@@ -59,7 +59,14 @@ type CaptionReaderProps = {
   actions?: ReactNode;
   /** Let attendees select finalized lines (toggle buttons) for clipping. */
   selectable?: boolean;
-  onSelectionChange?: (lines: readonly SelectedCaptionLine[]) => void;
+  /** Selected lines, in source-clock order, whenever the selection changes. */
+  onSelectionChange?: (lines: SelectedCaptionLine[]) => void;
+  /** Every finalized line (latest revision), whenever the transcript changes. */
+  onLinesChange?: (lines: SelectedCaptionLine[]) => void;
+  /** Controlled selection by segment ID; omit to let the reader own it. */
+  selectedIds?: readonly string[];
+  /** Selected segment IDs whenever the attendee toggles a line. */
+  onSelectedIdsChange?: (ids: string[]) => void;
 };
 
 const NOTES_PANEL_ID = "notes-panel";
@@ -75,6 +82,9 @@ const CountBadge = ({ count }: { count: number }) =>
       {count}
     </span>
   ) : null;
+
+/** Element ID for a line, so `#t=<startMs>` links can target it. */
+const lineAnchor = (startMs: number) => `t=${Math.floor(startMs)}`;
 
 const toneFor = (distanceFromLatest: number): TranscriptTone =>
   (["latest", "recent", "near", "far"] as const)[distanceFromLatest] ?? "old";
@@ -164,6 +174,9 @@ export const CaptionReader = ({
   actions,
   selectable = false,
   onSelectionChange,
+  onLinesChange,
+  selectedIds: controlledIds,
+  onSelectedIdsChange,
 }: CaptionReaderProps) => {
   const [notesOpen, setNotesOpen] = useState(true);
   const panelShown = Boolean(notesPanel) && notesOpen;
@@ -173,13 +186,21 @@ export const CaptionReader = ({
   const [following, setFollowing] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
 
-  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(
-    () => new Set(),
+  const [ownIds, setOwnIds] = useState<readonly string[]>([]);
+  const ids = controlledIds ?? ownIds;
+  const selectedSet = useMemo(() => new Set(ids), [ids]);
+  const setIds = useCallback(
+    (next: string[]) => {
+      if (controlledIds === undefined) setOwnIds(next);
+      onSelectedIdsChange?.(next);
+    },
+    [controlledIds, onSelectedIdsChange],
   );
-  const selectedLines = useMemo<SelectedCaptionLine[]>(
+
+  const finalLines = useMemo<SelectedCaptionLine[]>(
     () =>
       feed.lines.flatMap((line) =>
-        line.kind === "final" && selectedKeys.has(line.key)
+        line.kind === "final"
           ? [
               {
                 segmentId: line.segmentId,
@@ -191,9 +212,13 @@ export const CaptionReader = ({
             ]
           : [],
       ),
-    [feed.lines, selectedKeys],
+    [feed.lines],
   );
-  const clear = useCallback(() => setSelectedKeys(new Set()), []);
+  const selectedLines = useMemo(
+    () => finalLines.filter((line) => selectedSet.has(line.segmentId)),
+    [finalLines, selectedSet],
+  );
+  const clear = useCallback(() => setIds([]), [setIds]);
   const selection = useMemo<CaptionSelection>(
     () => ({ lines: selectedLines, clear, sourceMs: feed.sourceMs }),
     [selectedLines, clear, feed.sourceMs],
@@ -201,14 +226,51 @@ export const CaptionReader = ({
   useEffect(() => {
     onSelectionChange?.(selectedLines);
   }, [onSelectionChange, selectedLines]);
+  useEffect(() => {
+    onLinesChange?.(finalLines);
+  }, [onLinesChange, finalLines]);
 
-  const toggle = useCallback((key: string) => {
-    setSelectedKeys((current) => {
-      const next = new Set(current);
-      if (!next.delete(key)) next.add(key);
-      return next;
-    });
+  const toggle = useCallback(
+    (segmentId: string) =>
+      setIds(
+        selectedSet.has(segmentId)
+          ? ids.filter((id) => id !== segmentId)
+          : [...ids, segmentId],
+      ),
+    [ids, selectedSet, setIds],
+  );
+
+  // `#t=<startMs>` jumps to the line spoken at that source time, once the
+  // line has arrived. Scrolling away from the bottom pauses following live.
+  const pendingHashMs = useRef<number | null>(null);
+  const latestLines = useRef(finalLines);
+  const jumpToHash = useCallback(() => {
+    const ms = pendingHashMs.current;
+    if (ms === null) return;
+    const target = [...latestLines.current]
+      .reverse()
+      .find((line) => line.startMs <= ms);
+    const element = target
+      ? document.getElementById(lineAnchor(target.startMs))
+      : null;
+    if (!element) return;
+    pendingHashMs.current = null;
+    element.scrollIntoView({ block: "center" });
   }, []);
+  useEffect(() => {
+    const read = () => {
+      const match = /^#t=(\d+)$/.exec(window.location.hash);
+      pendingHashMs.current = match ? Number(match[1]) : null;
+      jumpToHash();
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, [jumpToHash]);
+  useEffect(() => {
+    latestLines.current = finalLines;
+    jumpToHash();
+  }, [finalLines, jumpToHash]);
 
   // Keep the newest caption in view while following live.
   useLayoutEffect(() => {
@@ -357,9 +419,12 @@ export const CaptionReader = ({
                           size={step}
                           timeColumn="wide"
                           onToggle={
-                            selectable ? () => toggle(line.key) : undefined
+                            selectable
+                              ? () => toggle(line.segmentId)
+                              : undefined
                           }
-                          selected={selectedKeys.has(line.key)}
+                          selected={selectedSet.has(line.segmentId)}
+                          id={lineAnchor(line.startMs)}
                         />
                       );
                     })

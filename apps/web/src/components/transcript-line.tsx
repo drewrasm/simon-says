@@ -17,6 +17,8 @@ type TranscriptLineProps = {
   /** When set, the line is a toggle button for selection. */
   onToggle?: (() => void) | undefined;
   selected?: boolean;
+  /** Element ID, for example a source-time anchor. */
+  id?: string | undefined;
   className?: string;
 };
 
@@ -49,6 +51,7 @@ export const TranscriptLine = ({
   timeColumn = "always",
   onToggle,
   selected = false,
+  id,
   className,
 }: TranscriptLineProps) => {
   const lead = interim || tone === "latest";
@@ -58,7 +61,9 @@ export const TranscriptLine = ({
       ? "grid-cols-[76px_minmax(0,1fr)]"
       : "grid-cols-1 lg:grid-cols-[76px_minmax(0,1fr)]",
     onToggle &&
-      "-mx-3 w-[calc(100%+1.5rem)] cursor-pointer rounded-lg px-3 py-2 outline-none hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring/50 aria-pressed:bg-foreground/10 aria-pressed:ring-1 aria-pressed:ring-foreground/25",
+      "-mx-3 w-[calc(100%+1.5rem)] cursor-pointer rounded-lg px-3 py-2 outline-none hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring/50",
+    selected &&
+      "-mx-3 w-[calc(100%+1.5rem)] rounded-lg bg-foreground/10 px-3 py-2 ring-1 ring-foreground/25",
     className,
   );
   const content = (
@@ -95,6 +100,7 @@ export const TranscriptLine = ({
   return onToggle ? (
     <button
       type="button"
+      id={id}
       aria-pressed={selected}
       onClick={onToggle}
       className={rowClass}
@@ -102,6 +108,8 @@ export const TranscriptLine = ({
       {content}
     </button>
   ) : (
-    <div className={rowClass}>{content}</div>
+    <div id={id} className={cn(rowClass, "scroll-mt-6")}>
+      {content}
+    </div>
   );
 };
