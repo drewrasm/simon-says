@@ -4,6 +4,8 @@ import { transcriptSegmentSchema } from "@simon-says/contracts/caption";
 
 const id = transcriptSegmentSchema.shape.sessionId;
 
+export const maxRecapBookmarks = 50;
+
 export const createRecapRequestSchema = z.object({
   operationId: z.uuid(),
   bookmarks: z
@@ -13,7 +15,8 @@ export const createRecapRequestSchema = z.object({
         expectedRevision: transcriptSegmentSchema.shape.revision,
       }),
     )
-    .min(1),
+    .min(1)
+    .max(maxRecapBookmarks),
 });
 
 export const createRecapResponseSchema = z.object({ id: z.uuid() });
