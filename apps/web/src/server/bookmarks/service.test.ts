@@ -261,9 +261,10 @@ describe("owner-only bookmarks", () => {
   });
 
   it("bounds lazy pending resolution to five owner records and leaves mutation revision unchanged", async () => {
-    const records = Array.from({ length: 6 }, () => ({
+    const records = Array.from({ length: 6 }, (_, index) => ({
       ...record,
       id: randomUUID(),
+      updatedAt: new Date(record.updatedAt.getTime() + index),
     }));
     bookmark.findMany.mockResolvedValue(records);
     fetchMock.mockImplementation(async (url) =>
@@ -292,6 +293,47 @@ describe("owner-only bookmarks", () => {
       ["pending", 1],
     ]);
     expect(bookmark.updateManyAndReturn).toHaveBeenCalledTimes(5);
+  });
+
+  it("retries least-recently-attempted pending ranges and skips zero-width ones", async () => {
+    const attemptedAt = (minute: number) =>
+      new Date(`2026-11-09T20:0${minute}:00.000Z`);
+    const records = Array.from({ length: 6 }, (_, index) => ({
+      ...record,
+      id: randomUUID(),
+      updatedAt: attemptedAt(6 - index),
+    }));
+    const zeroWidth = {
+      ...record,
+      id: randomUUID(),
+      markedAtMs: 0,
+      requestedStartMs: 0,
+      requestedEndMs: 0,
+      updatedAt: attemptedAt(0),
+    };
+    bookmark.findMany.mockResolvedValue([...records, zeroWidth]);
+    bookmark.updateManyAndReturn.mockImplementation(async ({ where, data }) => [
+      { ...record, id: where.id, ...data },
+    ]);
+
+    const result = await listBookmarks({ principalId, sessionId });
+
+    const attemptedIds = bookmark.updateManyAndReturn.mock.calls.map(
+      ([{ where }]) => where.id,
+    );
+    expect(attemptedIds.sort()).toEqual(
+      records
+        .slice(1)
+        .map((r) => r.id)
+        .sort(),
+    );
+    expect(bookmark.updateManyAndReturn).toHaveBeenCalledWith({
+      where: expect.objectContaining({ completeness: "pending", revision: 1 }),
+      data: { updatedAt: expect.any(Date) },
+    });
+    expect(result.bookmarks.map((b) => b.completeness)).toEqual(
+      Array(7).fill("pending"),
+    );
   });
 
   it("does not recreate a bookmark deleted while lazy resolution ran", async () => {
