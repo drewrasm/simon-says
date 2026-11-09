@@ -63,6 +63,8 @@ Logan confirmed these on November 9, 2026. Neither decision proves a live integr
 
 ## Proposed implementation defaults
 
+- **Approximate note clock (Track 1, November 9):** notes pin `markedAtMs` to time since session creation until Track 2 supplies a capture-aligned session clock; see [contracts](contracts.md#track-3-payloads). Notes use Track 3's bookmark API.
+
 - **LLM workflows:** recaps use OpenAI through the Vercel AI SDK (`ai`), as [decided](#confirmed-by-the-track-3-owner). Proposal: Agent/tool-loop APIs and durable job execution remain implementation choices; vendoring guidance does not install or validate an integration.
 
 - Next.js Route Handlers with a custom Node WebSocket entry point, reconnectable SSE, and the confirmed server-only caption adapter. Prove packaging in checkpoint 0A and cross-pod recovery in milestone 1. Propose a durable Postgres event log with bounded polling; leases and replay cannot depend on pod memory.
