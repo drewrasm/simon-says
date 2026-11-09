@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "typecheck": "next typegen && tsc --noEmit"
+    "dev": "tsx server/index.ts --dev",
+    "build": "next build && tsc -p tsconfig.server.json",
+    "start": "NODE_ENV=production node dist/index.js",
+    "typecheck": "next typegen && tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
     "@simon-says/contracts": "workspace:*",
@@ -19,10 +19,12 @@
     "react-dom": "19.3.1",
     "server-only": "0.0.1",
     "sonner": "2.0.8",
+    "ws": "8.18.3",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.5",
+    "@types/ws": "8.18.1",
     "tailwindcss": "4.3.5"
   }
 }
