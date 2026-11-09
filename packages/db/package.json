@@ -9,7 +9,7 @@
     "generate": "prisma generate",
     "validate": "prisma validate",
     "migrate:dev": "prisma migrate dev",
-    "migrate:deploy": "prisma migrate deploy",
+    "migrate:deploy": "prisma migrate deploy && node --import tsx scripts/migrate-jobs.ts",
     "typecheck": "tsc --noEmit",
     "check": "node --conditions=react-server --import tsx scripts/check.ts"
   },
@@ -17,6 +17,7 @@
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "dotenv": "17.2.3",
+    "pg-boss": "12.38.0",
     "prisma": "7.10.1",
     "server-only": "0.0.1"
   },

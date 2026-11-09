@@ -12,6 +12,8 @@ import { createIngestAuthority } from "../src/server/captions/access-authority";
 import { elasticsearchClient } from "../src/server/search/es-client";
 import { ElasticsearchSegmentSink } from "../src/server/search/elasticsearch-segment-sink";
 import { recordAcknowledgedSegments } from "../src/server/search/indexing-lag";
+import { startJobs, stopJobs } from "../src/server/jobs/runtime";
+import { registerRecapWorkers } from "../src/server/recaps/worker";
 import { readRuntimeEnv } from "./env.js";
 
 const runtime = readRuntimeEnv(process.env);
@@ -237,6 +239,7 @@ async function shutdown(exitCode: number) {
   for (const res of streams) res.end();
   for (const ws of wss.clients) ws.close(1012, "service restart");
   await captions.close(5000);
+  await stopJobs(3000);
   await telemetry?.shutdown(2000);
   server.close(() => {
     wss.close(() => {
@@ -259,6 +262,14 @@ process.on("SIGINT", () => void shutdown(0));
 server.listen(port, dev ? "127.0.0.1" : "0.0.0.0", () =>
   console.log(`HTTP listening on ${port}`),
 );
+// Readiness does not wait for jobs: captions work without them, and recap creation fails until they start.
+if (process.env.DATABASE_URL)
+  void startJobs({
+    connectionString: process.env.DATABASE_URL,
+    register: (jobs) => registerRecapWorkers(jobs),
+  })
+    .then((jobs) => jobs && console.log("jobs: started"))
+    .catch(() => console.error("jobs: start failed"));
 try {
   await app.prepare();
   if (!stopping) ready = true;

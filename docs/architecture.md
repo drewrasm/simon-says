@@ -50,7 +50,7 @@ Propose a Postgres event log with bounded polling for cross-pod SSE delivery. No
 
 Use CloudNativePG for cluster Postgres via Prisma. Elasticsearch on Elastic Cloud Serverless (hackathon trial) owns shared transcript revisions. The team cluster budget (2 CPU / 4 GiB requests, 4 CPU / 8 GiB limits total) cannot fit Elasticsearch next to the app and Postgres. Use runtime Secrets and explicit migration Jobs. See the [deployment plan](deployment.md) for packaging, rollout, and teardown gates.
 
-Recap and source cleanup work will run as durable Postgres jobs on [pg-boss](decisions.md#confirmed-by-the-track-3-owner) inside the app's Node process, with retries, per-job expiry, and a cron schedule for cleanup. Recaps still run through request-scoped `after()` until then. Cleanup progress must survive interruption. Never rely on an unawaited promise or pod-local files for durable work.
+Recap generation runs as durable Postgres jobs on [pg-boss](decisions.md#confirmed-by-the-track-3-owner) inside the app's Node process, with retries, per-job expiry, and a dead-letter queue; see the [recap contract](contracts.md#track-3-payloads). The custom server starts one pg-boss instance per pod (`apps/web/src/server/jobs/runtime.ts`) and stops it in the SIGTERM drain; Next route handlers enqueue through that instance inside their Prisma transaction. Source cleanup will use the same bootstrap with a cron schedule, and its progress must survive interruption. Never rely on an unawaited promise or pod-local files for durable work.
 
 ## Search and observability
 

@@ -1,12 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
-import { after } from "next/server";
-import {
-  createRecap,
-  exportRecapMarkdown,
-  generateRecap,
-  getRecap,
-} from "./service";
+import { createRecap, exportRecapMarkdown, getRecap } from "./service";
 import { handleCreateRecap, handleExportRecap, handleGetRecap } from "./http";
 import { readPrincipal } from "../access/principal";
 import { requireMembership } from "../access/membership";
@@ -14,11 +8,9 @@ import { AccessError } from "../access/errors";
 import { maxRecapBookmarks } from "@simon-says/contracts/recap";
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("./service", () => ({
   createRecap: vi.fn(),
   exportRecapMarkdown: vi.fn(),
-  generateRecap: vi.fn(),
   getRecap: vi.fn(),
 }));
 vi.mock("../access/principal", () => ({ readPrincipal: vi.fn() }));
@@ -41,7 +33,6 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(readPrincipal).mockResolvedValue({ id: principalId });
   vi.mocked(createRecap).mockResolvedValue({ response: { id }, created: true });
-  vi.mocked(generateRecap).mockResolvedValue(undefined);
   vi.mocked(getRecap).mockResolvedValue({
     id,
     status: "pending",
@@ -50,36 +41,16 @@ beforeEach(() => {
   });
 });
 
-it("returns the persisted ID and schedules generation after the response", async () => {
+it("returns the persisted ID of a recap created with its job", async () => {
   const response = await handleCreateRecap(request(), sessionId);
   expect(response.status).toBe(201);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.json()).toEqual({ id });
-  expect(generateRecap).not.toHaveBeenCalled();
-  expect(after).toHaveBeenCalledOnce();
-  const task = vi.mocked(after).mock.calls[0]?.[0];
-  if (typeof task !== "function") throw new Error("Expected an after callback");
-  await task();
-  expect(generateRecap).toHaveBeenCalledWith(id);
-});
-
-it("fails fast when the process already runs its maximum generations", async () => {
-  const responses = [];
-  for (let count = 0; count < 5; count += 1)
-    responses.push(await handleCreateRecap(request(), sessionId));
-  expect(responses.map((response) => response.status)).toEqual([
-    201, 201, 201, 201, 429,
-  ]);
-  expect(await responses[4]?.json()).toEqual({ error: "recaps_busy" });
-  expect(createRecap).toHaveBeenCalledTimes(4);
-
-  const tasks = vi.mocked(after).mock.calls.map(([task]) => task);
-  await Promise.all(
-    tasks.map((task) => (typeof task === "function" ? task() : task)),
-  );
-  expect((await handleCreateRecap(request(), sessionId)).status).toBe(201);
-  const last = vi.mocked(after).mock.calls.at(-1)?.[0];
-  if (typeof last === "function") await last();
+  expect(createRecap).toHaveBeenCalledWith({
+    principalId,
+    sessionId,
+    request: body,
+  });
 });
 
 it("rejects more selections than a recap accepts", async () => {
@@ -95,24 +66,23 @@ it("rejects more selections than a recap accepts", async () => {
   expect(createRecap).not.toHaveBeenCalled();
 });
 
-it("does not schedule duplicate work for an operation retry", async () => {
+it("returns the existing recap for an operation retry", async () => {
   vi.mocked(createRecap).mockResolvedValue({
     response: { id },
     created: false,
   });
   const response = await handleCreateRecap(request(), sessionId);
   expect(response.status).toBe(200);
-  expect(after).not.toHaveBeenCalled();
+  expect(await response.json()).toEqual({ id });
 });
 
-it("does not leak a background database error through Next's task logger", async () => {
-  vi.mocked(generateRecap).mockRejectedValue(
+it("hides a failed enqueue behind a content-free error", async () => {
+  vi.mocked(createRecap).mockRejectedValue(
     new Error("Synthetic private database error"),
   );
-  await handleCreateRecap(request(), sessionId);
-  const task = vi.mocked(after).mock.calls[0]?.[0];
-  if (typeof task !== "function") throw new Error("Expected an after callback");
-  await expect(task()).resolves.toBeUndefined();
+  const response = await handleCreateRecap(request(), sessionId);
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({ error: "internal_error" });
 });
 
 it("rejects malformed IDs uniformly before reading bodies or creating work", async () => {
@@ -138,7 +108,6 @@ it("checks membership before parsing and rejects an empty selection without work
       .status,
   ).toBe(400);
   expect(createRecap).not.toHaveBeenCalled();
-  expect(after).not.toHaveBeenCalled();
 });
 
 it("hides missing identity and cross-owner reads and exports with no-store", async () => {

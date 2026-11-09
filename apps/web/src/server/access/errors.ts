@@ -6,8 +6,7 @@ export class AccessError extends Error {
       | "not_found"
       | "already_host"
       | "payload_too_large"
-      | "recap_in_progress"
-      | "recaps_busy",
+      | "recap_in_progress",
   ) {
     super(code);
   }

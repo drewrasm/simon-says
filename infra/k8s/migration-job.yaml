@@ -25,10 +25,20 @@ spec:
         - name: migrate
           image: app
           workingDir: /app/migrate
+          # Prisma owns the app schema; pg-boss creates and upgrades its own `pgboss` schema.
+          # Argo can sync this command before the deploy-tag PR moves to an image that ships pg-boss;
+          # an image without the CLI does not run jobs, so it skips that step.
           command:
-            ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+            - sh
+            - -c
+            - node node_modules/prisma/build/index.js migrate deploy && if [ -e node_modules/pg-boss/dist/cli.js ]; then node node_modules/pg-boss/dist/cli.js migrate; fi
           env:
             - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-app
+                  key: uri
+            - name: PGBOSS_DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: db-app

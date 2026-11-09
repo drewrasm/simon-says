@@ -3,6 +3,9 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createDatabaseClient } from "@simon-says/db/client";
 import { createRecap, generateRecap, getRecap } from "./service";
 import { generateTakeaways } from "./model";
+import { getJobs, startJobs, stopJobs } from "../jobs/runtime";
+import { recapQueue } from "./queue";
+import { createRecapQueues } from "./worker";
 
 vi.mock("server-only", () => ({}));
 vi.mock("./model", async (importOriginal) => ({
@@ -15,6 +18,20 @@ const host = randomUUID();
 const attendee = randomUUID();
 const sessionId = randomUUID();
 const model = vi.mocked(generateTakeaways);
+// Workers stay off so each test runs its attempt itself.
+const finalAttempt = {
+  signal: new AbortController().signal,
+  retryCount: 2,
+};
+const removeRecaps = async () => {
+  const recaps = await database.recap.findMany({
+    where: { sessionId },
+    select: { id: true },
+  });
+  const ids = recaps.map((recap) => recap.id);
+  if (ids.length) await getJobs().deleteJob(recapQueue, ids);
+  await database.recap.deleteMany({ where: { id: { in: ids } } });
+};
 
 type Segment = { segmentId: string; startMs: number; endMs: number };
 const segmentText = (segmentId: string) => `Synthetic speech for ${segmentId}.`;
@@ -65,11 +82,15 @@ const recapOf = async (bookmarkIds: string[]) => {
       })),
     },
   });
-  await generateRecap(response.id);
+  await generateRecap(response.id, finalAttempt);
   return getRecap({ principalId: attendee, id: response.id });
 };
 
 beforeAll(async () => {
+  await startJobs({
+    connectionString: process.env.DATABASE_URL!,
+    register: createRecapQueues,
+  });
   await database.principal.createMany({
     data: [host, attendee].map((id) => ({ id })),
   });
@@ -90,16 +111,18 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   vi.resetAllMocks();
-  await database.recap.deleteMany({ where: { sessionId } });
+  await removeRecaps();
   await database.bookmark.deleteMany({ where: { sessionId } });
 });
 afterAll(async () => {
   try {
+    await removeRecaps();
     await database.session.deleteMany({ where: { id: sessionId } });
     await database.principal.deleteMany({
       where: { id: { in: [host, attendee] } },
     });
   } finally {
+    await stopJobs(1000);
     await database.$disconnect();
   }
 });

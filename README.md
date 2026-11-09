@@ -59,7 +59,7 @@ Notes on the steps:
 
 - The `sed` line removes the empty `ELASTICSEARCH_*` entries from your `.env`. The server refuses to start when `ELASTICSEARCH_URL` is exported but empty. Skip the line if you fill those values in.
 - `pnpm services:up` starts PostgreSQL with local credentials. `pnpm services:down` stops it. Do not use local credentials for deployed services.
-- `migrate:deploy` applies the committed migrations. The database scripts read the root `.env` themselves.
+- `migrate:deploy` applies the committed migrations and installs or upgrades the `pgboss` schema for recap jobs. The database scripts read the root `.env` themselves.
 - `pnpm dev` does not read `.env`. The `set -a` line exports `DATABASE_URL` and `SESSION_SECRET` into the shell that starts the server. Without them the pages load but session creation and joining fail.
 - `pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection.
 
