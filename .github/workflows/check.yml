@@ -76,10 +76,25 @@ jobs:
       - name: Skip superseded releases
         id: current
         run: |
-          git fetch origin main
-          if [ "$(git rev-parse origin/main)" = "$GITHUB_SHA" ]; then
-            echo 'release=true' >> "$GITHUB_OUTPUT"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+            git fetch --unshallow origin main
           fi
+          head=$(git rev-parse origin/main)
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            # Capture the diff separately so a Git failure cannot look like no changes.
+            source_changes=$(git diff --name-only "$GITHUB_SHA" "$head" -- . ':!infra/k8s/kustomization.yaml')
+            if [ -n "$source_changes" ]; then
+              message="Main advanced with source changes; skipping the deploy PR for $GITHUB_SHA."
+              echo "::warning::$message"
+              echo "$message" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            message="Main advanced only via kustomization; proposing $GITHUB_SHA on top of $head."
+            echo "::warning::$message"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo 'release=true' >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         if: steps.current.outputs.release == 'true'
         with:

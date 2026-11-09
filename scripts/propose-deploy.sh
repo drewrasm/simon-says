@@ -3,11 +3,23 @@
 set -euo pipefail
 : "${GITHUB_SHA:?}" "${GITHUB_REPOSITORY:?}" "${GH_TOKEN:?}"
 branch="deploy/$GITHUB_SHA"
-git fetch origin main
-# A newer merge owns the next release. Do not propose an older image over it.
-if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
-  echo "Main advanced during publication; skipping the deploy PR."
-  exit 0
+git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+  git fetch --unshallow origin main
+fi
+head=$(git rev-parse origin/main)
+if [ "$head" != "$GITHUB_SHA" ]; then
+  # Capture the diff separately so a Git failure cannot look like no changes.
+  source_changes=$(git diff --name-only "$GITHUB_SHA" "$head" -- . ':!infra/k8s/kustomization.yaml')
+  if [ -n "$source_changes" ]; then
+    message="Main advanced with source changes; skipping the deploy PR for $GITHUB_SHA."
+    echo "::warning::$message"
+    echo "$message" >> "$GITHUB_STEP_SUMMARY"
+    exit 0
+  fi
+  message="Main advanced only via kustomization; proposing $GITHUB_SHA on top of $head."
+  echo "::warning::$message"
+  echo "$message" >> "$GITHUB_STEP_SUMMARY"
 fi
 existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main --state all --json url --jq '.[0].url // empty')
 if [ -n "$existing" ]; then

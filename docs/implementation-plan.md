@@ -97,6 +97,14 @@ Verified November 9, 2026 with Node 22.22.0 / pnpm 11.24.0; rebased onto PR #8 (
 - A disposable local bare-Git-repository harness with a mocked `gh` command verified that the helper updates only the image reference on a deploy branch, leaves main unchanged, dispatches CI, reuses an existing PR, recovers after branch push / PR creation interruption, and skips a superseded source SHA. This is local control-flow evidence, not hosted Actions, Gitar, or registry acceptance.
 - Inspected repository API: auto-merge is disabled. The release workflow preserves `check` / `container`, pins action commits, gates publication on both checks and main, and proposes deploy-tag PRs instead of direct main writes. The unapplied Application now enables automated sync/pruning/self-healing. First publication, bot PR permissions, Gitar review triggering, public package pulls, Argo CD adoption, CRD/admission compatibility, and the deployed user flow remain pending. No cluster access/write, API key use, visibility change, or GitOps activation was performed in C1a. See [operator steps](deployment.md#first-release-and-one-time-operator-steps).
 
+#### PR #15 review-fix verification
+
+Merged `origin/main` including PR #12 without lockfile changes. Preserved main's Track 3 status-board row and the release PR's Track 2 row. The database Cluster now has `Prune=false,Delete=false`; automated sync/self-healing remain enabled with `PruneLast=true`. The [deployment policy](deployment.md#data-bearing-resource-protection) requires manual, approved data-resource removal and documents manual `workflow_dispatch` on main for release recovery.
+
+Repeated on November 9, 2026 with Node 22.22.0 / pnpm 11.24.0: `pnpm install --frozen-lockfile` and `pnpm check` passed (lint, formatting, strict typechecks, two test files / three tests). `KUBECONFIG=/dev/null kubectl kustomize infra/k8s` rendered the database protection annotation offline. `actionlint` 1.7.7, `bash -n scripts/propose-deploy.sh`, and `git diff --check` passed; ShellCheck was unavailable. No container build, image push, cluster access, or deployment was performed for these review fixes.
+
+A disposable scratch Git harness ran the actual workflow freshness step and deploy helper against local bare remotes with shallow checkouts and mocked `gh`. All four cases passed: workflow/source → skip; workflow/kustomization-only → continue; helper/source → skip; helper/kustomization-only → continue. Each case unshallowed successfully and emitted both a warning and job-summary line. The continued helper produced an image-only commit based on current main using the original source SHA, dispatched CI through the mock, and left remote main unchanged. This verifies local release control flow; hosted publication and rollout remain pending.
+
 ## Acceptance fixtures
 
 Use authorized synthetic audio and screens with known timing. Include these checks:
