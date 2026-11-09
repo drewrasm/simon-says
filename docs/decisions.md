@@ -103,6 +103,10 @@ Track 2 implements one-second capture with checksum deduplication, 1600 px maxim
 
 SeaweedFS with one 5 Gi PVC is a proposal pending Track 3 requirements/agreement at C1, not an approved deployment choice. It remains outside kustomization and has not been applied. See the [storage proposal](deployment.md#s4-private-frame-storage-proposal-not-applied). Production fencing, lifecycle propagation, retention, and durable observations remain open.
 
+## C1a release tags
+
+GHCR publication runs in GitHub Actions after main checks, using full commit SHA tags and a mutable `main` alias. Deploy tags land through `deploy/<sha>` PRs, preserving CI/Gitar review and the prohibition on direct main commits. Auto-merge is currently disabled in the repository; an administrator can enable it, while operators may merge manually after review. The Application file enables automated sync, self-healing, and final-wave pruning of eligible stateless resources (`PruneLast=true`). Data-bearing resources carry `Prune=false,Delete=false` and require a manual, approved removal; applying it still requires explicit operator approval through Radar. See the [release flow](deployment.md#release-flow-c1a) for bootstrap and recovery. Publication and cluster deployment are pending live verification.
+
 ## C1b Elasticsearch storage setup
 
 Track 2 supplies strict `segments-v1` and `observations-v1` mappings behind write aliases, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).
