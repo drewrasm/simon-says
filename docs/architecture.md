@@ -141,6 +141,16 @@ Sampling can miss short visuals. Inspect code legibility before choosing compres
 
 Number audio frames, attach source offsets/checksums, and distinguish receipt acks from final-content persistence. Host resend capacity is two minutes; raw-audio object persistence is deferred today. Exceeding it exposes a gap. Optional repair transcription creates revised segments with repaired provenance. Track audio coverage separately from transcription accuracy.
 
+### Host audio module (S2)
+
+`apps/web/src/capture/host-capture.ts` provides `HostCapture({ epoch, ingestUrl, deviceId? })`. Track 1 creates one instance per epoch in the host UI, calls `start()` from an explicit host gesture, and calls idempotent `stop()` on stop/unmount. Stop is terminal: acquire a new epoch and create a new instance to restart. Device selection uses `listMicrophones()` (no permission prompt) and `deviceId`; change devices by stopping and starting a new instance. Importing the module or subscribing never requests microphone access; attendee pages must never call `start()`.
+
+`useHostCapture(capture)` in `use-host-capture.ts` is a passive React adapter over `subscribe(listener)` and `getSnapshot()`. Its immutable health snapshot exposes `mic` (`idle`, `requesting`, `live`, `denied`, `error`), `connection` (`connecting`, `open`, `reconnecting`, `closed`, `rejected`), `level` (0–1 RMS), `unackedMs`, and `localGaps`. `open` means the server sent validated `ready`, not merely that the socket opened. A nonretryable rejection closes the socket and releases the mic while preserving `rejected`. Startup failures update health and reject `start()`; runtime failures update health and stop resources.
+
+The static `/capture/processor.js` worklet imports `/capture/pcm.js`, the same pure DSP used by unit tests. It requests a 24 kHz AudioContext; if unsupported it retries the browser default. The worklet linearly resamples the actual context rate to the contracts' 24 kHz rate, preserving fractional phase across render quanta. It emits exactly 2,400 PCM16 mono samples and RMS per frame. Sequence starts at zero; sample offsets advance by 2,400, independent of wall time. Stop ends tracks, closes the context/socket, and discards an incomplete final frame; it does not claim durable delivery of unacknowledged audio.
+
+The ingest client uses the shared binary encoder and validated JSON `hello`/`ready`/`ack`/`rejected` schemas. It replays retained frames after the server cursor, bounds its resend audio to the contracts' 120 seconds, and reconnects with jitter up to 15 seconds. An overfull browser send queue also triggers reconnect. Dropped unacknowledged frames create local gaps with inclusive `startSampleOffset` and exclusive `endSampleOffset`; adjacent gaps merge. These remain in the health snapshot after acknowledgment so Track 1 can display lost local coverage. Gaps are local evidence of unavailable resend audio, not proof of a server transcript gap, and are not sent as a new wire message. Authentication, durable ingest, and session end remain server/Track 3 integration work.
+
 ## Access, retention, and operations
 
 - QR invitations issue distinct attendee memberships, never host credentials. Enforce session access and resource ownership on every API, search, image URL, and event stream.
