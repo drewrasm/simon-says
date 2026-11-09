@@ -4,6 +4,17 @@ One conference session feed. Personal, illustrated takeaways.
 
 The host captures the speaker's microphone and screen once. Attendees join by QR code, read live captions, and save moments. Each attendee gets a private recap with source passages and aligned screenshots.
 
+## Try it
+
+The app is deployed at <https://simon-says.cnh.radarhq.io>. No account is needed.
+
+1. **Host:** open `/host/new`, name the session, and select **Open lobby**. On the host page, choose a microphone and start captions. The host page shows a QR code and a join link.
+2. **Join:** on a second device or in a private window, scan the QR code or open the link. Live captions appear as the host speaks.
+3. **Save a moment:** select **Clip last 30s**, or select caption lines and clip them. Add a note if you want one.
+4. **Review:** open **My notes** to see your clips, search the talk by idea, and select **Generate recap**. **Ask about this talk** on the session page answers questions from the captions.
+
+To run the app yourself, see [Local setup](#local-setup). For what a local run shows with and without provider keys, see [What works without provider keys](#what-works-without-provider-keys). For current gaps, see [Known limits](#known-limits).
+
 ## Start here
 
 Planned work, status, blockers, and evidence are tracked in the [simon-says Shortcut workspace](https://app.shortcut.com/simon-says). Its planning docs:
@@ -29,22 +40,45 @@ Use Node.js 22.22.0, pnpm 11.24.0, and Docker with Compose. From the repository 
 
 ```sh
 cp .env.example .env
+sed -i.bak '/^ELASTICSEARCH_.*=$/d' .env && rm .env.bak
 pnpm install --frozen-lockfile
 pnpm services:up
 pnpm db:generate
 pnpm db:validate
 pnpm db:check
+pnpm --filter @simon-says/db migrate:deploy
 pnpm storage:check
 pnpm check
 pnpm build
+set -a; . ./.env; set +a
 pnpm dev
 ```
 
-Open `http://localhost:8080` (the custom server's default `PORT`). The session and join API routes also need `DATABASE_URL` and `SESSION_SECRET` in the app environment and an up-to-date schema: export both from `.env.example` (or copy them into `apps/web/.env.local`) and run `pnpm --filter @simon-says/db migrate:deploy` before `pnpm dev`. Run `pnpm services:down` to stop the local services. The Compose configuration uses PostgreSQL and a private SeaweedFS S3 bucket with local credentials. The root `.env` configures the database scripts; Next.js loads app-specific settings from `apps/web/.env.local` when needed. Do not use local credentials for deployed services.
+Open `http://localhost:8080`. If port 8080 is in use, run `PORT=8081 pnpm dev` instead.
 
-To try session creation and joining locally, apply migrations with `pnpm --filter @simon-says/db migrate:deploy`, then start the server with the root `.env` exported (`set -a; . ./.env; set +a; pnpm dev`) so it has `DATABASE_URL` and `SESSION_SECRET`. Open `/host/new` in one window and the join link in a private window. Use `localhost`: the device cookie is `Secure` on any other host, so a phone on a LAN IP over HTTP cannot join; test phones against the deployed HTTPS URL.
+Notes on the steps:
 
-`pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection. The workspace uses Next.js and shadcn/ui for the application, with Prisma for PostgreSQL.
+- The `sed` line removes the empty `ELASTICSEARCH_*` entries from your `.env`. The server refuses to start when `ELASTICSEARCH_URL` is exported but empty. Skip the line if you fill those values in.
+- `pnpm services:up` starts PostgreSQL and a private SeaweedFS S3 bucket with local credentials. `pnpm services:down` stops them. Do not use local credentials for deployed services.
+- `migrate:deploy` applies the committed migrations. The database scripts read the root `.env` themselves.
+- `pnpm dev` does not read `.env`. The `set -a` line exports `DATABASE_URL`, `SESSION_SECRET`, and the storage settings into the shell that starts the server. Without them the pages load but session creation and joining fail.
+- `pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection. `pnpm storage:check` checks a signed upload and an anonymous rejection.
+
+To try a session locally, open `/host/new` in one window and the join link in a private window. Use `localhost`: the device cookie is `Secure` on any other host, so a phone on a LAN IP over HTTP cannot join. Test phones against the deployed HTTPS URL.
+
+The workspace uses Next.js and shadcn/ui for the application, with Prisma for PostgreSQL.
+
+### What works without provider keys
+
+The steps above set no provider keys. The app starts and degrades visibly. Add keys to your `.env` (ignored by Git), then run the `set -a; . ./.env; set +a` line again and restart `pnpm dev`. The server reads keys only from its shell environment. Never commit a key or put one in a `NEXT_PUBLIC_` variable.
+
+| Configuration                                                      | What you see                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No keys                                                            | Hosting and joining work by QR code or link. No captions appear; the host page reports that transcription is not configured. A saved moment stays pending with no source passage. Search and Ask report that search is unavailable. Recap generation fails. |
+| `OPENAI_API_KEY`                                                   | Live captions appear. They are held in memory only, and the host page reports that transcript storage is not configured. Saved moments, search, Ask, and recaps behave as with no keys, because they read captions from Elasticsearch.                      |
+| `OPENAI_API_KEY`, `ELASTICSEARCH_URL`, and `ELASTICSEARCH_API_KEY` | The full flow: captions are stored, saved moments resolve to source passages, and search, Ask, and recaps work. Create the indices first with `pnpm es:setup`; see the next section for a local Elasticsearch.                                              |
+
+`OPENAI_API_KEY` is used for live captions, recaps, and Ask. `CAPTION_MODEL` and `RECAP_MODEL` are optional overrides.
 
 ### Local Elasticsearch mappings and smoke check
 
@@ -67,6 +101,14 @@ unset ELASTICSEARCH_API_KEY ES_LOCAL_API_KEY ES_LOCAL_PASSWORD
 Setup creates `segments-v1` / `observations-v1` and their `simon-says-*` write aliases, verifies mappings on rerun, fails on drift, and repairs aliases atomically. `--dry-run` performs reads only. Smoke accepts only `http://localhost:9200` and the local E5 endpoint; it writes three synthetic finalized segments and an observation under reserved session `es-smoke-c1b`, checks overlap/semantic queries, duplicate IDs, create conflicts and strict fields, then deletes only those reserved documents. Do not use that session ID for application data or run the smoke concurrently. The first E5 inference may need a model download/deployment and adequate Docker memory; failures are reported, not replaced with fake vectors. No cloud connection is part of local verification.
 
 The mappings' inference endpoint is parameterized and defaults to `.jina-embeddings-v5-text-small`, which Track 3 [decided](docs/decisions.md#confirmed-by-the-track-3-owner). See [storage contracts](docs/contracts.md#elasticsearch-v1-storage-boundary) and [approval-gated operator setup](docs/deployment.md#elasticsearch-setup-operator-approval-required).
+
+## Known limits
+
+- **One replica.** The deployment runs one app replica. Caption fan-out, replay, and the cap of four concurrent recap generations are in-process, so they do not survive a restart or span replicas.
+- **No accounts.** Each browser gets an anonymous device cookie. Notes and recaps belong to that browser; another browser or device is a different attendee.
+- **Recaps are not durable jobs.** A recap is generated in the web process after the request returns. If the process restarts first, the recap is marked failed and you generate a new one.
+- **Note cards show no screenshot.** Saved moments carry caption passages only; the evidence resolver returns no image for a frame.
+- **The hosted environment is temporary.** The hackathon cluster is scheduled to end on November 13, 2026. The live URL stops working then.
 
 ## Deployment and hackathon scope
 
