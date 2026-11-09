@@ -83,6 +83,10 @@ spec:
                   name: app-credentials
                   key: OTEL_EXPORTER_OTLP_PROTOCOL
                   optional: true
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sleep", "5"]
           startupProbe:
             httpGet: { path: /readyz, port: http }
             periodSeconds: 2

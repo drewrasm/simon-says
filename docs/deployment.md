@@ -44,7 +44,7 @@ Readiness currently means Next is prepared and shutdown has not started. Livenes
 
 The content-free authenticated transport probes, bounds, commands, and shutdown behavior are documented in [README](../README.md#local-container-and-transport-probes). They prove transport only; product identity, membership, leases, replay, and revocation remain milestone 1 work. Unknown production upgrades are rejected before handshake. Development forwards Next's HMR upgrades after preparation.
 
-`infra/k8s` renders the app, Service `app:80` → 8080, starter HTTPRoute, and a one-instance CloudNativePG database. `infra/argocd/application.yaml` points at this repository and `infra/k8s` but has **no automatic sync policy** and has never been applied. The migration outline is commented and excluded from kustomization. CI on PRs and pushes installs, checks, builds Next/server and the image, and renders offline; it has read-only repository permissions and no publishing or deployment steps.
+`infra/k8s` renders the app, Service `app:80` → 8080, starter HTTPRoute, and a one-instance CloudNativePG database. `infra/argocd/application.yaml` points at this repository and `infra/k8s` but has **no automatic sync policy** and has never been applied. The app preStop hook waits five seconds for endpoint removal to propagate before SIGTERM; this and the ten-second server drain fit inside the 20-second grace period. The delay is provisional until gateway rollout testing measures propagation. The migration outline is commented and excluded from kustomization. CI on PRs and pushes installs, checks, builds Next/server and the image, and renders offline; it has read-only repository permissions and no publishing or deployment steps.
 
 ## Delivery responsibilities
 
