@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { after } from "next/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SpanStatusCode, trace } from "@opentelemetry/api";
 import { resourceFromAttributes } from "@opentelemetry/resources";
@@ -64,7 +63,10 @@ vi.mock("../recaps/model", async (original) => ({
   ...(await original<typeof import("../recaps/model")>()),
   generateTakeaways: mocks.model,
 }));
-vi.mock("next/server", () => ({ after: vi.fn() }));
+vi.mock("../recaps/queue", async (original) => ({
+  ...(await original<typeof import("../recaps/queue")>()),
+  enqueueRecap: vi.fn(),
+}));
 
 const marker = "PRIVATE-content-query-note-prompt-secret";
 const id = randomUUID();
@@ -201,7 +203,7 @@ it.each(["created", "retry", "denied", "invalid", "busy"])(
     if (mode === "created" || mode === "busy") {
       mocks.recap.findUnique.mockResolvedValue(null);
       mocks.recap.create.mockResolvedValue({ ...record, status: "pending" });
-      mocks.recap.count.mockResolvedValue(0);
+      mocks.recap.count.mockResolvedValue(mode === "busy" ? 1 : 0);
       mocks.transaction.mockImplementation((callback) =>
         callback({
           recap: mocks.recap,
@@ -214,15 +216,7 @@ it.each(["created", "retry", "denied", "invalid", "busy"])(
       operationId: randomUUID(),
       bookmarks: record.bookmarkSnapshot,
     };
-    try {
-      if (mode === "busy") {
-        for (let count = 0; count < 4; count += 1) {
-          expect(
-            (await handleCreateRecap(request(body), record.sessionId)).status,
-          ).toBe(201);
-        }
-        exporter.reset();
-      }
+    {
       const response = await handleCreateRecap(
         request(mode === "invalid" ? {} : body),
         record.sessionId,
@@ -247,13 +241,6 @@ it.each(["created", "retry", "denied", "invalid", "busy"])(
         duration_ms: expect.any(Number),
         ...(status >= 400 ? { error_code: "request_failed" } : {}),
       });
-      expect(after).toHaveBeenCalledTimes(
-        mode === "created" ? 1 : mode === "busy" ? 4 : 0,
-      );
-    } finally {
-      for (const [task] of vi.mocked(after).mock.calls) {
-        if (typeof task === "function") await task();
-      }
     }
   },
 );
@@ -289,12 +276,21 @@ it.each([
     vi.useFakeTimers();
     mocks.model.mockImplementation(() => new Promise(() => {}));
   }
-  const pending = generateRecap(id);
-  if (mode === "claim-failure") await expect(pending).rejects.toThrow(marker);
-  else {
-    if (mode === "timeout") await vi.advanceTimersByTimeAsync(45001);
-    await pending;
-  }
+  const pending = generateRecap(id, {
+    signal: new AbortController().signal,
+    retryCount: 2,
+  });
+  const settled =
+    mode === "claim-failure"
+      ? expect(pending).rejects.toThrow(marker)
+      : mode === "timeout" || mode === "failure"
+        ? expect(pending).rejects.toMatchObject({
+            code:
+              mode === "timeout" ? "generation_timeout" : "generation_failed",
+          })
+        : pending;
+  if (mode === "timeout") await vi.advanceTimersByTimeAsync(45001);
+  await settled;
   const span = await lastSpan();
   expect(span.name).toBe("recap.generate");
   const outcome =

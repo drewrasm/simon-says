@@ -81,8 +81,9 @@ jobs:
         run: docker build --platform linux/amd64 -t simon-says:ci .
       - name: Run the migration Job command in the image
         run: |
-          docker run --rm --network host -w /app/migrate -e DATABASE_URL simon-says:ci \
-            node node_modules/prisma/build/index.js migrate deploy
+          docker run --rm --network host -w /app/migrate -e DATABASE_URL \
+            -e PGBOSS_DATABASE_URL="$DATABASE_URL" simon-says:ci \
+            sh -c 'node node_modules/prisma/build/index.js migrate deploy && node node_modules/pg-boss/dist/cli.js migrate'
       - name: Check container transport locally
         env:
           PROBE_TOKEN: local-checkpoint-0a-probe-token-12345

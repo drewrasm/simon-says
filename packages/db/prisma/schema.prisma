@@ -123,6 +123,8 @@ model Recap {
   status           RecapStatus @default(pending)
   takeaways        Json        @default("[]")
   failureReason    String?
+  /// Job attempts claimed so far; an attempt claims only while this is at most its pg-boss retry count.
+  attempts         Int         @default(0)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 

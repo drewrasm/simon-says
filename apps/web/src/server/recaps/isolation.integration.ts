@@ -17,7 +17,6 @@ import {
   recapResponseSchema,
 } from "@simon-says/contracts/recap";
 import { cookies } from "next/headers";
-import { after } from "next/server";
 import { getDatabase } from "../access/database";
 import { principalCookieName, signPrincipal } from "../access/credentials";
 import {
@@ -27,6 +26,9 @@ import {
 } from "../bookmarks/http";
 import { handleCreateRecap, handleGetRecap, handleExportRecap } from "./http";
 import { generateTakeaways } from "./model";
+import { getJobs, startJobs, stopJobs } from "../jobs/runtime";
+import { recapQueue } from "./queue";
+import { registerRecapWorkers } from "./worker";
 import {
   syntheticSegment,
   syntheticSearchResponse,
@@ -34,7 +36,6 @@ import {
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ cookies: vi.fn() }));
-vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("./model", async (original) => ({
   ...(await original<typeof import("./model")>()),
   generateTakeaways: vi.fn(),
@@ -47,7 +48,6 @@ const attendeeA = randomUUID();
 const attendeeB = randomUUID();
 const secret = "synthetic-local-isolation-secret-103";
 const model = vi.mocked(generateTakeaways);
-let background: (() => Promise<unknown>)[] = [];
 
 const identity = (id: string | null) => {
   const value = id ? signPrincipal({ principalId: id, secret }) : undefined;
@@ -103,12 +103,23 @@ const create = async (owner: string, bookmarkId: string) => {
   );
   return createRecapResponseSchema.parse(await response.json()).id;
 };
-const drain = async () => {
-  const jobs = background.splice(0);
-  for (const job of jobs) await job();
-};
+// The real worker runs each queued recap; draining waits for every one to finish.
+const drain = () =>
+  vi.waitFor(
+    async () =>
+      expect(
+        await database.recap.count({
+          where: { sessionId, status: { in: ["pending", "running"] } },
+        }),
+      ).toBe(0),
+    { timeout: 15_000, interval: 100 },
+  );
 
 beforeAll(async () => {
+  await startJobs({
+    connectionString: process.env.DATABASE_URL!,
+    register: (jobs) => registerRecapWorkers(jobs),
+  });
   await database.principal.createMany({
     data: [host, attendeeA, attendeeB].map((id) => ({ id })),
   });
@@ -129,7 +140,6 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   vi.resetAllMocks();
-  background = [];
   vi.stubEnv("SESSION_SECRET", secret);
   vi.stubEnv("ELASTICSEARCH_URL", "https://synthetic-elastic.example");
   vi.stubEnv("ELASTICSEARCH_API_KEY", "synthetic-test-key");
@@ -145,11 +155,6 @@ beforeEach(async () => {
       ),
     ),
   );
-  vi.mocked(after).mockImplementation((task) => {
-    if (typeof task !== "function")
-      throw new Error("Expected an after callback");
-    background.push(async () => task());
-  });
   model.mockImplementation(async ({ passages }) => ({
     takeaways: passages.map((p) => ({
       text: p.text,
@@ -166,6 +171,15 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await drain();
+  const recaps = await database.recap.findMany({
+    where: { sessionId },
+    select: { id: true },
+  });
+  if (recaps.length)
+    await getJobs().deleteJob(
+      recapQueue,
+      recaps.map((recap) => recap.id),
+    );
   await database.recap.deleteMany({ where: { sessionId } });
   await database.bookmark.deleteMany({ where: { sessionId } });
   vi.unstubAllGlobals();
@@ -178,6 +192,7 @@ afterAll(async () => {
       where: { id: { in: [host, attendeeA, attendeeB] } },
     });
   } finally {
+    await stopJobs(1000);
     await database.$disconnect();
   }
 });

@@ -1,6 +1,5 @@
 import "server-only";
 
-import { after } from "next/server";
 import { z } from "zod";
 import { createRecapRequestSchema } from "@simon-says/contracts/recap";
 import { tracePrivateHttp } from "../telemetry/private-flow";
@@ -9,16 +8,7 @@ import { parseBody, respond } from "../access/http";
 import { readPrincipal } from "../access/principal";
 import { requireMembership } from "../access/membership";
 import { RevisionConflict } from "../bookmarks/service";
-import {
-  createRecap,
-  exportRecapMarkdown,
-  generateRecap,
-  getRecap,
-} from "./service";
-
-// One replica today, so an in-process counter bounds concurrent model calls.
-const maxActiveGenerations = 4;
-let activeGenerations = 0;
+import { createRecap, exportRecapMarkdown, getRecap } from "./service";
 
 const handleRecap = async (operation: () => Promise<Response>) => {
   try {
@@ -48,31 +38,12 @@ export const handleCreateRecap = (request: Request, sessionId: string) =>
       const owner = await principalId();
       await requireMembership({ principalId: owner, sessionId });
       const body = await parseBody(request, createRecapRequestSchema);
-      if (activeGenerations >= maxActiveGenerations)
-        throw new AccessError(429, "recaps_busy");
-
-      activeGenerations += 1;
-      let scheduled = false;
-      try {
-        const result = await createRecap({
-          principalId: owner,
-          sessionId,
-          request: body,
-        });
-        if (result.created) {
-          after(() =>
-            generateRecap(result.response.id)
-              .catch(() => undefined)
-              .finally(() => {
-                activeGenerations -= 1;
-              }),
-          );
-          scheduled = true;
-        }
-        return respond(result.response, result.created ? 201 : 200);
-      } finally {
-        if (!scheduled) activeGenerations -= 1;
-      }
+      const result = await createRecap({
+        principalId: owner,
+        sessionId,
+        request: body,
+      });
+      return respond(result.response, result.created ? 201 : 200);
     }),
   );
 

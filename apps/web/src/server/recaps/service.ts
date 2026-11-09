@@ -22,6 +22,7 @@ import {
   modelRecapSchema,
   type SelectedPassage,
 } from "./model";
+import { enqueueRecap, recapJobOptions } from "./queue";
 
 // Stored snapshots are not re-limited by the request maximum.
 const snapshotSchema = z.array(
@@ -43,9 +44,25 @@ type CreateOptions = {
   sessionId: string;
   request: CreateRecapRequest;
 };
+type AttemptFailure =
+  "generation_failed" | "generation_timeout" | "background_interrupted";
+type AttemptOptions = {
+  signal: AbortSignal;
+  /** pg-boss counts attempts from zero and never reuses a count for a job. */
+  retryCount: number;
+  timeoutMs?: number;
+};
 const generationTimeoutMs = 45_000;
-const interruptedAfterMs = 90_000;
+// Longer than any attempt plus its backoff; a recap stranded by a recovery failure stops blocking new ones.
+const activeForMs = 10 * 60_000;
 const maxPassageCharacters = 60_000;
+
+/** A retryable attempt failure, identified only by a content-free code. */
+export class RecapAttemptError extends Error {
+  constructor(public readonly code: AttemptFailure) {
+    super(code);
+  }
+}
 
 const requireId = (id: string) => {
   if (!z.uuid().safeParse(id).success) throw new AccessError(404, "not_found");
@@ -129,12 +146,12 @@ export const createRecap = async ({
           ownerPrincipalId: principalId,
           sessionId,
           status: { in: ["pending", "running"] },
-          updatedAt: { gt: new Date(Date.now() - interruptedAfterMs) },
+          updatedAt: { gt: new Date(Date.now() - activeForMs) },
         },
       });
       if (active) throw new AccessError(429, "recap_in_progress");
 
-      return transaction.recap.create({
+      const recap = await transaction.recap.create({
         data: {
           ownerPrincipalId: principalId,
           sessionId,
@@ -143,6 +160,8 @@ export const createRecap = async ({
           status: "pending",
         },
       });
+      await enqueueRecap(transaction, recap.id);
+      return recap;
     });
     return { response: createRecapResponseSchema.parse(record), created: true };
   } catch (error) {
@@ -209,131 +228,178 @@ export const limitPassages = (passages: SelectedPassage[]) => {
   });
 };
 
-export const generateRecap = async (id: string) => {
+type AttemptResult = {
+  outcome: "success" | "error" | "stale" | "skipped";
+  errorCode?: PrivateErrorCode;
+};
+
+/**
+ * Runs one job attempt. Terminal outcomes return; retryable failures throw a RecapAttemptError
+ * after returning the recap to `pending`, or after recording `failed` on the final attempt.
+ */
+export const generateRecap = async (id: string, options: AttemptOptions) => {
   const finish = startPrivateSpan("recap.generate");
-  let outcome: "success" | "error" | "stale" | "skipped" = "error";
-  let errorCode: PrivateErrorCode | undefined = "generation_failed";
   try {
-    const database = getDatabase();
-    const claimed = await database.recap.updateMany({
-      where: { id, status: "pending" },
-      data: { status: "running" },
+    finish(await attemptRecap(id, options));
+  } catch (error) {
+    const code =
+      error instanceof RecapAttemptError ? error.code : "generation_failed";
+    // The span allowlist has no code for an interrupted attempt.
+    finish({
+      outcome: "error",
+      ...(code === "background_interrupted" ? {} : { errorCode: code }),
     });
-    if (!claimed.count) {
-      outcome = "skipped";
-      errorCode = undefined;
-      return;
-    }
-    const record = await database.recap.findUniqueOrThrow({ where: { id } });
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await requireMembership({
-        principalId: record.ownerPrincipalId,
-        sessionId: record.sessionId,
-      });
-      const snapshot = snapshotSchema.parse(record.bookmarkSnapshot);
-      const records = await database.bookmark.findMany({
-        where: bookmarkFilter(record, snapshot),
-      });
-      if (!revisionsMatch(snapshot, records)) {
-        await database.recap.updateMany({
-          where: { id, status: "running" },
-          data: { status: "stale" },
-        });
-        outcome = "stale";
-        errorCode = undefined;
-        return;
-      }
-      const snapshotOrder = snapshot.map((selected) => selected.bookmarkId);
-      const bookmarks = records
-        .sort(
-          (a, b) => snapshotOrder.indexOf(a.id) - snapshotOrder.indexOf(b.id),
-        )
-        .map((bookmark) => ({
-          id: bookmark.id,
-          revision: bookmark.revision,
-          evidence: evidenceSchema.parse(bookmark.evidence ?? { segments: [] }),
-        }));
-      const passages = limitPassages(
-        bookmarks.flatMap((bookmark) =>
-          bookmark.evidence.segments
-            .filter((segment) => segment.text.trim())
-            .map((segment) => ({
-              bookmarkId: bookmark.id,
-              segmentId: segment.segmentId,
-              segmentRevision: segment.revision,
-              text: segment.text,
-            })),
-        ),
-      );
-      if (!passages.length) {
-        await database.recap.updateMany({
-          where: { id, status: "running" },
-          data: { status: "failed", failureReason: "no_resolved_evidence" },
-        });
-        errorCode = "no_resolved_evidence";
-        return;
-      }
-      const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          reject(new Error("generation_timeout"));
-        }, generationTimeoutMs);
-      });
-      const output = modelRecapSchema.parse(
-        await Promise.race([
-          generateTakeaways({ passages, abortSignal: controller.signal }),
-          timeout,
-        ]),
-      );
-      const takeaways = validateTakeaways(output, bookmarks);
-      await requireMembership({
-        principalId: record.ownerPrincipalId,
-        sessionId: record.sessionId,
-      });
-      await database.$transaction(
-        async (transaction) => {
-          const current = await transaction.bookmark.findMany({
-            where: bookmarkFilter(record, snapshot),
-            select: { id: true, revision: true },
-          });
-          const stale = !revisionsMatch(snapshot, current);
-          const failureReason =
-            stale || takeaways.length ? null : "no_valid_citations";
-          await transaction.recap.updateMany({
-            where: { id, status: "running" },
-            data: {
-              status: stale ? "stale" : takeaways.length ? "ready" : "failed",
-              takeaways: stale ? [] : takeaways,
-              failureReason,
-            },
-          });
-          outcome = stale ? "stale" : takeaways.length ? "success" : "error";
-          errorCode = failureReason ?? undefined;
-        },
-        { isolationLevel: "Serializable" },
-      );
-    } catch {
-      outcome = "error";
-      const failureReason = controller.signal.aborted
-        ? "generation_timeout"
-        : "generation_failed";
-      errorCode = failureReason;
-      await database.recap.updateMany({
-        where: { id, status: "running" },
-        data: {
-          status: "failed",
-          failureReason,
-        },
-      });
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  } finally {
-    finish({ outcome, ...(errorCode ? { errorCode } : {}) });
+    throw error;
   }
 };
+
+const attemptRecap = async (
+  id: string,
+  { signal, retryCount, timeoutMs = generationTimeoutMs }: AttemptOptions,
+): Promise<AttemptResult> => {
+  const database = getDatabase();
+  const attempts = retryCount + 1;
+  const finalAttempt = retryCount >= recapJobOptions.retryLimit;
+  // `running` is claimed again because a crashed or expired attempt leaves it behind,
+  // but only by a newer attempt, so a delayed older attempt cannot take it back.
+  const claimed = await database.recap.updateMany({
+    where: {
+      id,
+      status: { in: ["pending", "running"] },
+      attempts: { lt: attempts },
+    },
+    data: { status: "running", attempts },
+  });
+  if (!claimed.count) return { outcome: "skipped" };
+  // Every later write matches this claim, so a superseded attempt cannot overwrite its retry.
+  const claim = { id, status: "running" as const, attempts };
+
+  const record = await database.recap.findUniqueOrThrow({ where: { id } });
+  const controller = new AbortController();
+  let failure: AttemptFailure = "generation_failed";
+  const stop = (reason: AttemptFailure) => {
+    failure = reason;
+    controller.abort();
+  };
+  const interrupt = () => stop("background_interrupted");
+  if (signal.aborted) interrupt();
+  else signal.addEventListener("abort", interrupt, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await requireMembership({
+      principalId: record.ownerPrincipalId,
+      sessionId: record.sessionId,
+    });
+    const snapshot = snapshotSchema.parse(record.bookmarkSnapshot);
+    const records = await database.bookmark.findMany({
+      where: bookmarkFilter(record, snapshot),
+    });
+    if (!revisionsMatch(snapshot, records)) {
+      await database.recap.updateMany({
+        where: claim,
+        data: { status: "stale" },
+      });
+      return { outcome: "stale" };
+    }
+    const snapshotOrder = snapshot.map((selected) => selected.bookmarkId);
+    const bookmarks = records
+      .sort((a, b) => snapshotOrder.indexOf(a.id) - snapshotOrder.indexOf(b.id))
+      .map((bookmark) => ({
+        id: bookmark.id,
+        revision: bookmark.revision,
+        evidence: evidenceSchema.parse(bookmark.evidence ?? { segments: [] }),
+      }));
+    const passages = limitPassages(
+      bookmarks.flatMap((bookmark) =>
+        bookmark.evidence.segments
+          .filter((segment) => segment.text.trim())
+          .map((segment) => ({
+            bookmarkId: bookmark.id,
+            segmentId: segment.segmentId,
+            segmentRevision: segment.revision,
+            text: segment.text,
+          })),
+      ),
+    );
+    if (!passages.length) {
+      await database.recap.updateMany({
+        where: claim,
+        data: { status: "failed", failureReason: "no_resolved_evidence" },
+      });
+      return { outcome: "error", errorCode: "no_resolved_evidence" };
+    }
+
+    const aborted = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => stop("generation_timeout"), timeoutMs);
+      if (controller.signal.aborted) reject(new Error(failure));
+      controller.signal.addEventListener(
+        "abort",
+        () => reject(new Error(failure)),
+        { once: true },
+      );
+    });
+    const output = modelRecapSchema.parse(
+      await Promise.race([
+        generateTakeaways({ passages, abortSignal: controller.signal }),
+        aborted,
+      ]),
+    );
+    const takeaways = validateTakeaways(output, bookmarks);
+    await requireMembership({
+      principalId: record.ownerPrincipalId,
+      sessionId: record.sessionId,
+    });
+    const stale = await database.$transaction(
+      async (transaction) => {
+        const current = await transaction.bookmark.findMany({
+          where: bookmarkFilter(record, snapshot),
+          select: { id: true, revision: true },
+        });
+        const changed = !revisionsMatch(snapshot, current);
+        await transaction.recap.updateMany({
+          where: claim,
+          data: {
+            status: changed ? "stale" : takeaways.length ? "ready" : "failed",
+            takeaways: changed ? [] : takeaways,
+            failureReason:
+              changed || takeaways.length ? null : "no_valid_citations",
+          },
+        });
+        return changed;
+      },
+      { isolationLevel: "Serializable" },
+    );
+    if (stale) return { outcome: "stale" };
+    return takeaways.length
+      ? { outcome: "success" }
+      : { outcome: "error", errorCode: "no_valid_citations" };
+  } catch (error) {
+    // Revoked access is final: a retry would send the passages to the model again.
+    const revoked = error instanceof AccessError;
+    await database.recap.updateMany({
+      where: claim,
+      data:
+        revoked || finalAttempt
+          ? {
+              status: "failed",
+              failureReason: revoked ? "generation_failed" : failure,
+            }
+          : { status: "pending" },
+    });
+    if (!revoked) throw new RecapAttemptError(failure);
+    return { outcome: "error", errorCode: "generation_failed" };
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", interrupt);
+  }
+};
+
+/** Dead-letter handler: a final attempt that never recorded its own failure. */
+export const failInterruptedRecap = (id: string) =>
+  getDatabase().recap.updateMany({
+    where: { id, status: { in: ["pending", "running"] } },
+    data: { status: "failed", failureReason: "background_interrupted" },
+  });
 
 export const getRecap = async ({ principalId, id }: OwnerOptions) => {
   requireId(id);
@@ -347,20 +413,10 @@ export const getRecap = async ({ principalId, id }: OwnerOptions) => {
     where: bookmarkFilter(record, snapshot),
     select: { id: true, revision: true },
   });
-  const stale = !revisionsMatch(snapshot, current);
-  const interrupted =
-    (record.status === "pending" || record.status === "running") &&
-    Date.now() - record.updatedAt.getTime() > interruptedAfterMs;
-  if ((stale && record.status !== "stale") || interrupted) {
+  if (!revisionsMatch(snapshot, current) && record.status !== "stale") {
     await database.recap.updateMany({
-      where: stale
-        ? { id }
-        : { id, status: record.status, updatedAt: record.updatedAt },
-      data: {
-        status: stale ? "stale" : "failed",
-        takeaways: [],
-        failureReason: stale ? null : "background_interrupted",
-      },
+      where: { id },
+      data: { status: "stale", takeaways: [], failureReason: null },
     });
     record = await database.recap.findUniqueOrThrow({ where: { id } });
   }

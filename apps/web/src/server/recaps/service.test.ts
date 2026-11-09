@@ -6,15 +6,21 @@ import {
   generateRecap,
   getRecap,
   limitPassages,
+  RecapAttemptError,
   validateTakeaways,
 } from "./service";
 import { generateTakeaways } from "./model";
+import { enqueueRecap } from "./queue";
 import { syntheticRecapOutput, syntheticRecapSelection } from "./fixtures";
 
 vi.mock("server-only", () => ({}));
 vi.mock("./model", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./model")>()),
   generateTakeaways: vi.fn(),
+}));
+vi.mock("./queue", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./queue")>()),
+  enqueueRecap: vi.fn(),
 }));
 const { recap, bookmark, membership, transaction } = vi.hoisted(() => ({
   recap: {
@@ -58,6 +64,10 @@ const record = {
   updatedAt: new Date(),
 };
 const options = { principalId, sessionId, request };
+const finalAttempt = () => ({
+  signal: new AbortController().signal,
+  retryCount: 2,
+});
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -80,7 +90,7 @@ afterEach(() => vi.useRealTimers());
 
 const expectStatus = (status: string, failureReason?: string) =>
   expect(recap.updateMany).toHaveBeenLastCalledWith({
-    where: { id, status: "running" },
+    where: { id, status: "running", attempts: 3 },
     data: expect.objectContaining({
       status,
       ...(failureReason ? { failureReason } : {}),
@@ -96,7 +106,7 @@ describe("recap generation and citations", () => {
       bookmark.findMany.mockResolvedValue([
         { ...selection, evidence: { segments } },
       ]);
-      await generateRecap(id);
+      await generateRecap(id, finalAttempt());
       expectStatus("failed", "no_resolved_evidence");
     }
     expect(model).not.toHaveBeenCalled();
@@ -109,7 +119,7 @@ describe("recap generation and citations", () => {
         note: "private note",
       },
     ]);
-    await generateRecap(id);
+    await generateRecap(id, finalAttempt());
     expect(model).toHaveBeenCalledWith({
       passages: [
         {
@@ -164,14 +174,14 @@ describe("recap generation and citations", () => {
 
   it("fails when every citation is invalid", async () => {
     model.mockResolvedValue(syntheticRecapOutput(randomUUID()));
-    await generateRecap(id);
+    await generateRecap(id, finalAttempt());
     expectStatus("failed", "no_valid_citations");
   });
 
   it("detects changed or deleted selections before calling the model", async () => {
     for (const current of [[], [{ ...selection, revision: 2 }]]) {
       bookmark.findMany.mockResolvedValue(current);
-      await generateRecap(id);
+      await generateRecap(id, finalAttempt());
       expectStatus("stale");
     }
     expect(model).not.toHaveBeenCalled();
@@ -181,16 +191,58 @@ describe("recap generation and citations", () => {
     bookmark.findMany
       .mockResolvedValueOnce([selection])
       .mockResolvedValueOnce([{ ...selection, revision: 2 }]);
-    await generateRecap(id);
+    await generateRecap(id, finalAttempt());
     expectStatus("stale");
     expect(recap.updateMany.mock.lastCall?.[0].data.takeaways).toEqual([]);
   });
 
   it("stores a content-free failure without modifying bookmarks", async () => {
     model.mockRejectedValue(new Error("Synthetic sensitive model error"));
-    await generateRecap(id);
+    await expect(generateRecap(id, finalAttempt())).rejects.toEqual(
+      new RecapAttemptError("generation_failed"),
+    );
     expectStatus("failed", "generation_failed");
     expect(Object.keys(bookmark)).toEqual(["findMany"]);
+  });
+
+  it("returns a retryable failure to pending without recording it", async () => {
+    model.mockRejectedValue(new Error("Synthetic sensitive model error"));
+    await expect(
+      generateRecap(id, { ...finalAttempt(), retryCount: 0 }),
+    ).rejects.toMatchObject({ code: "generation_failed" });
+    expect(recap.updateMany).toHaveBeenLastCalledWith({
+      where: { id, status: "running", attempts: 1 },
+      data: { status: "pending" },
+    });
+  });
+
+  it("fails revoked access without a retry", async () => {
+    membership.findUnique.mockResolvedValue({
+      revokedAt: new Date(),
+      session: { status: "ended" },
+    });
+    await generateRecap(id, { ...finalAttempt(), retryCount: 0 });
+    expect(recap.updateMany).toHaveBeenLastCalledWith({
+      where: { id, status: "running", attempts: 1 },
+      data: { status: "failed", failureReason: "generation_failed" },
+    });
+    expect(model).not.toHaveBeenCalled();
+  });
+
+  it("aborts the model call when the job is interrupted", async () => {
+    const job = new AbortController();
+    model.mockImplementation(() => new Promise(() => {}));
+    const generation = generateRecap(id, {
+      signal: job.signal,
+      retryCount: 2,
+    });
+    await vi.waitFor(() => expect(model).toHaveBeenCalled());
+    job.abort();
+    await expect(generation).rejects.toMatchObject({
+      code: "background_interrupted",
+    });
+    expectStatus("failed", "background_interrupted");
+    expect(model.mock.calls[0]?.[0].abortSignal.aborted).toBe(true);
   });
 
   it("bounds a hung model call and ignores late output", async () => {
@@ -204,9 +256,12 @@ describe("recap generation and citations", () => {
           resolveModel = resolve;
         }),
     );
-    const generation = generateRecap(id);
+    const generation = generateRecap(id, finalAttempt());
+    const settled = expect(generation).rejects.toMatchObject({
+      code: "generation_timeout",
+    });
     await vi.advanceTimersByTimeAsync(45_001);
-    await generation;
+    await settled;
     expectStatus("failed", "generation_timeout");
     expect(model.mock.calls[0]?.[0].abortSignal.aborted).toBe(true);
     const writes = recap.updateMany.mock.calls.length;
@@ -238,9 +293,17 @@ describe("recap generation and citations", () => {
     );
   });
 
-  it("claims pending work once", async () => {
+  it("claims pending or abandoned running work only for a newer attempt", async () => {
     recap.updateMany.mockResolvedValue({ count: 0 });
-    await generateRecap(id);
+    await generateRecap(id, finalAttempt());
+    expect(recap.updateMany).toHaveBeenCalledWith({
+      where: {
+        id,
+        status: { in: ["pending", "running"] },
+        attempts: { lt: 3 },
+      },
+      data: { status: "running", attempts: 3 },
+    });
     expect(model).not.toHaveBeenCalled();
   });
 });
@@ -270,6 +333,10 @@ describe("owner-only creation and reads", () => {
         status: "pending",
       },
     });
+    const [jobTransaction, jobRecapId] =
+      vi.mocked(enqueueRecap).mock.calls[0] ?? [];
+    expect(jobRecapId).toBe(id);
+    expect(jobTransaction).toHaveProperty("recap", recap);
   });
 
   it("rejects a new operation while the owner's recap is active in the session", async () => {
@@ -288,6 +355,7 @@ describe("owner-only creation and reads", () => {
       },
     });
     expect(recap.create).not.toHaveBeenCalled();
+    expect(enqueueRecap).not.toHaveBeenCalled();
   });
 
   it("hides missing, cross-owner and cross-session bookmarks", async () => {
@@ -358,22 +426,6 @@ describe("owner-only creation and reads", () => {
         data: { status: "stale", takeaways: [], failureReason: null },
       }),
     );
-  });
-
-  it("exposes interrupted work as failed after 90 seconds", async () => {
-    recap.findUnique.mockResolvedValue({
-      ...record,
-      updatedAt: new Date(Date.now() - 91_000),
-    });
-    recap.findUniqueOrThrow.mockResolvedValue({
-      ...record,
-      status: "failed",
-      failureReason: "background_interrupted",
-    });
-    expect(await getRecap({ principalId, id })).toMatchObject({
-      status: "failed",
-      failureReason: "background_interrupted",
-    });
   });
 
   it("invalidates changed selections even when generation finishes during a read", async () => {

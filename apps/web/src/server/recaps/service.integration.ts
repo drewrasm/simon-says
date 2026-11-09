@@ -17,6 +17,9 @@ import {
 } from "./service";
 import { generateTakeaways } from "./model";
 import { syntheticRecapOutput, syntheticRecapSelection } from "./fixtures";
+import { getJobs, startJobs, stopJobs } from "../jobs/runtime";
+import { createRecapQueues } from "./worker";
+import { enqueueRecap, recapDeadLetterQueue, recapQueue } from "./queue";
 
 vi.mock("server-only", () => ({}));
 vi.mock("./model", async (importOriginal) => ({
@@ -32,6 +35,20 @@ const sessionId = randomUUID();
 const otherSessionId = randomUUID();
 let selection = syntheticRecapSelection();
 const model = vi.mocked(generateTakeaways);
+// Workers stay off so each test runs attempts itself.
+const finalAttempt = {
+  signal: new AbortController().signal,
+  retryCount: 2,
+};
+const removeRecaps = async (sessionIds: string[]) => {
+  const recaps = await database.recap.findMany({
+    where: { sessionId: { in: sessionIds } },
+    select: { id: true },
+  });
+  const ids = recaps.map((recap) => recap.id);
+  if (ids.length) await getJobs().deleteJob(recapQueue, ids);
+  await database.recap.deleteMany({ where: { id: { in: ids } } });
+};
 const options = () => ({
   principalId: attendeeA,
   sessionId,
@@ -42,6 +59,10 @@ const options = () => ({
 });
 
 beforeAll(async () => {
+  await startJobs({
+    connectionString: process.env.DATABASE_URL!,
+    register: createRecapQueues,
+  });
   await database.principal.createMany({
     data: [host, attendeeA, attendeeB].map((id) => ({ id })),
   });
@@ -65,9 +86,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   vi.resetAllMocks();
-  await database.recap.deleteMany({
-    where: { sessionId: { in: [sessionId, otherSessionId] } },
-  });
+  await removeRecaps([sessionId, otherSessionId]);
   await database.bookmark.deleteMany({ where: { sessionId } });
   await database.membership.updateMany({
     where: { sessionId },
@@ -95,6 +114,7 @@ beforeEach(async () => {
 });
 afterAll(async () => {
   try {
+    await removeRecaps([sessionId, otherSessionId]);
     await database.session.deleteMany({
       where: { id: { in: [sessionId, otherSessionId] } },
     });
@@ -102,6 +122,7 @@ afterAll(async () => {
       where: { id: { in: [host, attendeeA, attendeeB] } },
     });
   } finally {
+    await stopJobs(1000);
     await database.$disconnect();
   }
 });
@@ -153,8 +174,8 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
         bookmarks: [{ bookmarkId: other.id, expectedRevision: 1 }],
       },
     });
-    await generateRecap(a.response.id);
-    await generateRecap(b.response.id);
+    await generateRecap(a.response.id, finalAttempt);
+    await generateRecap(b.response.id, finalAttempt);
     const recapA = await getRecap({
       principalId: attendeeA,
       id: a.response.id,
@@ -181,7 +202,7 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
     expect(await getRecap({ principalId: attendeeA, id })).toMatchObject({
       status: "pending",
     });
-    await generateRecap(id);
+    await generateRecap(id, finalAttempt);
     const recap = await getRecap({ principalId: attendeeA, id });
     expect(recap.status).toBe("ready");
     expect(
@@ -200,6 +221,41 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
       note: "Synthetic private note",
       evidence: selection.evidence,
     });
+  });
+
+  it("commits one content-free job with each recap and none for a rejected create", async () => {
+    const {
+      response: { id },
+    } = await createRecap(options());
+    const jobs = await getJobs().findJobs(recapQueue, { id });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      id,
+      data: { recapId: id },
+      state: "created",
+      retryLimit: 2,
+      expireInSeconds: 90,
+      deadLetter: recapDeadLetterQueue,
+    });
+
+    await expect(createRecap(options())).rejects.toMatchObject({
+      status: 429,
+    });
+    expect(await database.recap.count({ where: { sessionId } })).toBe(1);
+    expect(
+      await getJobs().findJobs(recapQueue, { data: { recapId: id } }),
+    ).toHaveLength(1);
+  });
+
+  it("rolls the job back with its transaction", async () => {
+    const id = randomUUID();
+    await expect(
+      database.$transaction(async (transaction) => {
+        await enqueueRecap(transaction, id);
+        throw new Error("Synthetic rollback");
+      }),
+    ).rejects.toThrow("Synthetic rollback");
+    expect(await getJobs().findJobs(recapQueue, { id })).toEqual([]);
   });
 
   it("converges concurrent create retries on one operation and keeps it after edits", async () => {
@@ -232,7 +288,7 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
     ).toMatchObject({ reason: { status: 429, code: "recap_in_progress" } });
     expect(await database.recap.count({ where: { sessionId } })).toBe(1);
 
-    await generateRecap(created[0]!.response.id);
+    await generateRecap(created[0]!.response.id, finalAttempt);
     expect((await createRecap(options())).created).toBe(true);
   });
 
@@ -279,7 +335,7 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
     const {
       response: { id },
     } = await createRecap(options());
-    await generateRecap(id);
+    await generateRecap(id, finalAttempt);
     expect(await getRecap({ principalId: attendeeA, id })).toMatchObject({
       status: "failed",
       failureReason: "no_resolved_evidence",
@@ -295,7 +351,7 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
     const {
       response: { id },
     } = await createRecap(options());
-    await generateRecap(id);
+    await generateRecap(id, finalAttempt);
     expect(await getRecap({ principalId: attendeeA, id })).toMatchObject({
       status: "failed",
       failureReason: "no_valid_citations",
@@ -317,7 +373,7 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
     const {
       response: { id },
     } = await createRecap(options());
-    await generateRecap(id);
+    await generateRecap(id, finalAttempt);
     expect(await getRecap({ principalId: attendeeA, id })).toMatchObject({
       status: "stale",
       takeaways: [],
@@ -329,7 +385,7 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
         bookmarks: [{ bookmarkId: selection.id, expectedRevision: 2 }],
       },
     });
-    await generateRecap(second.response.id);
+    await generateRecap(second.response.id, finalAttempt);
     expect(
       await getRecap({ principalId: attendeeA, id: second.response.id }),
     ).toMatchObject({ status: "ready" });
@@ -352,7 +408,9 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
     const {
       response: { id },
     } = await createRecap(options());
-    await generateRecap(id);
+    await expect(generateRecap(id, finalAttempt)).rejects.toMatchObject({
+      code: "generation_failed",
+    });
     expect(await getRecap({ principalId: attendeeA, id })).toMatchObject({
       status: "failed",
       failureReason: "generation_failed",
@@ -395,5 +453,6 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
     });
     await database.session.delete({ where: { id: otherSessionId } });
     expect(await database.recap.findUnique({ where: { id } })).toBeNull();
+    await getJobs().deleteJob(recapQueue, id);
   });
 });

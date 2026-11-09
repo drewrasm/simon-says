@@ -10,5 +10,7 @@ export default defineConfig({
   test: {
     include: ["apps/web/src/server/recaps/*.integration.ts"],
     fileParallelism: false,
+    // Real job workers poll, back off and expire on pg-boss's own timers.
+    testTimeout: 30_000,
   },
 });
