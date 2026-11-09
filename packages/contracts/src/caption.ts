@@ -137,6 +137,15 @@ export const captureStateEventSchema = z.object({
   audio: z.enum(["receiving", "stalled", "stopped"]),
   /** Lag from audio receipt to final caption; null before the first final. */
   captionLagMs: ms.nullable(),
+  /** Content-free degradation reason; never a provider error message. */
+  reason: z
+    .enum([
+      "missing_provider_key",
+      "transcription_failed",
+      "segment_sink_failed",
+      "backlog_limit",
+    ])
+    .optional(),
 });
 
 export const clockHeartbeatEventSchema = z.object({
