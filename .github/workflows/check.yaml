@@ -1,0 +1,44 @@
+name: Check and build locally
+on:
+  pull_request:
+  push:
+permissions:
+  contents: read
+concurrency:
+  group: checkpoint-0a-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+      - name: Build image without publishing
+        run: docker build -t simon-says:ci .
+      - name: Check container transport locally
+        env:
+          PROBE_TOKEN: local-checkpoint-0a-probe-token-12345
+        run: |
+          trap 'docker logs simon-says-ci; docker rm -f simon-says-ci' EXIT
+          docker run -d --name simon-says-ci -p 127.0.0.1:8080:8080 \
+            -e PROBE_TOKEN -e DATABASE_URL=postgresql://dummy:dummy@127.0.0.1:5432/dummy simon-says:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/readyz; then break; fi
+            sleep 1
+          done
+          node scripts/probe.mjs
+          docker stop --time 20 simon-says-ci
+          test "$(docker inspect -f '{{.State.ExitCode}}' simon-says-ci)" = 0
+      - name: Render manifests offline
+        run: kubectl kustomize infra/k8s > /tmp/simon-says.yaml
+# No registry login, image push, manifest write-back, or deployment job.
+# Publishing requires authorization (public image + GitOps activates deploy-on-push).
