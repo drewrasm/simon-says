@@ -8,7 +8,7 @@ import { readPrincipal } from "@/server/access/principal";
 import { listBookmarks } from "@/server/bookmarks/service";
 import { NoteComposer } from "../note-composer";
 import { NotJoined } from "../not-joined";
-import { ExportNotesButton } from "./note-card-actions";
+import { NotesExportActions } from "./note-card-actions";
 import { NotesList } from "./notes-list";
 
 export const dynamic = "force-dynamic";
@@ -56,12 +56,12 @@ const NotesPage = async ({ params }: NotesPageProps) => {
             {session.title ?? "Live session"}
           </span>
         </div>
-        <ExportNotesButton
-          title={session.title ?? "Live session"}
-          bookmarks={bookmarks}
-          iconOnly
-        />
       </header>
+
+      <NotesExportActions
+        title={session.title ?? "Live session"}
+        bookmarks={bookmarks}
+      />
 
       {session.status === "live" ? (
         <Link

@@ -1,6 +1,7 @@
 import type { BookmarkResponse } from "@simon-says/contracts/bookmark";
 import { describe, expect, it } from "vitest";
-import { momentLabel, notesMarkdown } from "./notes-markdown";
+import { momentLabel } from "./notes-entries";
+import { notesMarkdown } from "./notes-markdown";
 
 const base: BookmarkResponse = {
   id: "0b8f3c52-41f7-4d3a-8f0e-7a1e2c3d4b5f",
