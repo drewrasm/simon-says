@@ -87,7 +87,8 @@ export const useClipSave = ({ sessionId }: { sessionId: string }) => {
     /** True once some lines are saved: the lines and note can't change. */
     locked: partlySaved,
     /** The lines being finished after a partial save. */
-    lockedLines: draft && partlySaved ? draft.parts.map(({ line }) => line) : null,
+    lockedLines:
+      draft && partlySaved ? draft.parts.map(({ line }) => line) : null,
     failureMessage: failure
       ? [FAILURE_MESSAGE[failure], progress].filter(Boolean).join(" ")
       : null,

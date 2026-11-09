@@ -1,5 +1,5 @@
 import { buttonVariants } from "@simon-says/ui/components/button";
-import { ChevronLeftIcon, MonitorSmartphoneIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, LockIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AccessError } from "@/server/access/errors";
@@ -8,6 +8,7 @@ import { readPrincipal } from "@/server/access/principal";
 import { listBookmarks } from "@/server/bookmarks/service";
 import { NoteComposer } from "../note-composer";
 import { NotJoined } from "../not-joined";
+import { ExportNotesButton } from "./note-card-actions";
 import { NotesList } from "./notes-list";
 
 export const dynamic = "force-dynamic";
@@ -49,34 +50,44 @@ const NotesPage = async ({ params }: NotesPageProps) => {
         >
           <ChevronLeftIcon aria-hidden="true" />
         </Link>
-        <div className="flex min-w-0 flex-col">
+        <div className="flex min-w-0 grow flex-col">
           <h1 className="text-lg font-bold">My notes</h1>
           <span className="truncate text-xs text-muted-foreground">
             {session.title ?? "Live session"}
           </span>
         </div>
+        <ExportNotesButton
+          title={session.title ?? "Live session"}
+          bookmarks={bookmarks}
+          iconOnly
+        />
       </header>
 
-      <section
-        aria-label="Where notes are kept"
-        className="flex gap-2.5 rounded-xl border bg-muted p-3.5"
-      >
-        <MonitorSmartphoneIcon
-          aria-hidden="true"
-          className="mt-0.5 size-4.5 shrink-0"
-        />
-        <div className="flex flex-col gap-0.5 text-sm">
-          <span className="font-semibold">Only you can see these</span>
-          <span className="text-muted-foreground">
-            Notes are tied to this browser. Clearing its cookies or switching
-            devices loses access to them.
+      {session.status === "live" ? (
+        <Link
+          href={`/session/${id}`}
+          className="flex min-h-11 items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm"
+        >
+          <span
+            aria-hidden="true"
+            className="size-2 shrink-0 animate-pulse rounded-full bg-destructive"
+          />
+          <span className="grow font-semibold">Session is still live</span>
+          <span className="flex items-center gap-0.5 text-muted-foreground">
+            Return
+            <ChevronRightIcon aria-hidden="true" className="size-4" />
           </span>
-        </div>
-      </section>
+        </Link>
+      ) : null}
 
       <div className="flex-1">
-        <NotesList bookmarks={bookmarks} />
+        <NotesList bookmarks={bookmarks} showJump />
       </div>
+
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <LockIcon aria-hidden="true" className="size-3.5" />
+        Private to you on this device.
+      </p>
 
       <div className="sticky bottom-0 -mx-4 border-t bg-background px-4 py-3 sm:-mx-6 sm:px-6">
         <NoteComposer

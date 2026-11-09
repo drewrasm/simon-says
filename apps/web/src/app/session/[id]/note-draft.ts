@@ -4,7 +4,9 @@ import type { NoteDraft } from "./save-note";
 type NewId = () => string;
 
 /** The same draft under new IDs, so a send can't collide with an earlier one. */
-export const withFreshIds = <Draft extends { bookmarkId: string; operationId: string }>(
+export const withFreshIds = <
+  Draft extends { bookmarkId: string; operationId: string },
+>(
   draft: Draft,
   newId: NewId,
 ): Draft => ({

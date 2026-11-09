@@ -4,6 +4,9 @@ import { requireMembership } from "@/server/access/membership";
 import { readPrincipal } from "@/server/access/principal";
 import { listBookmarks } from "@/server/bookmarks/service";
 import { CaptionReader } from "./caption-reader";
+import { ClipProvider } from "./clip-context";
+import { ClipControls } from "./clip-controls";
+import { KeepThatButton } from "./keep-that-button";
 import { NoteComposer } from "./note-composer";
 import { NoteForm } from "./note-form";
 import { NotesPanel } from "./notes/notes-panel";
@@ -35,23 +38,38 @@ const SessionPage = async ({ params }: SessionPageProps) => {
     sessionId: id,
   });
 
+  const title = session.title ?? "Live session";
+  // ClipProvider carries the reader's finalized lines and selection to the
+  // clip and note controls; until the reader reports them they wait honestly.
   return (
-    <CaptionReader
-      sessionId={id}
-      title={session.title}
-      status={session.status}
-      noteCount={notes.length}
-      notesPanel={
-        <NotesPanel bookmarks={notes} form={<NoteForm sessionId={id} />} />
-      }
-      actions={
-        <NoteComposer
-          sessionId={id}
-          triggerLabel="Note"
-          afterSave="open-notes"
-        />
-      }
-    />
+    <ClipProvider>
+      <CaptionReader
+        sessionId={id}
+        title={session.title}
+        status={session.status}
+        noteCount={notes.length}
+        notesPanel={
+          <NotesPanel
+            title={title}
+            bookmarks={notes}
+            actions={<KeepThatButton sessionId={id} className="w-full" />}
+            form={<NoteForm sessionId={id} />}
+          />
+        }
+        actions={
+          <>
+            <KeepThatButton sessionId={id} className="h-11 grow" />
+            <NoteComposer
+              sessionId={id}
+              triggerLabel="Note"
+              triggerClassName="h-11 grow"
+              afterSave="open-notes"
+            />
+          </>
+        }
+      />
+      <ClipControls sessionId={id} />
+    </ClipProvider>
   );
 };
 

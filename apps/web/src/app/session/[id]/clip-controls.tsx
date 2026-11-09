@@ -44,8 +44,7 @@ type ClipSheetProps = {
  */
 const ClipSheet = ({ sessionId, open, onOpenChange }: ClipSheetProps) => {
   const router = useRouter();
-  const { lines, selectedIds, setSelectedIds, clearSelection } =
-    useClipState();
+  const { lines, selectedIds, setSelectedIds, clearSelection } = useClipState();
   const [note, setNote] = useState("");
   const { save, saving, reset, locked, lockedLines, failureMessage } =
     useClipSave({ sessionId });

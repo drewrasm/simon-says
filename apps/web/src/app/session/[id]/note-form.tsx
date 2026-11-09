@@ -20,8 +20,15 @@ type NoteFormProps = { sessionId: string };
 export const NoteForm = ({ sessionId }: NoteFormProps) => {
   const router = useRouter();
   const { talkMs } = useClipState();
-  const { note, setNote, submit, saving, canSubmit, failureMessage, pinnedAtMs } =
-    useNoteDraft({ sessionId, talkMs });
+  const {
+    note,
+    setNote,
+    submit,
+    saving,
+    canSubmit,
+    failureMessage,
+    pinnedAtMs,
+  } = useNoteDraft({ sessionId, talkMs });
 
   const save = async () => {
     if (!(await submit())) return;
