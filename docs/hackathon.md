@@ -1,6 +1,6 @@
 # Hackathon integrations
 
-Status: the team selected technology from all four sponsor tracks on November 9, 2026. Integrations are planned, not implemented or verified. The Radar team cluster is provisioned, and Radar and Dash0 MCP access works; see [deployment](deployment.md#team-environment). The [implementation plan](implementation-plan.md) is the completion record; the [building tracks](building-tracks.md) assign the three builders.
+Status: the team selected technology from all four sponsor tracks on November 9, 2026. Radar deployment is verified; its investigation and the remaining integration gates are open. Radar and Dash0 MCP access works; see [deployment](deployment.md#team-environment). The [implementation plan](implementation-plan.md) is the completion record; the [building tracks](building-tracks.md) assign the three builders.
 
 ## Required scope and evidence
 
@@ -15,17 +15,27 @@ The [hackathon resources](https://www.wemakedevs.org/hackathons/cnh/resources) i
 
 Collect evidence during ordinary development. Do not invent incidents or claim a configured SDK proves a working integration. Search stays within sessions the attendee can access; this plan does not introduce a public conference catalog.
 
+## Radar evidence so far
+
+Verified November 9, 2026 (MT), organization Cloud Native Hackathon (`org_NCJbssDGEBsU`), cluster `simon-says` (`kiTZ7VFRruo`), namespace `team-simon-says`:
+
+- Before: organizers' starter Deployment `app`, no Argo CD Application; Radar reported the known shared CoreDNS rewrite issue.
+- Operation: with explicit Track 2 owner approval, Radar MCP applied only the unmodified `infra/argocd/application.yaml`. After: Argo CD Synced / Healthy, operation Succeeded at 20:11:17 UTC (13:11 MT), revision `dd101113…`; starter replaced by app image `c97978f…` (1/1 Ready, 0 restarts), Postgres `db-1` 1/1 Ready with one primary and one PVC. Public health, readiness, and home returned 200.
+- Checks: single-primary PodDisruptionBudget restriction, empty `db-ro` Service, and one historical readiness warning from the retired starter pod. Postgres admission webhook connection refusal recovered through Argo retry; transient Radar dry-run Unauthorized and OpenAPI timeouts also recovered.
+
+No Radar investigation has been run yet. Checks and deployment operations do not complete that requirement. Authenticated gateway transport remains unverified while `PROBE_TOKEN` is unset. See [deployment evidence and limitations](implementation-plan.md#c1--checkpoint-0a-deployment-evidence).
+
 ## Accounts and access
 
 | Service                                                | Needed access                                                                                      | Status                                                                                                                                    |
 | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub/GHCR                                            | Repository administration for app installation, CI, image publication, and GitOps read/pull access | Repository is public; image publication and package access unverified                                                                     |
-| [Radar team environment](https://join.cnh.radarhq.io/) | Team invites, assigned cluster ID, namespace, hostname, and authenticated MCP                      | Cluster provisioned; MCP reads the team namespace; teammate invites open                                                                  |
+| GitHub/GHCR                                            | Repository administration for app installation, CI, image publication, and GitOps read/pull access | Repository and GHCR package are public; image publication verified, anonymous manifest pull HTTP 200                                      |
+| [Radar team environment](https://join.cnh.radarhq.io/) | Team invites, assigned cluster ID, namespace, hostname, and authenticated MCP                      | Argo CD applied through MCP; app and Postgres ready; investigation pending                                                                |
 | [Dash0](https://www.dash0.com/)                        | Team organization, dataset, OTLP endpoint/token, Agent0, and MCP access                            | Organization in AWS US West; MCP configured; ingest unverified                                                                            |
 | [Gitar](https://app.gitar.ai/)                         | Repository administrator installs the GitHub App for this repo after reviewing permissions         | App connected to repo by owner; review instructions and CI added in PR, unverified until a PR is reviewed; auto-apply off                 |
 | [Elastic Cloud](https://cloud.elastic.co/)             | Search project, scoped API key, and inference endpoint                                             | Serverless hackathon-trial project in AWS us-west-2; agent CLI and MCP access verified; app key scope and cluster connectivity unverified |
 | Transcription and recap providers                      | Account, processing/retention settings, keys, and budget                                           | OpenAI only via AI SDK; hackathon credits; key, quota, retention, and runtime unverified; recap model open                                |
-| Database and object storage                            | Persistent Postgres and private object access from the cluster                                     | CloudNativePG selected, unverified; object storage undecided                                                                              |
+| Database and object storage                            | Persistent Postgres and private object access from the cluster                                     | CloudNativePG primary ready with one PVC; database connectivity/recovery unverified; object storage undecided                             |
 
 Store runtime credentials in cluster Secrets or an approved secret manager. Keep values out of chat, git, images, build arguments, and browser bundles. An account does not establish quota, connectivity, or permission to deploy.
 
