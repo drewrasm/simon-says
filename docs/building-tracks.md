@@ -10,6 +10,8 @@ Status: milestone 0 foundation is complete with local verification for the three
 | 2. Capture and transcription     | Browser capture, source clock, ingest, transcription, Elasticsearch segment/frame ingest, shared feed, host stop, Radar deployment, Dash0 setup | Capture module in `apps/web`; ingest and event modules in `apps/web/src/server`; timeline rules in `packages/domain`; `infra`; `.github/workflows` |
 | 3. Private highlights and recaps | Identity, membership, private selections, Elasticsearch evidence resolution/search, generation, exports, data lifecycle                         | Access, bookmark, and recap modules in `apps/web/src/server`; selection rules in `packages/domain`; `packages/db`                                  |
 
+Builders: Logan owns track 3 and Dylan owns track 2. Track 1's builder is not confirmed yet. The [delivery plan](delivery-plan.md) sets today's per-track checkpoints, path ownership, and status board.
+
 [Architecture](architecture.md) defines package boundaries. [Contracts](contracts.md) defines shared records and operations. Keep provider SDKs, database access, and credentials in server code.
 
 ## Establish the shared foundation
