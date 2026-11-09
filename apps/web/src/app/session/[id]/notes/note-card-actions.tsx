@@ -154,10 +154,9 @@ export const NotesExportActions = ({
 
   const share = async () => {
     try {
-      await navigator.share({
-        title: `My notes: ${title}`,
-        text: notesPlainText(title, bookmarks),
-      });
+      // No `title`: share targets such as Notes put it above the text, and the
+      // text already opens with the "My notes: …" heading.
+      await navigator.share({ text: notesPlainText(title, bookmarks) });
     } catch (error) {
       // Cancelling the share sheet is not a failure.
       if (error instanceof DOMException && error.name === "AbortError") return;
