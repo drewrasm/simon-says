@@ -10,7 +10,7 @@ import { AccessError } from "./errors";
 import { ensurePrincipal } from "./principal";
 import { claimHost, createSession, joinSession } from "./sessions";
 
-const respond = (body: unknown, status: number) =>
+export const respond = (body: unknown, status: number) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 const handleAccess = async (
@@ -54,7 +54,7 @@ const readBodyText = async (request: Request) => {
   return Buffer.concat(chunks).toString("utf8");
 };
 
-const parseBody = async <T>(request: Request, schema: z.ZodType<T>) => {
+export const parseBody = async <T>(request: Request, schema: z.ZodType<T>) => {
   if (
     request.headers.get("content-type")?.split(";")[0]?.trim() !==
     "application/json"
