@@ -72,3 +72,27 @@ it("validates optional Elasticsearch settings without echoing credentials", () =
     "ELASTICSEARCH_API_KEY must be nonempty",
   );
 });
+
+it("validates a server-only exact APP_ORIGIN with no default trust", () => {
+  expect(readRuntimeEnv({}).frameEnv.APP_ORIGIN).toBeUndefined();
+  expect(
+    readRuntimeEnv({
+      APP_ORIGIN: "https://simon.example",
+      DATABASE_URL: "configured",
+    }).frameEnv,
+  ).toMatchObject({
+    APP_ORIGIN: "https://simon.example",
+    DATABASE_URL: "configured",
+  });
+  for (const APP_ORIGIN of [
+    "",
+    "null",
+    "ftp://localhost",
+    "https://user:secret@localhost",
+    "https://localhost/",
+    "https://localhost/path",
+    "https://localhost?q=x",
+    "https://localhost#fragment",
+  ])
+    expect(() => readRuntimeEnv({ APP_ORIGIN })).toThrow("APP_ORIGIN must be");
+});

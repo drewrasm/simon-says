@@ -255,7 +255,7 @@ it.each([false, true])(
       expect(response.status).toBe(conflicting ? 409 : 200);
       expect(await response.json()).toEqual(
         conflicting
-          ? { error: "observation_conflict" }
+          ? { error: "sequence_conflict" }
           : { observationId: "frame-0" },
       );
       if (!response.ok) throw new FrameUploadError(response.status);

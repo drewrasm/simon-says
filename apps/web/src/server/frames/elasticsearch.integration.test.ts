@@ -184,7 +184,7 @@ it("local ES + SeaweedFS: uploads a frame before persisting exact mapped fields 
       expect(replay.status).toBe(conflicting ? 409 : 200);
       expect(await replay.json()).toEqual(
         conflicting
-          ? { error: "observation_conflict" }
+          ? { error: "sequence_conflict" }
           : { observationId: observation.observationId },
       );
     }

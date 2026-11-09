@@ -14,17 +14,18 @@ import { ElasticsearchSegmentSink } from "../src/server/search/elasticsearch-seg
 import { ElasticsearchObservationSink } from "../src/server/search/elasticsearch-observation-sink";
 import {
   createFrameUpload,
-  devFrameAccess,
   InMemoryObservationSink,
 } from "../src/server/frames/upload";
+import { createFrameAccess } from "../src/server/frames/access-authority";
 import { s3FrameStore } from "../src/server/frames/s3";
 import { readRuntimeEnv } from "./env.js";
 
 const runtime = readRuntimeEnv(process.env);
 const { port, probeToken } = runtime;
 const elasticsearch = runtime.elasticsearch;
+const authority = createIngestAuthority(process.env);
 const captions = new CaptionTransport({
-  authority: createIngestAuthority(process.env),
+  authority,
   ...(elasticsearch
     ? {
         sink: {
@@ -68,9 +69,10 @@ const frames = new FrameTransport(
   new URL(`http://localhost:${port}`).origin,
   () =>
     createFrameUpload({
-      access: devFrameAccess(
+      access: createFrameAccess(
         runtime.frameEnv,
         new URL(`http://localhost:${port}`).origin,
+        authority,
       ),
       store: s3FrameStore(runtime.frameEnv),
       sink: elasticsearch
@@ -85,6 +87,7 @@ const frames = new FrameTransport(
         ? { sinkDegradedReason: "missing_elasticsearch_config" }
         : {}),
     }),
+  authority,
 );
 const maxConnections = 16;
 const durationMs = 30_000;

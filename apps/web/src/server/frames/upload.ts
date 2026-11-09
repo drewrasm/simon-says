@@ -170,7 +170,7 @@ export function createFrameUpload(deps: {
       } catch (error) {
         records.delete(key);
         if (error instanceof ObservationConflictError)
-          return reply(409, "observation_conflict");
+          return reply(409, "sequence_conflict");
         return reply(503, "frame_persistence_unavailable");
       }
       return Response.json(

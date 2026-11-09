@@ -1,19 +1,22 @@
 import "server-only";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { s3FrameStore } from "./s3";
-import {
-  createFrameUpload,
-  devFrameAccess,
-  InMemoryObservationSink,
-} from "./upload";
+import { createIngestAuthority } from "../captions/access-authority";
+import type { IngestAuthority } from "../captions/ingest-authority";
+import { createFrameAccess } from "./access-authority";
+import { createFrameUpload, InMemoryObservationSink } from "./upload";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 type Upload = ReturnType<typeof createFrameUpload>;
 const route = /^\/api\/sessions\/([^/]+)\/frames$/;
 
-function localUpload(env: Environment, expectedOrigin: string): Upload {
+function frameUpload(
+  env: Environment,
+  expectedOrigin: string,
+  authority: IngestAuthority,
+): Upload {
   return createFrameUpload({
-    access: devFrameAccess(env, expectedOrigin),
+    access: createFrameAccess(env, expectedOrigin, authority),
     store: s3FrameStore(env),
     sink: new InMemoryObservationSink(),
   });
@@ -26,7 +29,8 @@ export class FrameTransport {
     private readonly env: Environment,
     private readonly expectedOrigin: string,
     private readonly createUpload: () => Upload = () =>
-      localUpload(env, expectedOrigin),
+      frameUpload(env, expectedOrigin, authority),
+    authority: IngestAuthority = createIngestAuthority(env),
   ) {}
 
   handleHttp(
@@ -38,7 +42,10 @@ export class FrameTransport {
     if (!match) return false;
     res.setHeader("Cache-Control", "no-store");
     // Fail closed before initializing storage, including with dev opt-in set.
-    if (this.env.NODE_ENV === "production" || !this.env.CAPTIONS_DEV_SESSION) {
+    if (
+      !this.env.DATABASE_URL &&
+      (this.env.NODE_ENV === "production" || !this.env.CAPTIONS_DEV_SESSION)
+    ) {
       res.writeHead(404).end();
       return true;
     }
