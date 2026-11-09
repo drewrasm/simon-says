@@ -6,7 +6,10 @@ import {
   screenObservationSchema,
   type ScreenObservation,
 } from "@simon-says/contracts/screen";
-import type { ObservationSink } from "../frames/upload";
+import {
+  ObservationConflictError,
+  type ObservationSink,
+} from "../frames/upload";
 import type { CaptionTelemetry } from "../captions/telemetry";
 
 type RequestOptions = {
@@ -126,7 +129,7 @@ export class ElasticsearchObservationSink implements ObservationSink {
                 existing._source,
               );
               if (!parsed.success || !isDeepStrictEqual(parsed.data, document))
-                throw new Error("observation_conflict");
+                throw new ObservationConflictError();
             } else if (result.status === 429 || result.status >= 500) {
               retry = true;
             } else if (result.status < 200 || result.status >= 300) {
@@ -146,8 +149,9 @@ export class ElasticsearchObservationSink implements ObservationSink {
         this.telemetry?.("es_write_retries", 1);
         await new Promise<void>((resolve) => setTimeout(resolve, delay));
       }
-    } catch {
+    } catch (error) {
       this.telemetry?.("es_write_failures", 1);
+      if (error instanceof ObservationConflictError) throw error;
       // SDK errors can carry source bodies and credentials. Expose only a fixed code.
       throw new Error("observation_sink_failed");
     } finally {

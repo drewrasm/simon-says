@@ -19,6 +19,13 @@ export interface HostFrameAccess {
 export interface FrameStore {
   put(key: string, bytes: Uint8Array, mimeType: string): Promise<void>;
 }
+export class ObservationConflictError extends Error {
+  constructor() {
+    super("observation_conflict");
+    this.name = "ObservationConflictError";
+  }
+}
+
 export interface ObservationSink {
   /** Persist by observationDocumentId; await persistence before acknowledging. */
   put(observation: ScreenObservation): Promise<void>;
@@ -85,7 +92,9 @@ export function createFrameUpload(deps: {
       return reply(400, "invalid_metadata");
     }
     const parsed = frameUploadMetadataSchema.safeParse(raw);
-    if (!parsed.success) return reply(400, "invalid_metadata");
+    // The observation index stores epoch as a signed Elasticsearch integer.
+    if (!parsed.success || parsed.data.epoch > 0x7fff_ffff)
+      return reply(400, "invalid_metadata");
     const metadata = parsed.data;
     if (
       request.headers.get("Content-Type") !== metadata.mimeType ||
@@ -158,8 +167,10 @@ export function createFrameUpload(deps: {
       let observation: ScreenObservation;
       try {
         observation = await result;
-      } catch {
+      } catch (error) {
         records.delete(key);
+        if (error instanceof ObservationConflictError)
+          return reply(409, "observation_conflict");
         return reply(503, "frame_persistence_unavailable");
       }
       return Response.json(

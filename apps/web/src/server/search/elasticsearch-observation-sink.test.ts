@@ -1,3 +1,7 @@
+import {
+  FrameUploadError,
+  FrameUploadQueue,
+} from "../../capture/screen-capture";
 import { createHash } from "node:crypto";
 import { errors } from "@elastic/elasticsearch";
 import { afterEach, expect, it, vi } from "vitest";
@@ -6,7 +10,11 @@ import {
   ElasticsearchObservationSink,
   type ObservationWriteClient,
 } from "./elasticsearch-observation-sink";
-import { createFrameUpload, devFrameAccess } from "../frames/upload";
+import {
+  createFrameUpload,
+  devFrameAccess,
+  ObservationConflictError,
+} from "../frames/upload";
 
 const bytes = Buffer.from(
   "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA",
@@ -88,7 +96,7 @@ it.each([
   });
   await expect(
     new ElasticsearchObservationSink(client).put(observation),
-  ).rejects.toThrow("observation_sink_failed");
+  ).rejects.toThrow(ObservationConflictError);
   expect(client.bulk).toHaveBeenCalledTimes(1);
 });
 it.each([429, 503, "network"])(
@@ -195,3 +203,73 @@ it("aborts in-flight writes at the total budget", async () => {
   await vi.advanceTimersByTimeAsync(250);
   await assertion;
 });
+
+it.each([false, true])(
+  "maps a stored observation conflict to terminal 409 (different source: %s)",
+  async (conflicting) => {
+    const client = mockClient(409);
+    client.get.mockImplementation(async () => {
+      const stored = {
+        ...document,
+        objectKey: `sessions/local/frames/1/0-${observation.checksum}.webp`,
+      };
+      return {
+        _index: "observations-v1",
+        _id: "local:1:frame-0",
+        found: true,
+        _source: conflicting ? { ...stored, checksum: "0".repeat(64) } : stored,
+      };
+    });
+    const upload = createFrameUpload({
+      access: devFrameAccess(
+        { CAPTIONS_DEV_SESSION: "local" },
+        "http://localhost",
+      ),
+      store: { put: vi.fn().mockResolvedValue(undefined) },
+      sink: new ElasticsearchObservationSink(client),
+    });
+    const metadata = {
+      epoch: 1,
+      seq,
+      captureSampleOffset,
+      mimeType,
+      width: 1,
+      height: 1,
+      captureState: "live",
+      checksum: observation.checksum,
+    } satisfies Parameters<FrameUploadQueue["enqueue"]>[0]["metadata"];
+    const send = vi.fn(async () => {
+      const response = await upload(
+        new Request("http://localhost/api/sessions/local/frames", {
+          method: "POST",
+          headers: {
+            Origin: "http://localhost",
+            "Content-Type": mimeType,
+            "X-Frame-Metadata": JSON.stringify(metadata),
+          },
+          body: bytes,
+        }),
+        "local",
+        "127.0.0.1",
+      );
+      expect(response.status).toBe(conflicting ? 409 : 200);
+      expect(await response.json()).toEqual(
+        conflicting
+          ? { error: "observation_conflict" }
+          : { observationId: "frame-0" },
+      );
+      if (!response.ok) throw new FrameUploadError(response.status);
+    });
+    const success = vi.fn();
+    const failure = vi.fn();
+    const wait = vi.fn().mockResolvedValue(undefined);
+    const queue = new FrameUploadQueue(send, success, failure, wait);
+    queue.enqueue({ metadata, blob: new Blob([bytes], { type: mimeType }) });
+    await vi.waitFor(() =>
+      expect(conflicting ? failure : success).toHaveBeenCalledTimes(1),
+    );
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(client.bulk).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+  },
+);

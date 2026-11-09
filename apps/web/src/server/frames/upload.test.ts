@@ -71,6 +71,9 @@ describe("frame endpoint", () => {
   it("rejects schema, size, checksum, signature, auth and stale epoch before writes", async () => {
     const { upload, put } = setup();
     expect((await upload(request({ width: 0 }), "demo")).status).toBe(400);
+    expect((await upload(request({ epoch: 0x8000_0000 }), "demo")).status).toBe(
+      400,
+    );
     expect(
       (
         await upload(

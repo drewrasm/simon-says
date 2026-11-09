@@ -15,7 +15,11 @@ import {
 } from "@aws-sdk/client-s3";
 import { expect, it, vi } from "vitest";
 import { s3FrameStore } from "./s3";
-import { createFrameUpload, devFrameAccess } from "./upload";
+import {
+  createFrameUpload,
+  devFrameAccess,
+  ObservationConflictError,
+} from "./upload";
 
 // Hardcoded loopback and local Compose credentials: never reads cloud configuration.
 const env = {
@@ -152,7 +156,38 @@ it("local ES + SeaweedFS: uploads a frame before persisting exact mapped fields 
     await sink.put(observation); // Real 409 verifies identical mapped content.
     await expect(
       sink.put({ ...observation, checksum: "0".repeat(64) }),
-    ).rejects.toThrow("observation_sink_failed");
+    ).rejects.toThrow(ObservationConflictError);
+    // A fresh handler bypasses process-local deduplication and exercises real ES 409s.
+    for (const conflicting of [false, true]) {
+      const restartedUpload = createFrameUpload({
+        access: devFrameAccess(env, "http://localhost"),
+        store: s3FrameStore(env),
+        sink,
+      });
+      const replay = await restartedUpload(
+        new Request("http://localhost/api/sessions/s4-integration/frames", {
+          method: "POST",
+          headers: {
+            Origin: "http://localhost",
+            "Content-Type": "image/webp",
+            "X-Frame-Metadata": JSON.stringify({
+              ...metadata,
+              captureSampleOffset:
+                metadata.captureSampleOffset + (conflicting ? 24 : 0),
+            }),
+          },
+          body: bytes,
+        }),
+        env.CAPTIONS_DEV_SESSION,
+        "127.0.0.1",
+      );
+      expect(replay.status).toBe(conflicting ? 409 : 200);
+      expect(await replay.json()).toEqual(
+        conflicting
+          ? { error: "observation_conflict" }
+          : { observationId: observation.observationId },
+      );
+    }
     await es.indices.refresh({ index: "simon-says-observations" });
     const found = await es.search({
       index: "simon-says-observations",
