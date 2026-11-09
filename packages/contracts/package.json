@@ -4,9 +4,13 @@
   "type": "module",
   "exports": {
     "./audio-frame": "./src/audio-frame.ts",
-    "./ingest": "./src/ingest.ts",
+    "./bookmark": "./src/bookmark.ts",
     "./caption": "./src/caption.ts",
-    "./screen": "./src/screen.ts"
+    "./ingest": "./src/ingest.ts",
+    "./recap": "./src/recap.ts",
+    "./screen": "./src/screen.ts",
+    "./search": "./src/search.ts",
+    "./session": "./src/session.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
