@@ -1,6 +1,6 @@
 # Building tracks
 
-Status: milestone 0 foundation is complete with local verification for the three-builder app in one Next.js app. See the [implementation plan](implementation-plan.md) for verification and remaining work. Feature tracks are not implemented yet. Checkpoint 0A adds Kubernetes deployment; cluster access is pending. Three builder tracks share responsibility for all four sponsor tracks.
+Status: milestone 0 foundation is complete with local verification for the three-builder app in one Next.js app. See the [implementation plan](implementation-plan.md) for verification and remaining work. Feature tracks are not implemented yet. Checkpoint 0A adds Kubernetes deployment to the provisioned team cluster. Three builder tracks share responsibility for all four sponsor tracks.
 
 ## Divide ownership
 

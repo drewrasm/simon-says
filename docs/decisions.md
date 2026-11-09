@@ -8,7 +8,7 @@ Keep durable choices here. Mark proposals explicitly; add rationale and conseque
 - **Capture:** one host captures the speaker mic and screen; attendees consume a shared transcript and make private selections.
 - **Output:** personal summaries include source passages and screenshots.
 - **Repository:** one monorepo contains everything needed to develop, test, and deploy the app.
-- **Application and hosting:** keep the full-stack Next.js app and shadcn/ui; deploy to Kubernetes operated through Radar. This supersedes Vercel hosting, not the existing app foundation. Cluster access is being arranged.
+- **Application and hosting:** keep the full-stack Next.js app and shadcn/ui; deploy to Kubernetes operated through Radar. This supersedes Vercel hosting, not the existing app foundation. The team cluster is provisioned.
 - **Database tooling:** Prisma for PostgreSQL. Local development uses PostgreSQL and a private SeaweedFS S3 bucket; cluster Postgres and private storage provisioning remain unverified.
 - **Toolchain:** Node.js 22.22.0, pnpm 11.24.0, Next.js 16.4.5, React 19.3.1, TypeScript 5.9.3, Vitest 5.1, and Prisma 7.10.1.
 - **Workspace:** strict TypeScript, pnpm workspaces, and shared shadcn components. The foundation includes a shadcn Button from the official registry with manual setup.

@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the milestone 0 workspace foundation is complete with local verification. Next.js on Kubernetes operated through Radar and Prisma for PostgreSQL are confirmed. Cluster access is pending. Track 2's transcription provider, adapter direction, and Elasticsearch core-content-store split are confirmed by its owner; runtime behavior is unverified. The remaining product runtime design below is proposed. See [decisions](decisions.md) for choices requiring validation.
+Status: the milestone 0 workspace foundation is complete with local verification. Next.js on Kubernetes operated through Radar and Prisma for PostgreSQL are confirmed. The team cluster is provisioned. Track 2's transcription provider, adapter direction, and Elasticsearch core-content-store split are confirmed by its owner; runtime behavior is unverified. The remaining product runtime design below is proposed. See [decisions](decisions.md) for choices requiring validation.
 
 ## Data flow
 

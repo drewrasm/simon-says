@@ -1,6 +1,6 @@
 # Hackathon integrations
 
-Status: the team selected technology from all four sponsor tracks on November 9, 2026. Integrations are planned, not implemented or verified. Cluster access is being arranged. The [implementation plan](implementation-plan.md) is the completion record; the [building tracks](building-tracks.md) assign the three builders.
+Status: the team selected technology from all four sponsor tracks on November 9, 2026. Integrations are planned, not implemented or verified. The Radar team cluster is provisioned, and Radar and Dash0 MCP access works; see [deployment](deployment.md#team-environment). The [implementation plan](implementation-plan.md) is the completion record; the [building tracks](building-tracks.md) assign the three builders.
 
 ## Required scope and evidence
 
@@ -17,15 +17,15 @@ Collect evidence during ordinary development. Do not invent incidents or claim a
 
 ## Accounts and access
 
-| Service                                                | Needed access                                                                                      | Status                                                                               |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| GitHub/GHCR                                            | Repository administration for app installation, CI, image publication, and GitOps read/pull access | Repository exists; deployment permissions and package access unverified              |
-| [Radar team environment](https://join.cnh.radarhq.io/) | Team invites, assigned cluster ID, namespace, hostname, and authenticated MCP                      | User is arranging access                                                             |
-| [Dash0](https://www.dash0.com/)                        | Team organization, dataset, OTLP endpoint/token, Agent0, and MCP access                            | Pending verification                                                                 |
-| [Gitar](https://app.gitar.ai/)                         | Repository administrator installs the GitHub App for this repo after reviewing permissions         | Pending explicit enablement                                                          |
-| [Elastic Cloud](https://cloud.elastic.co/)             | Search project, scoped API key, and inference endpoint                                             | Serverless hackathon trial selected; project, key scope, and connectivity unverified |
-| Transcription and recap providers                      | Account, processing/retention settings, keys, and budget                                           | Transcription direction confirmed; runtime unverified; recap open                    |
-| Database and object storage                            | Persistent Postgres and private object access from the cluster                                     | CloudNativePG selected, unverified; object storage undecided                         |
+| Service                                                | Needed access                                                                                      | Status                                                                                                                                    |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub/GHCR                                            | Repository administration for app installation, CI, image publication, and GitOps read/pull access | Repository is public; image publication and package access unverified                                                                     |
+| [Radar team environment](https://join.cnh.radarhq.io/) | Team invites, assigned cluster ID, namespace, hostname, and authenticated MCP                      | Cluster provisioned; MCP reads the team namespace; teammate invites open                                                                  |
+| [Dash0](https://www.dash0.com/)                        | Team organization, dataset, OTLP endpoint/token, Agent0, and MCP access                            | Organization in AWS US West; MCP configured; ingest unverified                                                                            |
+| [Gitar](https://app.gitar.ai/)                         | Repository administrator installs the GitHub App for this repo after reviewing permissions         | Pending explicit enablement                                                                                                               |
+| [Elastic Cloud](https://cloud.elastic.co/)             | Search project, scoped API key, and inference endpoint                                             | Serverless hackathon-trial project in AWS us-west-2; agent CLI and MCP access verified; app key scope and cluster connectivity unverified |
+| Transcription and recap providers                      | Account, processing/retention settings, keys, and budget                                           | Transcription direction confirmed; runtime unverified; recap open                                                                         |
+| Database and object storage                            | Persistent Postgres and private object access from the cluster                                     | CloudNativePG selected, unverified; object storage undecided                                                                              |
 
 Store runtime credentials in cluster Secrets or an approved secret manager. Keep values out of chat, git, images, build arguments, and browser bundles. An account does not establish quota, connectivity, or permission to deploy.
 
@@ -45,7 +45,7 @@ Postgres (CloudNativePG via Prisma) owns identity, sessions, membership, lease/e
 
 Elasticsearch outages visibly degrade captions and must not silently drop content. Milestone 1 must settle cross-store durable acknowledgment and write ordering. Search-only or telemetry outages leave captions and saved evidence usable when shared-content persistence is healthy. Elastic Cloud avoids an in-cluster Elasticsearch deployment that cannot fit beside the app and Postgres within the team budget (2 CPU / 4 GiB requests, 4 CPU / 8 GiB limits total). The Elastic track requires the core data layer, not a side feature.
 
-Use keyword search plus `semantic_text` over segments and glossary terms with an explicit inference endpoint. Confirm Jina availability, cost, and processing settings in the selected Elastic project before choosing it. The [Elastic semantic search guide](https://www.elastic.co/docs/solutions/search/semantic-search/semantic-search-semantic-text) explains ingestion-time embeddings and endpoint selection. Model selection remains open; do not treat the service default as a confirmed Jina integration.
+Use keyword search plus `semantic_text` over segments and glossary terms with an explicit inference endpoint. The project lists Jina text embedding and reranking endpoints through the Elastic Inference Service, including `.jina-embeddings-v5-text-small` and `.jina-reranker-v3`. Confirm cost and processing settings before indexing real captured content. The [Elastic semantic search guide](https://www.elastic.co/docs/solutions/search/semantic-search/semantic-search-semantic-text) explains ingestion-time embeddings and endpoint selection. Model selection remains open; do not treat the service default as a confirmed Jina integration.
 
 ## Completion record
 

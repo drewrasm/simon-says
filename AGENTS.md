@@ -11,6 +11,7 @@ The milestone 0 foundation is implemented. Do not claim setup, integrations, or 
 ## Work rules
 
 - Follow the [hackathon integration scope](docs/hackathon.md) and [Kubernetes deployment plan](docs/deployment.md). Radar is the deployment operations tool; Vercel hosting is superseded. Keep pending integrations distinct from verified work.
+- Use the project MCP servers for Radar, Dash0, and Elastic. Pass the team cluster id from the [team environment](docs/deployment.md#team-environment) on every Radar call, and never target `cnh` or another team's cluster. Ask before any write to a cluster, telemetry backend, or search project.
 - Keep dependencies inside the documented monorepo boundaries. Use strict TypeScript and explicit package imports; do not introduce re-export-only barrel files.
 - Use shadcn/ui components and semantic HTML. Preserve keyboard access, focus, and readable live captions.
 - Validate at external boundaries. Keep timeline and selection logic independent of UI and provider SDKs.

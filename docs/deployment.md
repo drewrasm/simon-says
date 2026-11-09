@@ -1,6 +1,6 @@
 # Kubernetes deployment plan
 
-Status: selected target, pending implementation and verification. The user is arranging cluster access. Milestone 0 remains locally verified; checkpoint 0A prepares this deployment. This document does not authorize provisioning, publishing, GitOps activation, or deployment.
+Status: selected target, pending implementation and verification. The team cluster is provisioned; see [team environment](#team-environment). Milestone 0 remains locally verified; checkpoint 0A prepares this deployment. This document does not authorize provisioning, publishing, GitOps activation, or deployment.
 
 ## Target and platform facts
 
@@ -10,15 +10,31 @@ The starter describes a team cluster with Radar, Argo CD, and CloudNativePG avai
 
 The starter's default delivery uses public GitHub/GHCR access and Argo CD deployment from `main`. Do not change repository or image visibility without authorization; arrange read/pull credentials if private access is needed. Activating GitOps changes the effect of future pushes: a push can deploy.
 
-The provided environment ends November 13, 2026 according to the starter. Verify the cutoff with organizers and arrange authorized export, migration, or teardown before it. Event infrastructure availability cannot guarantee our proposed 30-day selected-evidence retention. Record the actual cluster ID, namespace, hostname, quota, and access in operator setup notes without secrets.
+The provided environment ends November 13, 2026 according to the starter. Verify the cutoff with organizers and arrange authorized export, migration, or teardown before it. Event infrastructure availability cannot guarantee our proposed 30-day selected-evidence retention. The verified cluster ID, namespace, hostname, quota, and access are recorded below under [team environment](#team-environment), without secrets.
+
+## Team environment
+
+Verified through the Radar MCP on November 9, 2026:
+
+- Radar Cloud organization **Cloud Native Hackathon**, cluster `simon-says` (id `kiTZ7VFRruo`), namespace `team-simon-says`, URL `https://simon-says.cnh.radarhq.io`. Pass the cluster id on every Radar MCP call; never target `cnh` or another team's cluster.
+- The namespace runs the organizers' starter Deployment `app`; no Argo CD Application exists yet. Radar reports only the known CoreDNS rewrite issue shared by every team cluster.
+- Budget across all namespaces: 2 CPU and 4 GiB of requests, 4 CPU and 8 GiB of limits, 4 PVCs, and 20 GiB of storage. The host refuses privileged, hostPath, hostNetwork, and hostPID pods.
+- The Dash0 Kubernetes operator does not fit: its collector DaemonSet always mounts `/var/log/pods` through hostPath. Export telemetry from the app over OTLP instead.
+
+External services verified on the same date:
+
+- Dash0 organization in AWS US West (`us-west-2`); MCP access works through browser OAuth. App telemetry export is not implemented.
+- Elastic Cloud Serverless Elasticsearch project in AWS `us-west-2`, Elasticsearch 9.7.0: `https://my-elasticsearch-project-fb0a5d.es.us-west-2.aws.elastic.cloud` with Kibana at the matching `.kb.` host. It has no indices yet. The `elastic` CLI and Agent Builder MCP work with a per-person API key.
+
+Project MCP configuration lives in `.mcp.json` (Claude Code) and `.codex/config.toml` (Codex); the [README](../README.md#agent-mcp-servers) has sign-in steps. The files hold URLs and environment variable names only.
 
 ## Content persistence and network access
 
 Elasticsearch on Elastic Cloud Serverless, using the hackathon trial, is the confirmed core shared-content store from milestone 1. CloudNativePG/Postgres via Prisma owns identity, sessions, membership, lease/epoch, private bookmarks/notes/recaps, finalized-transcript offset, audio acknowledgments, and job queue. Private object storage holds screen images; Elasticsearch holds observation metadata and object keys.
 
-The team cluster budget is 2 CPU / 4 GiB requests and 4 CPU / 8 GiB limits total. Elasticsearch cannot fit beside the app and Postgres; run it on Elastic Cloud. Confirm the assigned quota before sizing workloads. This also makes Elasticsearch the core data layer required by its hackathon track.
+The team cluster budget is 2 CPU / 4 GiB requests and 4 CPU / 8 GiB limits total. Elasticsearch cannot fit beside the app and Postgres; run it on Elastic Cloud. The assigned quota is recorded under [team environment](#team-environment). This also makes Elasticsearch the core data layer required by its hackathon track.
 
-Inject server-only `ELASTICSEARCH_URL` and `ELASTICSEARCH_API_KEY` from a cluster Secret at runtime. Scope the key to the required project/index ingest, read, and cleanup operations; confirm exact privileges before milestone 1. Permit and verify TLS network egress from the app/worker/cleanup workloads to Elastic Cloud, including the chosen inference endpoint’s network requirements. Never put keys in images, build arguments, client props, or `NEXT_PUBLIC_` variables. Project access, key scope, and connectivity remain unverified.
+Inject server-only `ELASTICSEARCH_URL` and `ELASTICSEARCH_API_KEY` from a cluster Secret at runtime. Scope the key to the required project/index ingest, read, and cleanup operations; confirm exact privileges before milestone 1. Permit and verify TLS network egress from the app/worker/cleanup workloads to Elastic Cloud, including the chosen inference endpoint’s network requirements. Never put keys in images, build arguments, client props, or `NEXT_PUBLIC_` variables. Agent access to the project is verified; app key scope and cluster connectivity remain unverified.
 
 ## Proposed implementation
 

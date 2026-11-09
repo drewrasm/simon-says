@@ -1,6 +1,6 @@
 # Implementation plan
 
-Status: milestone 0 is complete with local verification. Checkpoint 0A is next, followed by milestone 1. The team selected all four hackathon tracks; cluster access is pending. These checkboxes describe outcomes, not permission to implement. Complete one vertical slice before expanding scope.
+Status: milestone 0 is complete with local verification. Checkpoint 0A is next, followed by milestone 1. The team selected all four hackathon tracks; the team cluster is provisioned and readable through Radar. These checkboxes describe outcomes, not permission to implement. Complete one vertical slice before expanding scope.
 
 ## Three builder tracks
 
@@ -78,9 +78,9 @@ If the core slice fails, cut voice, OCR, repair transcription, advanced search f
 ## Resolve before the affected milestone
 
 - Before capture: target browser/device, authorized mic/screen route, provider configuration and retention/data-use opt-out settings where available, Node WebSocket routing, gateway limits, and shared event delivery.
-- Before milestone 1 acceptance: provision/verify the Elastic Cloud Serverless hackathon-trial project, index mappings, API key scope, and network egress from the cluster. Settle cross-store Elasticsearch writes, Postgres finalized offset/audio acknowledgments, replay event ordering, and crash recovery. Resolve model hosting. Local `llama serve` is for development; model access from the Kubernetes deployment via OpenAI or `llama serve` on a reachable host remains open. Stock GGUF LiveASR worked in a local synthetic-speech spike; real-microphone latency and accuracy remain unverified.
+- Before milestone 1 acceptance: verify the provisioned Elastic Cloud Serverless hackathon-trial project ([team environment](deployment.md#team-environment)), index mappings, API key scope, and network egress from the cluster. Settle cross-store Elasticsearch writes, Postgres finalized offset/audio acknowledgments, replay event ordering, and crash recovery. Resolve model hosting. Local `llama serve` is for development; model access from the Kubernetes deployment via OpenAI or `llama serve` on a reachable host remains open. Stock GGUF LiveASR worked in a local synthetic-speech spike; real-microphone latency and accuracy remain unverified.
 - Before checkpoint 0A acceptance: confirm team cluster ID, namespace, hostname, quota, runtime architecture, image access, database, private storage, and deployment authorization.
-- Before milestone 2 search: confirm `semantic_text` and the embedding/inference endpoint (for example Jina), availability, cost, and processing settings in the actual Elastic project; do not assume a default. Select the Postgres job mechanism and confirm processing/retention disclosures. The project, scoped API key, and cluster network access are milestone 1 prerequisites.
+- Before milestone 2 search: confirm `semantic_text` and the embedding/inference endpoint, cost, and processing settings in the actual Elastic project; do not assume a default. The project lists Jina endpoints ([team environment](deployment.md#team-environment)). Select the Postgres job mechanism and confirm processing/retention disclosures. The project, scoped API key, and cluster network access are milestone 1 prerequisites.
 - Before public access: identity mechanism, host access, invitation expiry, limits, revocation, redaction, and storage policy.
 - Before recap: text/multimodal provider, structured output, data handling, budget, and durable job execution.
 - Before deployment: database and private object store, migrations, connection recovery, cleanup scheduling, rollback, and operator ownership. GitOps enablement, publication, and deployment require authorization; routine future pushes may deploy after GitOps is enabled.
