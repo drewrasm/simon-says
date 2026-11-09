@@ -37,11 +37,14 @@ export const JoinByLink = ({ inviteCode }: JoinByLinkProps) => {
 
   return (
     <div className="flex flex-col gap-3">
-      <div>
-        <Button size="lg" disabled={joining} onClick={() => void join()}>
-          {joining ? "Joining…" : "Join session"}
-        </Button>
-      </div>
+      <Button
+        size="lg"
+        className="h-11 w-full"
+        disabled={joining}
+        onClick={() => void join()}
+      >
+        {joining ? "Joining…" : "Join session"}
+      </Button>
       {failure ? (
         <Alert variant="destructive">
           <AlertDescription>{FAILURE_MESSAGE[failure]}</AlertDescription>

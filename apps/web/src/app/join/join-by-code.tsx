@@ -30,7 +30,7 @@ export const JoinByCode = () => {
       onSubmit={(event) => event.preventDefault()}
     >
       <Field>
-        <FieldLabel htmlFor="join-code">Join code</FieldLabel>
+        <FieldLabel htmlFor="join-code">Session code</FieldLabel>
         <InputOTP
           id="join-code"
           maxLength={JOIN_CODE_LENGTH}
@@ -42,27 +42,26 @@ export const JoinByCode = () => {
           inputMode="text"
         >
           <InputOTPGroup>
-            <InputOTPSlot index={0} className="size-12 text-lg" />
-            <InputOTPSlot index={1} className="size-12 text-lg" />
-            <InputOTPSlot index={2} className="size-12 text-lg" />
+            <InputOTPSlot index={0} className="size-12 text-xl font-semibold" />
+            <InputOTPSlot index={1} className="size-12 text-xl font-semibold" />
+            <InputOTPSlot index={2} className="size-12 text-xl font-semibold" />
           </InputOTPGroup>
           <InputOTPSeparator />
           <InputOTPGroup>
-            <InputOTPSlot index={3} className="size-12 text-lg" />
-            <InputOTPSlot index={4} className="size-12 text-lg" />
-            <InputOTPSlot index={5} className="size-12 text-lg" />
+            <InputOTPSlot index={3} className="size-12 text-xl font-semibold" />
+            <InputOTPSlot index={4} className="size-12 text-xl font-semibold" />
+            <InputOTPSlot index={5} className="size-12 text-xl font-semibold" />
           </InputOTPGroup>
         </InputOTP>
       </Field>
-      <div>
-        <Button
-          type="submit"
-          size="lg"
-          disabled={!available || code.length !== JOIN_CODE_LENGTH}
-        >
-          Join session
-        </Button>
-      </div>
+      <Button
+        type="submit"
+        size="lg"
+        className="h-11 w-full"
+        disabled={!available || code.length !== JOIN_CODE_LENGTH}
+      >
+        Join session
+      </Button>
       <Alert>
         <AlertDescription>
           Typed codes are coming soon. For now, scan the host&apos;s QR code or

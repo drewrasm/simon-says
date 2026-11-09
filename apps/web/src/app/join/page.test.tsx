@@ -11,6 +11,12 @@ describe("join by code page", () => {
     expect(html).toContain("never uses its microphone");
   });
 
+  it("follows the guest join design without requiring an account", () => {
+    expect(html).toContain("Read along, live");
+    expect(html).toContain("QR code on the stage screen");
+    expect(html).toContain("No account or app download needed.");
+  });
+
   it("keeps typed codes visibly unavailable until the contract supports them", () => {
     expect(html).toContain("Typed codes are coming soon");
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
