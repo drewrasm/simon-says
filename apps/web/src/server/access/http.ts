@@ -27,6 +27,33 @@ const handleAccess = async (
   }
 };
 
+const maxBodyBytes = 16 * 1024;
+
+// Content-Length can be absent or wrong, so the stream itself is capped too.
+const readBodyText = async (request: Request) => {
+  const declaredBytes = Number(request.headers.get("content-length"));
+  if (declaredBytes > maxBodyBytes) {
+    throw new AccessError(413, "payload_too_large");
+  }
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    receivedBytes += value.byteLength;
+    if (receivedBytes > maxBodyBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new AccessError(413, "payload_too_large");
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+};
+
 const parseBody = async <T>(request: Request, schema: z.ZodType<T>) => {
   if (
     request.headers.get("content-type")?.split(";")[0]?.trim() !==
@@ -37,8 +64,9 @@ const parseBody = async <T>(request: Request, schema: z.ZodType<T>) => {
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = JSON.parse(await readBodyText(request));
+  } catch (error) {
+    if (error instanceof AccessError) throw error;
     throw new AccessError(400, "invalid_request");
   }
   const result = schema.safeParse(body);

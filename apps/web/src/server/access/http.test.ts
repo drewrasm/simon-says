@@ -66,6 +66,94 @@ describe("access HTTP boundaries", () => {
     expect(ensurePrincipal).not.toHaveBeenCalled();
   });
 
+  it("rejects an oversized declared Content-Length before reading the body", async () => {
+    const oversized = new Request("http://localhost/api/sessions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": String(16 * 1024 + 1),
+      },
+      body: JSON.stringify({ title: "Talk" }),
+    });
+    const response = await handleCreateSession(oversized);
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "payload_too_large" });
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(oversized.bodyUsed).toBe(false);
+    expect(ensurePrincipal).not.toHaveBeenCalled();
+  });
+
+  it("caps streamed bodies that declare no Content-Length", async () => {
+    const chunk = new TextEncoder().encode("x".repeat(4096));
+    const streamed = new Request("http://localhost/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: new ReadableStream<Uint8Array>({
+        pull: (controller) => controller.enqueue(chunk),
+      }),
+      duplex: "half",
+    } as RequestInit);
+    expect(streamed.headers.get("content-length")).toBeNull();
+
+    const response = await handleJoinSession(streamed);
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "payload_too_large" });
+    expect(ensurePrincipal).not.toHaveBeenCalled();
+  });
+
+  it("keeps the 413 when cancelling an oversized stream fails", async () => {
+    const chunk = new TextEncoder().encode("x".repeat(4096));
+    const streamed = new Request("http://localhost/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: new ReadableStream<Uint8Array>({
+        pull: (controller) => controller.enqueue(chunk),
+        cancel: () => {
+          throw new Error("cancel failed");
+        },
+      }),
+      duplex: "half",
+    } as RequestInit);
+
+    const response = await handleJoinSession(streamed);
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "payload_too_large" });
+  });
+
+  it("treats an aborted upload as an invalid request", async () => {
+    const aborted = new Request("http://localhost/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: new ReadableStream<Uint8Array>({
+        pull: (controller) => controller.error(new Error("socket hang up")),
+      }),
+      duplex: "half",
+    } as RequestInit);
+
+    const response = await handleJoinSession(aborted);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_request" });
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(ensurePrincipal).not.toHaveBeenCalled();
+  });
+
+  it("accepts a normal body near the limit", async () => {
+    createSession.mockResolvedValue({ sessionId });
+    const padded = `{"title":"Talk","padding":"${"x".repeat(16_000)}"}`;
+    const response = await handleCreateSession(
+      new Request("http://localhost/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: padded,
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(createSession).toHaveBeenCalledWith({
+      principalId,
+      request: { title: "Talk" },
+    });
+  });
+
   it("rejects malformed invite codes and non-UUID session IDs at the boundary", async () => {
     expect(
       (await handleJoinSession(request({ inviteCode: "bad" }))).status,
