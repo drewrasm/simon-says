@@ -320,7 +320,14 @@ describe("bookmarks with real local Postgres and synthetic ES HTTP", () => {
 
   it("rotates the bounded retry budget so later pending bookmarks resolve across reads", async () => {
     const ids = Array.from({ length: 6 }, () => randomUUID());
-    for (const id of ids) await putBookmark(createOptions(attendeeA, id));
+    for (const [index, id] of ids.entries()) {
+      await putBookmark(createOptions(attendeeA, id));
+      const seededAt = new Date(Date.UTC(2026, 0, 1, 0, index));
+      await database.bookmark.update({
+        where: { id },
+        data: { createdAt: seededAt, updatedAt: seededAt },
+      });
+    }
     const pendingIds = async () =>
       (await listBookmarks({ principalId: attendeeA, sessionId })).bookmarks
         .filter((b) => b.completeness === "pending")
