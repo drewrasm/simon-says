@@ -206,9 +206,18 @@ export const validateTakeaways = (
   });
 
 // Budgets the serialized prompt and keeps whole passages in selection order so cited excerpts stay verbatim.
+// Overlapping bookmarks share segments; each is sent once and lists every bookmark that holds it.
 export const limitPassages = (passages: SelectedPassage[]) => {
+  const bySegment = new Map<string, SelectedPassage>();
+  for (const passage of passages) {
+    const segment = `${passage.segmentId}:${passage.segmentRevision}`;
+    const sent = bySegment.get(segment);
+    if (sent) (sent.alsoBookmarkIds ??= []).push(passage.bookmarkId);
+    else bySegment.set(segment, { ...passage });
+  }
+
   let characters = 0;
-  return passages.filter((passage) => {
+  return [...bySegment.values()].filter((passage) => {
     characters += JSON.stringify(passage).length + 1;
     return characters <= maxPassageCharacters;
   });
