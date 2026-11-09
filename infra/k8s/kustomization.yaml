@@ -10,4 +10,4 @@ resources:
 images:
   - name: app
     newName: ghcr.io/drewrasm/simon-says
-    newTag: c97978f31ae1150f622bae09fe882f193f780bea
+    newTag: 00f99e83cb34229bc291d697822d62059e67ad4e
