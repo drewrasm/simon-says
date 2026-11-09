@@ -36,7 +36,7 @@ HTTP endpoints run as Next.js Route Handlers in `apps/web`. The proposed audio W
 | Operation                                            | Contract                                                                         |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `POST /api/sessions`                                 | Authorized host creates a session                                                |
-| `POST /api/sessions/:id/join`                        | Exchange invitation for attendee membership                                      |
+| `POST /api/join`                                     | Exchange invitation code for attendee membership                                 |
 | `POST /api/sessions/:id/end`                         | Host-only, idempotent stop; fence ingest and persist end/expiry times            |
 | `WS /api/sessions/:id/ingest`                        | Host audio/clock messages; require current lease and epoch                       |
 | `POST /api/sessions/:id/frames`                      | Timestamped images; require host role, current lease and epoch                   |
@@ -47,11 +47,23 @@ HTTP endpoints run as Next.js Route Handlers in `apps/web`. The proposed audio W
 | `DELETE /api/bookmarks/:id`                          | Owner deletion plus recap invalidation                                           |
 | `POST /api/sessions/:id/recaps`                      | Generate for current owner from expected bookmark revisions                      |
 | `GET /api/me/recaps/:id`                             | Owner-only takeaways, evidence, generation status, and staleness                 |
-| `GET /api/me/recaps/:id/export`                      | Authorized portable HTML or Markdown                                             |
+| `GET /api/me/recaps/:id/export`                      | Authorized portable Markdown (HTML deferred)                                     |
 | `DELETE /api/sessions/:id/memberships/:membershipId` | Host-only revocation; terminate member access                                    |
 | `POST /api/sessions/:id/redactions`                  | Host-only source-range redaction and dependent-result invalidation               |
 
 Specify lifecycle payload schemas alongside their implementation. Ended sessions reject new audio and frames; ending does not prematurely revoke permitted recap access. Complete revocation and redaction before a public pilot.
+
+## Track 3 payloads
+
+C0 schemas and inferred types are available through explicit package paths: [`session`](../packages/contracts/src/session.ts), [`bookmark`](../packages/contracts/src/bookmark.ts), [`search`](../packages/contracts/src/search.ts), and [`recap`](../packages/contracts/src/recap.ts). These define payloads; routes, persistence, access enforcement, and generation remain unimplemented.
+
+**Identity (proposed for C0 confirmation):** an anonymous signed-cookie principal per device, with no accounts. Session creation returns a host path and a separate invitation/join path; the host reaches the session through the host link created with it. Invitations are 16–64 URL-safe characters, are exchanged through `POST /api/join`, and grant attendee membership, never host credentials. Server-issued membership, principal, bookmark, and recap IDs are UUIDs. Titles are optional, trimmed, and limited to 120 characters.
+
+**Bookmarks:** `kind: live` records `markedAtMs`; resolution fixes the previous 30 seconds as `[max(0, markedAtMs - 30000), markedAtMs]`. `kind: paragraph` records a segment ID, revision, and explicit range. All Track 3 source times and uncertainty values are non-negative milliseconds and may be fractional, matching caption times; ranges permit equal endpoints and reject inverted endpoints. Caption segment IDs and revisions reuse the caption schema. Mutation retries reuse a UUID `operationId`; `expectedRevision: null` creates, while a positive revision updates. Conflicts return `error: revision_conflict`, the bookmark `id`, and nullable expected/current revisions (null current means absent). Notes are limited to 4,000 characters; omitted notes preserve the existing note on update, and responses use null for no note. `createdAt` and `updatedAt` are UTC ISO timestamps. Responses keep requested and nullable actual ranges, completeness, text revisions, and frame evidence separate; image URLs are nullable authorized HTTP(S) links. Responses return the anchor so a loaded card can be edited. List responses wrap items in `bookmarks`.
+
+**Search:** query text is sent only in the POST body, never URLs. Trimmed queries contain 1–500 characters, limits are 1–20 (default 10), and cursors are opaque. Responses expose source ranges and revisions, nullable `nextCursor`, and `current`, `catching_up`, or `unavailable` indexing state.
+
+**Recaps:** creation requires a retry-stable UUID operation ID and at least one `{ bookmarkId, expectedRevision }` in `bookmarks`. Each takeaway has text and at least one citation tying a bookmark to a segment revision, range, excerpt, and nullable frame ID. Creation returns the recap `id`; responses include generation/staleness status and nullable `failureReason`. The C0 export format is `markdown` only; HTML remains deferred.
 
 ## Event and mutation rules
 
