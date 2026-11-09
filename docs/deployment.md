@@ -12,6 +12,14 @@ The starter's default delivery uses public GitHub/GHCR access and Argo CD deploy
 
 The provided environment ends November 13, 2026 according to the starter. Verify the cutoff with organizers and arrange authorized export, migration, or teardown before it. Event infrastructure availability cannot guarantee our proposed 30-day selected-evidence retention. Record the actual cluster ID, namespace, hostname, quota, and access in operator setup notes without secrets.
 
+## Content persistence and network access
+
+Elasticsearch on Elastic Cloud Serverless, using the hackathon trial, is the confirmed core shared-content store from milestone 1. CloudNativePG/Postgres via Prisma owns identity, sessions, membership, lease/epoch, private bookmarks/notes/recaps, finalized-transcript offset, audio acknowledgments, and job queue. Private object storage holds screen images; Elasticsearch holds observation metadata and object keys.
+
+The team cluster budget is 2 CPU / 4 GiB requests and 4 CPU / 8 GiB limits total. Elasticsearch cannot fit beside the app and Postgres; run it on Elastic Cloud. Confirm the assigned quota before sizing workloads. This also makes Elasticsearch the core data layer required by its hackathon track.
+
+Inject server-only `ELASTICSEARCH_URL` and `ELASTICSEARCH_API_KEY` from a cluster Secret at runtime. Scope the key to the required project/index ingest, read, and cleanup operations; confirm exact privileges before milestone 1. Permit and verify TLS network egress from the app/worker/cleanup workloads to Elastic Cloud, including the chosen inference endpoint’s network requirements. Never put keys in images, build arguments, client props, or `NEXT_PUBLIC_` variables. Project access, key scope, and connectivity remain unverified.
+
 ## Proposed implementation
 
 Track 2 owns runtime, image, manifests, and CI. Track 3 owns database schema, migration contents, storage requirements, and jobs. Track 1 verifies the delivered UI. These are implementation proposals to validate in checkpoint 0A:
@@ -20,9 +28,9 @@ Track 2 owns runtime, image, manifests, and CI. Track 3 owns database schema, mi
 2. Use one custom Node entry point for Next.js HTTP and authenticated WebSocket upgrades. Compile/package that entry point explicitly. Next.js [custom-server guidance](https://nextjs.org/docs/app/guides/custom-server) warns that standalone output does not trace custom server files. Prove this combination before finalizing the Dockerfile. Preserve development HMR and add a real local ingest command when implemented.
 3. Add liveness/readiness probes, resource requests/limits, runtime Secret references, and graceful termination. Start with one replica. Handle overlap during rolling updates through durable host fencing, shared replay, and source-clock continuity.
 4. Keep manifests under `infra` and workflows under `.github/workflows`. Adapt the starter's service and GitOps wiring to these paths. Build/test before publishing immutable image tags/digests; deploy the verified image. Use one delivery writer and prevent manifest-update loops or competing CI releases.
-5. Propose CloudNativePG with persistent storage for Postgres. Choose private object storage separately: managed S3-compatible storage or a verified persistent in-cluster service. Local SeaweedFS is not production configuration. Verify signed reads/writes, anonymous denial, restart persistence, capacity, and recovery for the chosen service.
+5. Use CloudNativePG with persistent storage for Postgres; verify provisioning and recovery. Choose private object storage separately: managed S3-compatible storage or a verified persistent in-cluster service. Local SeaweedFS is not production configuration. Verify signed reads/writes, anonymous denial, restart persistence, capacity, and recovery for the chosen service.
 6. Run versioned Prisma migrations once per release using a serialized Job before rollout. Do not migrate from every pod startup. Prefer additive changes compatible with the previous image; rollback cannot undo destructive schema changes. Verify backup/restore before real captured data.
-7. Propose a Postgres-backed job worker from the same image for indexing and recaps, with durable leases and idempotent retries. Select its library before milestone 2. Cleanup uses durable progress and a scheduled Job/CronJob. Review total database connections and resource use for app, worker, and jobs.
+7. Propose a Postgres-backed job worker from the same image for source cleanup and recaps, with durable leases and idempotent retries. Select its library before milestone 2. Cleanup uses durable progress and a scheduled Job/CronJob. Review total database connections and resource use for app, worker, and jobs.
 8. Inject Dash0 OTLP and external service credentials at runtime. Scope Elastic keys and separate telemetry from capture content. Verify network access to each provider. No captured media belongs on ephemeral app disk.
 
 [Next.js self-hosting guidance](https://nextjs.org/docs/app/guides/self-hosting) covers proxying, runtime environment variables, streaming, and cache behavior. Configure the gateway for WebSocket upgrades and unbuffered SSE. Member and owner responses must not use shared caches. Verify HTTPS and origin/cookie settings on the actual hostname.
@@ -40,7 +48,7 @@ After deployment authorization, verify the assigned cluster:
 - Runtime Secrets stay out of images, responses, logs, and telemetry; Dash0 receives a content-free test operation.
 - A failed rollout can return to a known working image without losing durable data. Record schema compatibility limits.
 
-Milestone 1 separately proves real audio, two caption readers, timestamps, durable replay, and stop fencing. Later milestones prove search, jobs, isolation, and lifecycle cleanup.
+Milestone 1 separately proves real audio, two caption readers, timestamps, durable Elasticsearch segment/observation writes, Postgres offsets/acknowledgments, replay, and stop fencing. Resolve write ordering and crash recovery before acceptance. Elasticsearch outages visibly degrade captions without silently dropping content. Milestone 2 proves resolution/search; later milestones complete jobs, isolation, and resumable lifecycle cleanup.
 
 ## Pending operator decisions
 

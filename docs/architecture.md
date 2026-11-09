@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the milestone 0 workspace foundation is complete with local verification. Next.js on Kubernetes operated through Radar and Prisma for PostgreSQL are confirmed. Cluster access is pending. Track 2's transcription provider and adapter direction are confirmed by its owner; runtime behavior is unverified. The remaining product runtime design below is proposed. See [decisions](decisions.md) for choices requiring validation.
+Status: the milestone 0 workspace foundation is complete with local verification. Next.js on Kubernetes operated through Radar and Prisma for PostgreSQL are confirmed. Cluster access is pending. Track 2's transcription provider, adapter direction, and Elasticsearch core-content-store split are confirmed by its owner; runtime behavior is unverified. The remaining product runtime design below is proposed. See [decisions](decisions.md) for choices requiring validation.
 
 ## Data flow
 
@@ -8,15 +8,16 @@ Status: the milestone 0 workspace foundation is complete with local verification
 flowchart TD
   Host[Host: mic and screen] --> Ingest[Kubernetes: authenticated ingest]
   Ingest --> STT[One transcription stream per session]
-  STT --> Timeline[Timestamped transcript and frame timeline]
-  Ingest --> Media[Private media storage]
-  Timeline --> Search[Elasticsearch passage index]
-  Search --> Results[Authorized source results]
-  Results --> Selections
-  Timeline --> Feed[Shared caption feed]
+  STT --> Content[Elastic Cloud: segment revisions and frame observations]
+  Ingest --> Content
+  Ingest --> Media[Private object storage: images]
+  Access[Postgres: identity, sessions, membership, leases] --> Reads[Authorized search, resolution, replay]
+  Content --> Reads
+  Reads --> Selections
+  Reads --> Feed[Shared caption feed]
   Feed --> A[Attendee A]
   Feed --> B[Attendee B]
-  A --> Selections[Owner-scoped bookmarks]
+  A --> Selections[Postgres: private bookmarks, notes, recaps, jobs]
   B --> Selections
   Selections --> Recap[Private recap with evidence]
   Media --> Recap
@@ -28,17 +29,17 @@ The workspace uses pnpm, one lockfile, and `workspace:` dependencies. The web, U
 
 The [building tracks](building-tracks.md) divide feature ownership, including the UI/capture boundary and shared migration coordination.
 
-| Path                  | Owns                                                                                           |
-| --------------------- | ---------------------------------------------------------------------------------------------- |
-| `apps/web`            | Next.js App Router, host and attendee UI, browser capture, server routes, and Node.js runtime  |
-| `apps/web/src/server` | Authentication, ingest, caption delivery, provider adapters, search/indexing, and durable jobs |
-| `packages/ui`         | shadcn/ui components, theme, shared presentation primitives                                    |
-| `packages/contracts`  | Runtime request/event schemas and derived TypeScript types                                     |
-| `packages/domain`     | Pure timeline, selection, alignment, and revision rules                                        |
-| `packages/db`         | Prisma schema and client; planned migrations, repositories, and synthetic seeds                |
-| `infra`               | Local services, deployment definitions, telemetry configuration                                |
-| `tests/fixtures`      | Authorized audio, screen frames, expected words and timestamps                                 |
-| `tests/e2e`           | Host/attendee flows and cross-user isolation checks                                            |
+| Path                  | Owns                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `apps/web`            | Next.js App Router, host and attendee UI, browser capture, server routes, and Node.js runtime                 |
+| `apps/web/src/server` | Authentication, ingest, caption delivery, provider adapters, Elasticsearch ingest and reads, and durable jobs |
+| `packages/ui`         | shadcn/ui components, theme, shared presentation primitives                                                   |
+| `packages/contracts`  | Runtime request/event schemas and derived TypeScript types                                                    |
+| `packages/domain`     | Pure timeline, selection, alignment, and revision rules                                                       |
+| `packages/db`         | Prisma schema and client; planned migrations, repositories, and synthetic seeds                               |
+| `infra`               | Local services, deployment definitions, telemetry configuration                                               |
+| `tests/fixtures`      | Authorized audio, screen frames, expected words and timestamps                                                |
+| `tests/e2e`           | Host/attendee flows and cross-user isolation checks                                                           |
 
 One Next.js application owns the UI and backend. HTTP endpoints use App Router Route Handlers; capture and interactive captions use Client Components. `domain` and `contracts` have no UI, database, or provider dependencies. Only server code imports `db` or server provider SDKs. Mark server modules with `server-only`. Keep application-specific components in web.
 
@@ -50,15 +51,19 @@ Start with one application replica, but keep all leases, replay cursors, audio a
 
 Propose a Postgres event log with bounded polling for cross-pod SSE delivery. Notification mechanisms may reduce latency but cannot replace durable replay. Validate latency and load in milestone 1. The gateway must pass WebSocket upgrades and unbuffered SSE. Bound uploads, connection counts, and backpressure; keep authorization at each boundary.
 
-Propose CloudNativePG for cluster Postgres, subject to access and persistence verification. Private object storage remains a deployment decision; the local SeaweedFS setup proves only local behavior. Use runtime Secrets and explicit migration Jobs. See the [deployment plan](deployment.md) for packaging, rollout, and teardown gates.
+Use CloudNativePG for cluster Postgres via Prisma, with access and persistence still to verify. Elasticsearch on Elastic Cloud Serverless (hackathon trial) owns shared transcript revisions and screen observations; private object storage owns images. The team cluster budget (2 CPU / 4 GiB requests, 4 CPU / 8 GiB limits total) cannot fit Elasticsearch next to the app and Postgres. Private object storage remains a deployment decision; the local SeaweedFS setup proves only local behavior. Use runtime Secrets and explicit migration Jobs. See the [deployment plan](deployment.md) for packaging, rollout, and teardown gates.
 
-Recap and indexing work need durable jobs, retries, and leases. Propose Postgres-backed jobs consumed by a worker from the same repository and image; select the library before milestone 2. Scheduled cleanup can use a Kubernetes CronJob, but progress must survive interruption. Never rely on an unawaited promise or pod-local files for durable work.
+Recap and source cleanup work need durable Postgres jobs, retries, and leases. Propose Postgres-backed jobs consumed by a worker from the same repository and image; select the library before milestone 2. Scheduled cleanup can use a Kubernetes CronJob, but progress must survive interruption. Never rely on an unawaited promise or pod-local files for durable work.
 
 ## Search and observability
 
-Elasticsearch passage search is required hackathon scope after private highlights work. Postgres remains authoritative. Index finalized shared transcript passages with session, source range, segment IDs, revisions, and expiry; never index private notes or recaps. Use keyword search first, then semantic search with an explicitly selected inference endpoint. Elastic Cloud Serverless is proposed to avoid adding a search cluster to the application cluster.
+Elasticsearch is the system of record for shared source content from milestone 1: every transcript segment revision with live/corrected/repaired provenance, and screen observations with capture time, frame ID, checksum, glossary terms, and private image object key. Track 2 writes these during ingest. Postgres owns identity, sessions, membership, host lease/epoch, audio acknowledgments, finalized-transcript offset, bookmarks, notes, recaps, and job queue. No private data or identity-linked search queries enter Elasticsearch.
 
-Search returns candidates. Recheck membership, current source revisions, redaction, and expiry in Postgres before exposing text or accepting a selection. Search selection uses the existing paragraph bookmark path and source clock. Durable indexing jobs update revisions and purge expired or removed passages; an index outage must not interrupt capture or private saves. Search never silently adds evidence to a recap.
+Track 3 resolves bookmarks by `startMs`/`endMs` on the session clock against Elasticsearch, filtered to segment revisions and frames. Fixed requested ranges never move when later content arrives. Track 3 also implements “Find the Right Talk” keyword search plus `semantic_text` over segments and glossary terms; track 1 owns its UI. Confirm the embedding/inference endpoint (for example Jina) in the Elastic project before using it. Results resolve to source ranges that attendees explicitly keep as paragraph-anchored selections; search never adds evidence automatically.
+
+Every Elasticsearch read, including search, resolution, and replay, checks current membership and access in Postgres first, including after revocation. Apply source revision, redaction, and expiry guards before returning content. Durable cleanup jobs remove expired/redacted/deleted documents and prevent retries restoring them. Materialize selected evidence before shared-source expiry.
+
+Use idempotent document IDs based on session, epoch, segment ID, and revision; frame observations use stable observation identity. Elasticsearch persistence is part of durable source acknowledgment. Milestone 1 must settle write ordering across Elasticsearch, the Postgres finalized offset, audio acknowledgments, and replay events, including crash recovery. An Elasticsearch outage visibly degrades captions; retain/retry source content or expose a gap, never silently drop it. A search-only failure leaves captions and saved evidence usable when the content store is healthy.
 
 Dash0 receives content-free OpenTelemetry from the Node runtime and worker. Allowlist attributes and suppress captured text, queries, notes, model prompts, credentials, and signed URLs. Disable content-bearing automatic instrumentation. Radar handles cluster operations; Dash0 handles application traces and metrics. The [hackathon plan](hackathon.md) defines evidence and ownership for all four tracks.
 
@@ -79,7 +84,7 @@ Proposed milestone 2–3 work uses `ai` through `createOpenAICompatible` pointed
 - Estimate the live session clock on attendee devices. Record uncertainty. If sync is stale, disable live marks and allow paragraph-anchored marks.
 - Replace interim text; patch final segments by stable ID and revision. Replayed events must not duplicate words or undo a newer correction.
 - Replay SSE from a cursor. If history expired, supply an authorized snapshot and cursor. Do not report a silent gap as caught up.
-- Resolve bookmarks within fixed requested ranges. A later transcript or image arrival cannot move the range. Partial evidence remains visibly incomplete.
+- Resolve bookmarks against Elasticsearch segment revisions and frames within fixed requested `startMs`/`endMs` ranges after a current Postgres access check. A later transcript or image arrival cannot move the range. Partial evidence remains visibly incomplete.
 
 ## Screen and audio capture
 
@@ -96,7 +101,7 @@ Number audio chunks, attach time ranges/checksums, and acknowledge durable write
 - QR invitations issue distinct attendee memberships, never host credentials. Enforce session access and resource ownership on every API, search, image URL, and event stream.
 - Shared captions exclude private bookmark events. Hosts do not automatically see attendees' notes or recaps. Revocation stops further authorized delivery and image access.
 - Proposed expiry: shared audio, transcript, and frames 24 hours after session end; selected evidence and recaps 30 days after selection. Confirm policy before real recording.
-- Materialize selected text revisions and retain authorized selected image references before shared-source expiry. Deletion and expiry jobs must handle references and invalidate dependent recaps.
+- Materialize selected text revisions and retain authorized selected image references before shared-source expiry. Deletion, redaction, and expiry jobs must durably resume Elasticsearch document cleanup, handle object references, and invalidate dependent recaps.
 - Host redaction invalidates affected hosted selections and recaps. Personal deletion does not remove others' shared source. Downloaded exports cannot be recalled.
 - Keep content out of logs, telemetry, session replay, and errors. Verify provider retention controls, including provider data-use opt-out where available. Never claim system-wide 30-second retention.
 - Measure ingest lag, caption lag, transcription failures, source gaps, durable-save latency, and recap errors. Verify Dash0 telemetry with real requests and inspect exported payloads for content leaks.

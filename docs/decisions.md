@@ -27,12 +27,28 @@ Dylan confirmed this direction on November 9, 2026. A first local spike ran the 
 - **Caption adapter:** implement the protocol directly in a server-only adapter in `apps/web/src/server`. Own commit boundaries, handle many items per session, and resample per provider. Stamp text with our source clock from the audio offsets sent, not provider timestamps. Provider choice and credentials are server-only configuration, with no `NEXT_PUBLIC_` variables.
 - **AI SDK boundary:** do not use `experimental_streamTranscribe` for the caption stream. In `@ai-sdk/openai` 4.0.x it sends one commit at end of input, closes on the first `.completed` event, and returns no segment timestamps; that lifecycle cannot cover a whole talk. Reserve `ai` for text and vision passes below. This records the design rationale, not a verified integration.
 
+## Core content store confirmed by the Track 2 owner
+
+Dylan confirmed this data split on November 9, 2026. Provisioning and runtime behavior remain unverified.
+
+| Data                                                                                                                                                                                | Store                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Shared transcript segments, every revision with live/corrected/repaired provenance; screen observations with capture time, frame ID, checksum, slide glossary terms, and object key | Elasticsearch on Elastic Cloud Serverless, using the hackathon trial; system of record for shared source content |
+| Identity, sessions, membership, host lease and ingest epoch, bookmarks, private notes, recaps, job queue, finalized-transcript offset, and audio acknowledgments                    | Postgres via Prisma, using CloudNativePG in the team Kubernetes cluster                                          |
+| Screen frame images                                                                                                                                                                 | Private object storage; Elasticsearch holds only the object key                                                  |
+
+The team cluster budget (2 CPU / 4 GiB requests, 4 CPU / 8 GiB limits total) cannot fit Elasticsearch alongside the app and Postgres. Elastic Cloud keeps it outside that budget. The Elastic track requires Elasticsearch as the core data layer.
+
+Track 2 writes segments and frame observations during ingest from milestone 1. Track 3 resolves bookmarks by fixed session-clock ranges and implements keyword plus `semantic_text` search; track 1 builds the search UI. Captions come first, but search is core work alongside private highlights, not a later integration. Confirm the inference endpoint in the project before choosing a model such as Jina.
+
+Private data never enters Elasticsearch. Every source read checks current membership and access in Postgres first, including replay and resolution after revocation. Expiry, redaction, and deletion require durable, resumable Elasticsearch cleanup; materialize selected evidence before shared-source expiry. Elasticsearch outages visibly degrade captions and cannot silently discard source content. Milestone 1 must settle cross-store write ordering and durable acknowledgment before acceptance.
+
 ## Proposed implementation defaults
 
 - **LLM tooling (proposal):** use the Vercel AI SDK (`ai`), including its Agent and tool-loop APIs, in server-owned LLM workflows. Verify APIs against the version selected during implementation. Recap provider/model selection and durable recap job execution remain open; vendoring guidance does not install or validate an integration.
 
 - Next.js Route Handlers with a custom Node WebSocket entry point, reconnectable SSE, and the confirmed server-only caption adapter. Prove packaging in checkpoint 0A and cross-pod recovery in milestone 1. Propose a durable Postgres event log with bounded polling; leases and replay cannot depend on pod memory.
-- Propose CloudNativePG for PostgreSQL, private S3-compatible storage, a Postgres-backed job worker, and Kubernetes CronJobs for cleanup. Storage location, job library, capacity, and post-hackathon hosting remain open. Isolate provider adapters from domain rules.
+- Use CloudNativePG for PostgreSQL; propose private S3-compatible storage, a Postgres-backed job worker, and Kubernetes CronJobs for cleanup. Storage location, job library, capacity, and post-hackathon hosting remain open. Isolate provider adapters from domain rules.
 - Thirty-second marks, one-second screen observations, and a two-minute resend cap. Validate actual timing and readability.
 - Shared-source expiry 24 hours after session end; selected-content expiry 30 days after selection. Confirm permission and cleanup behavior before claiming these guarantees.
 - **Slide glossary and caption correction (proposal, milestones 2–3):** use `ai` through `createOpenAICompatible` pointed at `llama serve`, or through `@ai-sdk/openai`. A Liquid vision model (LFM2.5-VL or LFM3-VL family) reads each changed screen frame to extract on-screen terms. A small Liquid text model uses that glossary to correct finalized segments asynchronously, writing new `TranscriptSegment` revisions with existing `corrected` provenance and preserving original text. Never put correction on the live caption path. Treat screen and transcript text as untrusted data, never instructions. This is outside milestone 1; the recap model remains undecided.
@@ -40,7 +56,7 @@ Dylan confirmed this direction on November 9, 2026. A first local spike ran the 
 
 ## Selected hackathon integrations
 
-Use [hackathon.md](hackathon.md) as the integration scope and account checklist. Radar owns deployment operations, Dash0 application observability, Sonar/Gitar development review, and Elasticsearch passage retrieval. Search is required for the four-track delivery, sequenced after captions and private saves.
+Use [hackathon.md](hackathon.md) as the integration scope and account checklist. Radar owns deployment operations, Dash0 application observability, and Sonar/Gitar development review. Elasticsearch is the core shared-content store and passage retrieval layer. Captions come first; Elasticsearch stores segments from milestone 1, with search and private highlights in milestone 2.
 
 Detailed adapters and service plans remain proposals. Gitar's normal review writes PR comments; resolve repository-admin enablement explicitly before installing it. Coding agents must not post PR comments. Automatic fixes, pushes, merges, and deployment are not authorized by this documentation update.
 
@@ -48,7 +64,7 @@ Detailed adapters and service plans remain proposals. Gitar's normal review writ
 
 Vite and the separate `apps/api` service remain superseded by the full-stack Next.js app. Vercel hosting, its experimental WebSocket API, `vercel dev`, and Vercel-specific job assumptions are superseded by the Kubernetes plan.
 
-Elasticsearch as optional stretch work and Radar being set aside are superseded by the decision to use all four hackathon tracks. The Vercel AI SDK proposal and vendored React guidance remain independent of hosting.
+Elasticsearch as optional stretch work, a derived index with Postgres authoritative for shared content, and search sequenced after private saves are superseded by Dylan’s November 9, 2026 core-content-store decision. Radar being set aside is superseded by the decision to use all four hackathon tracks. The Vercel AI SDK proposal and vendored React guidance remain independent of hosting.
 
 The personal-device recorder with a strict 30-second discard buffer is superseded. Central session retention supports late marks, reconnects, and optional repair. Do not carry its privacy promise into this design.
 
