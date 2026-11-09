@@ -15,8 +15,9 @@ import { readRuntimeEnv } from "./env.js";
 const runtime = readRuntimeEnv(process.env);
 const { port, probeToken } = runtime;
 const elasticsearch = runtime.elasticsearch;
+const authority = createIngestAuthority(process.env);
 const captions = new CaptionTransport({
-  authority: createIngestAuthority(process.env),
+  authority,
   ...(elasticsearch
     ? {
         sink: {
@@ -51,6 +52,8 @@ const handle = app.getRequestHandler();
 const frames = new FrameTransport(
   runtime.frameEnv,
   new URL(`http://localhost:${port}`).origin,
+  undefined,
+  authority,
 );
 const maxConnections = 16;
 const durationMs = 30_000;

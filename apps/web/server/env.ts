@@ -4,6 +4,7 @@ import type { CaptionDelay } from "../src/server/captions/openai-window";
 export function readRuntimeEnv(
   env: Readonly<Record<string, string | undefined>>,
 ) {
+  const appOrigin = readAppOrigin(env.APP_ORIGIN);
   const port = Number(env.PORT ?? "8080");
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("PORT must be an integer from 1 to 65535.");
@@ -78,6 +79,8 @@ export function readRuntimeEnv(
     // a frame request, where s3FrameStore validates all required S3 settings.
     frameEnv: {
       NODE_ENV: env.NODE_ENV,
+      DATABASE_URL: env.DATABASE_URL,
+      APP_ORIGIN: appOrigin,
       CAPTIONS_DEV_SESSION: captionsDevSession,
       CAPTIONS_DEV_EPOCH: env.CAPTIONS_DEV_EPOCH,
       S3_ENDPOINT: env.S3_ENDPOINT,
@@ -100,4 +103,19 @@ function parseCaptionDelay(captionDelay: string): CaptionDelay {
   )
     throw new Error("CAPTION_DELAY is invalid.");
   return captionDelay;
+}
+
+/** Server-only browser provenance; never infer trust from Host/forwarding headers. */
+function readAppOrigin(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const url = new URL(value);
+    if (["http:", "https:"].includes(url.protocol) && value === url.origin)
+      return url.origin;
+  } catch {
+    // Report the setting name only.
+  }
+  throw new Error(
+    "APP_ORIGIN must be an exact HTTP(S) origin without credentials, path, query or fragment.",
+  );
 }

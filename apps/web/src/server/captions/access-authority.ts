@@ -14,7 +14,7 @@ import {
 } from "./ingest-authority";
 
 /** Node requests have no Next cookies() context. Use the same verifier as readPrincipal. */
-function principalId(request: IncomingMessage) {
+function principalId(request: Pick<IncomingMessage, "headers">) {
   const values = (request.headers.cookie ?? "")
     .split(";")
     .map((cookie) => cookie.trim())
@@ -37,7 +37,7 @@ export class MembershipIngestAuthority implements IngestAuthority {
 
   private async authorize(
     sessionId: string,
-    request: IncomingMessage,
+    request: Pick<IncomingMessage, "headers">,
     host: boolean,
   ): Promise<HostAuthorization> {
     try {
@@ -58,13 +58,19 @@ export class MembershipIngestAuthority implements IngestAuthority {
     }
   }
 
-  authorizeHost(sessionId: string, request: IncomingMessage) {
+  authorizeHost(sessionId: string, request: Pick<IncomingMessage, "headers">) {
     return this.authorize(sessionId, request, true);
   }
-  authorizeMember(sessionId: string, request: IncomingMessage) {
+  authorizeMember(
+    sessionId: string,
+    request: Pick<IncomingMessage, "headers">,
+  ) {
     return this.authorize(sessionId, request, false).then(
       (result) => result === true,
     );
+  }
+  currentEpoch(sessionId: string) {
+    return this.epochs.get(sessionId);
   }
   checkEpoch(sessionId: string, epoch: number) {
     if (epoch < (this.epochs.get(sessionId) ?? 0)) return false;
