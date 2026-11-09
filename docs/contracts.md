@@ -186,3 +186,20 @@ Use durable Postgres cleanup jobs and deletion tombstones/guards so delayed writ
 0A transport probes are separate from product APIs: opt-in `PROBE_TOKEN` authentication, `/api/probe/ws` accepts only text `ping` and replies `pong`, and `/api/probe/sse` emits one constant heartbeat per second without compression/buffering. They share a 16-connection cap and 30-second lifetime; WS payloads are limited to 32 bytes and 30 messages. Missing configuration disables probe access; invalid credentials reject before streaming/upgrade. They do not establish product identity or durable replay. See [runtime details](deployment.md#local-foundation).
 
 Use allowlisted telemetry fields for operation, outcome, duration, source lag, retry count, and opaque correlation IDs. Never export query text, transcript, frame content, notes, prompt bodies, tokens, or signed URLs. Verify both manual spans and automatic instrumentation.
+
+### Private-flow spans
+
+The `simon-says.private` scope exports `bookmark.save`, `search.query`,
+`recap.create`, and `recap.generate` through the existing content-safe processor.
+HTTP spans include validation and access failures; search unavailability is an
+error even with a 200 response. Recap creation measures acceptance, while generation
+records its terminal success, error, stale, or skipped outcome separately.
+
+Allowed attributes are the fixed operation name, outcome (`success`, `error`,
+`stale`, `skipped`), non-negative numeric `duration_ms` and HTTP response status,
+and fixed error codes: `request_failed`, `source_unavailable`,
+`no_resolved_evidence`, `no_valid_citations`, `generation_timeout`,
+`generation_failed`. No IDs, query text, notes, passages, prompts, URLs, or raw
+errors are accepted. The export boundary rebuilds attributes and removes events,
+links, status descriptions, and incidental resources, with separate allowlists
+for caption and private-flow scopes. Provider content instrumentation stays disabled.

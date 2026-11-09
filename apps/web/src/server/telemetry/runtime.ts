@@ -21,6 +21,11 @@ import {
   createCaptionTelemetry,
   safeAttributes,
 } from "./captions";
+import {
+  PRIVATE_SCOPE,
+  PRIVATE_SPAN_NAMES,
+  safePrivateAttributes,
+} from "./private-flow";
 
 /** Last export boundary: foreign scopes, arbitrary names, events, links, status
  * descriptions, tracestate and detected resource attributes are never forwarded. */
@@ -31,11 +36,12 @@ export class ContentSafeSpanProcessor implements SpanProcessor {
   ) {}
   onStart() {}
   onEnd(span: ReadableSpan) {
-    if (
-      span.instrumentationScope.name !== CAPTION_SCOPE ||
-      !SPAN_NAMES.includes(span.name)
-    )
-      return;
+    const scope = span.instrumentationScope.name;
+    const caption = scope === CAPTION_SCOPE && SPAN_NAMES.includes(span.name);
+    const privateFlow =
+      scope === PRIVATE_SCOPE &&
+      PRIVATE_SPAN_NAMES.some((name) => name === span.name);
+    if (!caption && !privateFlow) return;
     const context = span.spanContext();
     this.downstream.onEnd({
       name: span.name,
@@ -50,11 +56,13 @@ export class ContentSafeSpanProcessor implements SpanProcessor {
       duration: span.duration,
       ended: span.ended,
       status: { code: span.status.code },
-      attributes: safeAttributes(span.attributes),
+      attributes: caption
+        ? safeAttributes(span.attributes)
+        : safePrivateAttributes(span.attributes),
       events: [],
       links: [],
       resource: this.resource,
-      instrumentationScope: { name: CAPTION_SCOPE },
+      instrumentationScope: { name: scope },
       droppedAttributesCount: 0,
       droppedEventsCount: 0,
       droppedLinksCount: 0,
