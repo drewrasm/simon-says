@@ -53,7 +53,7 @@ Propose a Postgres event log with bounded polling for cross-pod SSE delivery. No
 
 Use CloudNativePG for cluster Postgres via Prisma. Elasticsearch on Elastic Cloud Serverless (hackathon trial) owns shared transcript revisions and screen observations; private object storage owns images. The team cluster budget (2 CPU / 4 GiB requests, 4 CPU / 8 GiB limits total) cannot fit Elasticsearch next to the app and Postgres. Private object storage remains a deployment decision; the local SeaweedFS setup proves only local behavior. Use runtime Secrets and explicit migration Jobs. See the [deployment plan](deployment.md) for packaging, rollout, and teardown gates.
 
-Recap and source cleanup work need durable Postgres jobs, retries, and leases. Propose Postgres-backed jobs consumed by a worker from the same repository and image; select the library before milestone 2. Scheduled cleanup can use a Kubernetes CronJob, but progress must survive interruption. Never rely on an unawaited promise or pod-local files for durable work.
+Recap and source cleanup work will run as durable Postgres jobs on [pg-boss](decisions.md#confirmed-by-the-track-3-owner) inside the app's Node process, with retries, per-job expiry, and a cron schedule for cleanup. Recaps still run through request-scoped `after()` until then. Cleanup progress must survive interruption. Never rely on an unawaited promise or pod-local files for durable work.
 
 ## Search and observability
 
@@ -65,7 +65,7 @@ Every Elasticsearch read, including search, resolution, and replay, checks curre
 
 Use idempotent document IDs based on session, epoch, segment ID, and revision; frame observations use stable observation identity. Elasticsearch persistence is part of durable source acknowledgment. Write ordering across Elasticsearch, the Postgres finalized offset, audio acknowledgments, and replay events, including crash recovery, must be settled before source acknowledgment counts as durable. An Elasticsearch outage visibly degrades captions; retain/retry source content or expose a gap, never silently drop it. A search-only failure leaves captions and saved evidence usable when the content store is healthy.
 
-Export content-free OpenTelemetry from the Node runtime and worker to Dash0. Allowlist attributes and suppress captured text, queries, notes, model prompts, credentials, and signed URLs. Disable content-bearing automatic instrumentation. Radar handles cluster operations; Dash0 handles application traces and metrics. The [hackathon plan](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzc1LTA2YmQtNDllNS04NjZhLTg0NmY2NTczYzk5NyI=) defines evidence and ownership for all four tracks.
+Export content-free OpenTelemetry from the Node runtime, including its jobs, to Dash0. Allowlist attributes and suppress captured text, queries, notes, model prompts, credentials, and signed URLs. Disable content-bearing automatic instrumentation. Radar handles cluster operations; Dash0 handles application traces and metrics. The [hackathon plan](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzc1LTA2YmQtNDllNS04NjZhLTg0NmY2NTczYzk5NyI=) defines evidence and ownership for all four tracks.
 
 ## Transcription and text passes
 
