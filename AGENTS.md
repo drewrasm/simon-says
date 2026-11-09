@@ -16,6 +16,7 @@ The milestone 0 foundation is implemented. Do not claim setup, integrations, or 
 - Use shadcn/ui components and semantic HTML. Preserve keyboard access, focus, and readable live captions.
 - Validate at external boundaries. Keep timeline and selection logic independent of UI and provider SDKs.
 - Keep provider keys server-only; never expose them through `NEXT_PUBLIC_` variables or Client Component props. Never log captured content, private notes, or model prompts.
+- Never commit to `main`. Work on a feature branch and open a pull request so CI and Gitar review it before merge; see [decisions](docs/decisions.md).
 - Preserve unrelated work. Commit or publish only within the user's authorization.
 - Run the relevant checks and verify the real user flow. Do not skip failing tests or substitute fixtures for an undisclosed live demo.
 
