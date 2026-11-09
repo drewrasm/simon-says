@@ -58,7 +58,7 @@ Private data never enters Elasticsearch. Every source read checks current member
 
 Logan confirmed these on November 9, 2026. Neither decision proves a live integration.
 
-- **Embedding endpoint:** `.jina-embeddings-v5-text-small`, configured through `ELASTICSEARCH_INFERENCE_ID`. Confirm cost and processing settings in the Elastic project before real content is indexed; operator setup is in progress.
+- **Embedding endpoint:** `.jina-embeddings-v5-text-small`, configured through `ELASTICSEARCH_INFERENCE_ID`. Availability and processing settings (zero data retention, AWS `us-west-2`) were confirmed in the Elastic project and operator setup completed on November 9 ([evidence](implementation-plan.md#elastic-cloud-setup-evidence)); the per-token rate is not shown by the inference API.
 - **Recap model:** OpenAI through the AI SDK, reusing `OPENAI_API_KEY` from Secret `app-credentials`. The model id is configurable through server-only `RECAP_MODEL`. Recaps send only the owner's selected passages.
 
 ## Proposed implementation defaults
@@ -130,7 +130,7 @@ Use optional `DEPLOY_TOKEN` for a fine-grained PAT or dedicated installed GitHub
 
 Track 2 supplies strict `segments-v1` and `observations-v1` mappings behind write aliases, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).
 
-The `.jina-embeddings-v5-text-small` default is [decided by Track 3](#confirmed-by-the-track-3-owner), configurable through `ELASTICSEARCH_INFERENCE_ID`. Cost, processing settings, and cloud app-key behavior remain unverified. Local smoke uses `.multilingual-e5-small-elasticsearch`; automatic inference and semantic search passed with zero cluster privileges. The v9 client is pinned to available 9.5.1; cloud 9.7.0 remains an authorized operator verification gate.
+The `.jina-embeddings-v5-text-small` default is [decided by Track 3](#confirmed-by-the-track-3-owner), configurable through `ELASTICSEARCH_INFERENCE_ID`. Processing settings are confirmed in the cloud project ([evidence](implementation-plan.md#elastic-cloud-setup-evidence)); per-token cost and cloud app-key behavior remain unverified. Local smoke uses `.multilingual-e5-small-elasticsearch`; automatic inference and semantic search passed with zero cluster privileges. The v9 client is pinned to available 9.5.1; cloud 9.7.0 remains an authorized operator verification gate.
 
 ## PR #13 caption review decisions (November 9, 2026)
 
