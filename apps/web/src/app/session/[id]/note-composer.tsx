@@ -20,6 +20,9 @@ import { ClockIcon, SquarePenIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useClipState } from "./clip-context";
+import { lastLine } from "./clip-line";
+import { formatTalkTime } from "./talk-time";
 import { NOTE_MAX_LENGTH, useNoteDraft } from "./use-note-draft";
 
 type NoteComposerProps = {
@@ -30,7 +33,11 @@ type NoteComposerProps = {
   afterSave: "open-notes" | "refresh";
 };
 
-/** Phone "New note" sheet: a private note pinned to the moment it opened. */
+/**
+ * Phone "New note" sheet: a private note pinned to where captions had reached
+ * when it opened. Before the first caption it is saved unpinned, with its save
+ * time. "Attach what was just said" quotes the latest caption line under it.
+ */
 export const NoteComposer = ({
   sessionId,
   triggerLabel,
@@ -39,6 +46,8 @@ export const NoteComposer = ({
 }: NoteComposerProps) => {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const { lines, talkMs } = useClipState();
+  const latest = lastLine(lines);
   const {
     note,
     setNote,
@@ -48,7 +57,10 @@ export const NoteComposer = ({
     saving,
     canSubmit,
     failureMessage,
-  } = useNoteDraft({ sessionId });
+    attached,
+    setAttached,
+    pinnedAtMs,
+  } = useNoteDraft({ sessionId, talkMs });
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
@@ -95,10 +107,11 @@ export const NoteComposer = ({
         >
           <DrawerHeader className="p-0 text-left">
             <DrawerTitle>New note</DrawerTitle>
-            <DrawerDescription className="flex items-center gap-1.5">
+            <DrawerDescription className="flex items-center gap-1.5 tabular-nums">
               <ClockIcon aria-hidden="true" className="size-3.5" />
-              Saved with the time you add it. Pinning to a moment in the talk
-              arrives with live captions.
+              {pinnedAtMs === null
+                ? "Saved with the time you add it. Pinning to a moment in the talk arrives with live captions."
+                : `Pinned to ${formatTalkTime(pinnedAtMs)} in the talk`}
             </DrawerDescription>
           </DrawerHeader>
 
@@ -106,7 +119,7 @@ export const NoteComposer = ({
             <FieldLabel htmlFor="note-text">Your note</FieldLabel>
             <Textarea
               id="note-text"
-              rows={3}
+              rows={5}
               value={note}
               maxLength={NOTE_MAX_LENGTH}
               placeholder="Jot down a thought…"
@@ -115,21 +128,35 @@ export const NoteComposer = ({
             />
           </Field>
 
-          <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
-            <div className="flex grow flex-col gap-0.5">
-              <Label htmlFor="attach-quote">Attach what was just said</Label>
-              <span
-                id="attach-quote-hint"
-                className="text-xs text-muted-foreground"
-              >
-                Available once live captions start.
-              </span>
+          <div className="flex flex-col gap-3 rounded-lg bg-muted p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex grow flex-col gap-0.5">
+                <Label htmlFor="attach-quote">Attach what was just said</Label>
+                <span
+                  id="attach-quote-hint"
+                  className="text-xs text-muted-foreground"
+                >
+                  {latest
+                    ? "Adds the last line as a quote under your note."
+                    : "Available once live captions start."}
+                </span>
+              </div>
+              <Switch
+                id="attach-quote"
+                checked={attached !== null}
+                disabled={!latest && !attached}
+                aria-describedby="attach-quote-hint"
+                onCheckedChange={(checked) => {
+                  setAttached(checked ? latest : null);
+                  if (checked) start();
+                }}
+              />
             </div>
-            <Switch
-              id="attach-quote"
-              disabled
-              aria-describedby="attach-quote-hint"
-            />
+            {attached ? (
+              <blockquote className="border-l-2 border-primary pl-3 text-sm leading-relaxed text-muted-foreground">
+                “{attached.text}”
+              </blockquote>
+            ) : null}
           </div>
 
           {failureMessage ? (

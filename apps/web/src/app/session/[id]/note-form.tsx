@@ -7,6 +7,8 @@ import { Textarea } from "@simon-says/ui/components/textarea";
 import { ClockIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useClipState } from "./clip-context";
+import { formatTalkTime } from "./talk-time";
 import { NOTE_MAX_LENGTH, useNoteDraft } from "./use-note-draft";
 
 type NoteFormProps = { sessionId: string };
@@ -17,8 +19,9 @@ type NoteFormProps = { sessionId: string };
  */
 export const NoteForm = ({ sessionId }: NoteFormProps) => {
   const router = useRouter();
-  const { note, setNote, submit, saving, canSubmit, failureMessage } =
-    useNoteDraft({ sessionId });
+  const { talkMs } = useClipState();
+  const { note, setNote, submit, saving, canSubmit, failureMessage, pinnedAtMs } =
+    useNoteDraft({ sessionId, talkMs });
 
   const save = async () => {
     if (!(await submit())) return;
@@ -40,7 +43,11 @@ export const NoteForm = ({ sessionId }: NoteFormProps) => {
         rows={3}
         value={note}
         maxLength={NOTE_MAX_LENGTH}
-        placeholder="Jot down a thought."
+        placeholder={
+          pinnedAtMs === null
+            ? "Jot down a thought."
+            : "Jot down a thought. It’s pinned to this moment in the talk."
+        }
         aria-describedby="panel-note-pin"
         onChange={(event) => setNote(event.target.value)}
         onKeyDown={(event) => {
@@ -54,10 +61,12 @@ export const NoteForm = ({ sessionId }: NoteFormProps) => {
       <div className="flex items-center gap-2">
         <span
           id="panel-note-pin"
-          className="flex grow items-center gap-1.5 text-xs text-muted-foreground"
+          className="flex grow items-center gap-1.5 text-xs text-muted-foreground tabular-nums"
         >
           <ClockIcon aria-hidden="true" className="size-3.5" />
-          Saved with the time you add it
+          {pinnedAtMs === null
+            ? "Saved with the time you add it"
+            : `At ${formatTalkTime(pinnedAtMs)}`}
         </span>
         <Button type="submit" size="sm" disabled={!canSubmit}>
           {saving ? "Adding…" : "Add note"}
