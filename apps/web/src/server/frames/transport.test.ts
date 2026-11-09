@@ -16,14 +16,9 @@ it("routes real HTTP uploads on a random port before the Next fallback", async (
   const env = { CAPTIONS_DEV_SESSION: "http-test" };
   const put = vi.fn().mockResolvedValue(undefined);
   const sink = new InMemoryObservationSink();
-  const transport = new FrameTransport(env, () =>
-    createFrameUpload({ access: devFrameAccess(env), store: { put }, sink }),
-  );
-  const disabled = new FrameTransport({});
-  const production = new FrameTransport({ ...env, NODE_ENV: "production" });
-  let current = transport;
+  let current: FrameTransport;
   const server = createServer((req, res) => {
-    if (current.handleHttp(req, res)) return;
+    if (current.handleHttp(req, res, req.socket.remoteAddress)) return;
     res.writeHead(418).end("Next fallback");
   });
   server.listen(0, "127.0.0.1");
@@ -31,6 +26,19 @@ it("routes real HTTP uploads on a random port before the Next fallback", async (
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("No port");
   const base = `http://127.0.0.1:${address.port}`;
+  const transport = new FrameTransport(env, base, () =>
+    createFrameUpload({
+      access: devFrameAccess(env, base),
+      store: { put },
+      sink,
+    }),
+  );
+  const disabled = new FrameTransport({}, base);
+  const production = new FrameTransport(
+    { ...env, NODE_ENV: "production" },
+    base,
+  );
+  current = transport;
   const url = `${base}/api/sessions/http-test/frames`;
   const bytes = Buffer.from(
     "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA",
@@ -70,6 +78,17 @@ it("routes real HTTP uploads on a random port before the Next fallback", async (
         await fetch(url, {
           method: "POST",
           headers: { ...headers, Origin: "https://evil.example" },
+          body: bytes,
+        })
+      ).status,
+    ).toBe(403);
+    const withoutOrigin = new Headers(headers);
+    withoutOrigin.delete("Origin");
+    expect(
+      (
+        await fetch(url, {
+          method: "POST",
+          headers: withoutOrigin,
           body: bytes,
         })
       ).status,

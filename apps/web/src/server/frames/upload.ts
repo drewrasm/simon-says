@@ -13,6 +13,7 @@ export interface HostFrameAccess {
     request: Request,
     sessionId: string,
     epoch: number,
+    remoteAddress: string | undefined,
   ): Promise<"allowed" | "unauthorized" | "stale_epoch">;
 }
 export interface FrameStore {
@@ -64,7 +65,11 @@ export function createFrameUpload(deps: {
     { fingerprint: string; result: Promise<ScreenObservation> }
   >();
   let active = 0;
-  return async (request: Request, sessionId: string): Promise<Response> => {
+  return async (
+    request: Request,
+    sessionId: string,
+    remoteAddress: string | undefined,
+  ): Promise<Response> => {
     const reply = (status: number, error: string) =>
       Response.json(
         { error },
@@ -90,6 +95,7 @@ export function createFrameUpload(deps: {
       request,
       sessionId,
       metadata.epoch,
+      remoteAddress,
     );
     if (access !== "allowed")
       return reply(access === "stale_epoch" ? 409 : 403, access);
@@ -125,8 +131,12 @@ export function createFrameUpload(deps: {
         await deps.store.put(objectKey, bytes, metadata.mimeType);
         // Recheck the lease after storage latency, before acknowledging the observation.
         if (
-          (await deps.access.authorize(request, sessionId, metadata.epoch)) !==
-          "allowed"
+          (await deps.access.authorize(
+            request,
+            sessionId,
+            metadata.epoch,
+            remoteAddress,
+          )) !== "allowed"
         )
           throw new Error("Lease changed");
         const observation: ScreenObservation = {
@@ -163,20 +173,23 @@ export function createFrameUpload(deps: {
   };
 }
 
-/** Explicit local-only bridge until S3/Track 3 supplies real session access. */
+/** Local prototype: peer comes only from the socket; Origin is server-configured.
+ * Require Origin even for scripts so absent browser provenance never bypasses it.
+ */
 export function devFrameAccess(
   env: Readonly<Record<string, string | undefined>>,
+  expectedOrigin: string,
 ): HostFrameAccess {
   return {
-    async authorize(request, sessionId, epoch) {
-      const url = new URL(request.url);
+    async authorize(request, sessionId, epoch, remoteAddress) {
       const origin = request.headers.get("Origin");
       if (
         env.NODE_ENV === "production" ||
         !env.CAPTIONS_DEV_SESSION ||
         sessionId !== env.CAPTIONS_DEV_SESSION ||
-        !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
-        (origin && origin !== url.origin)
+        !remoteAddress ||
+        !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remoteAddress) ||
+        origin !== expectedOrigin
       )
         return "unauthorized";
       return epoch === Number(env.CAPTIONS_DEV_EPOCH ?? "1")

@@ -49,7 +49,7 @@ it("stores a frame in local SeaweedFS, reads it signed, and denies anonymous rea
   const checksum = createHash("sha256").update(bytes).digest("hex");
   const sink = new InMemoryObservationSink();
   const upload = createFrameUpload({
-    access: devFrameAccess(env),
+    access: devFrameAccess(env, "http://localhost"),
     store: s3FrameStore(env),
     sink,
   });
@@ -69,12 +69,14 @@ it("stores a frame in local SeaweedFS, reads it signed, and denies anonymous rea
       new Request("http://localhost/api/sessions/s4-integration/frames", {
         method: "POST",
         headers: {
+          Origin: "http://localhost",
           "Content-Type": "image/webp",
           "X-Frame-Metadata": JSON.stringify(metadata),
         },
         body: bytes,
       }),
       env.CAPTIONS_DEV_SESSION,
+      "127.0.0.1",
     );
     expect(response.status).toBe(200);
     key = Array.from(sink.observations.values())[0]?.objectKey;

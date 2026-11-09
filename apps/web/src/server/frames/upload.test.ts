@@ -24,6 +24,7 @@ function request(patch = {}, body = bytes, headers = {}) {
   return new Request("http://localhost/api/sessions/demo/frames", {
     method: "POST",
     headers: {
+      Origin: "http://localhost",
       "Content-Type": "image/webp",
       "X-Frame-Metadata": JSON.stringify({ ...metadata, ...patch }),
       ...headers,
@@ -35,11 +36,19 @@ function setup() {
   const sink = new InMemoryObservationSink();
   const put = vi.fn().mockResolvedValue(undefined);
   const upload = createFrameUpload({
-    access: devFrameAccess({ CAPTIONS_DEV_SESSION: "demo" }),
+    access: devFrameAccess(
+      { CAPTIONS_DEV_SESSION: "demo" },
+      "http://localhost",
+    ),
     store: { put },
     sink,
   });
-  return { sink, put, upload };
+  return {
+    sink,
+    put,
+    upload: (request: Request, sessionId: string) =>
+      upload(request, sessionId, "127.0.0.1"),
+  };
 }
 describe("frame endpoint", () => {
   it("stores and deduplicates simultaneous retries with deterministic identity and time", async () => {
@@ -106,9 +115,14 @@ describe("frame endpoint", () => {
       {},
       { NODE_ENV: "production", CAPTIONS_DEV_SESSION: "demo" },
     ])
-      expect(await devFrameAccess(env).authorize(request(), "demo", 1)).toBe(
-        "unauthorized",
-      );
+      expect(
+        await devFrameAccess(env, "http://localhost").authorize(
+          request(),
+          "demo",
+          1,
+          "127.0.0.1",
+        ),
+      ).toBe("unauthorized");
   });
   it("allows retry after sink failure without acknowledging missing observations", async () => {
     const sink = {
@@ -119,14 +133,100 @@ describe("frame endpoint", () => {
     };
     const put = vi.fn().mockResolvedValue(undefined);
     const upload = createFrameUpload({
-      access: devFrameAccess({ CAPTIONS_DEV_SESSION: "demo" }),
+      access: devFrameAccess(
+        { CAPTIONS_DEV_SESSION: "demo" },
+        "http://localhost",
+      ),
       store: { put },
       sink,
     });
-    expect((await upload(request(), "demo")).status).toBe(503);
-    expect((await upload(request(), "demo")).status).toBe(200);
+    expect((await upload(request(), "demo", "127.0.0.1")).status).toBe(503);
+    expect((await upload(request(), "demo", "127.0.0.1")).status).toBe(200);
     expect(put).toHaveBeenCalledTimes(2);
   });
 });
 
 vi.mock("server-only", () => ({}));
+
+describe("dev frame security boundary", () => {
+  it.each([
+    "192.168.1.42",
+    "10.0.0.8",
+    "::ffff:192.168.1.42",
+    "127.0.0.2",
+    undefined,
+  ])(
+    "rejects a spoofed loopback Host and forwarding headers from peer %s",
+    async (remoteAddress) => {
+      const put = vi.fn();
+      const sink = new InMemoryObservationSink();
+      const upload = createFrameUpload({
+        access: devFrameAccess(
+          { CAPTIONS_DEV_SESSION: "demo" },
+          "http://localhost",
+        ),
+        store: { put },
+        sink,
+      });
+      for (const origin of [null, "http://localhost"]) {
+        const forged = request({}, bytes, {
+          Host: "localhost",
+          "X-Forwarded-For": "127.0.0.1",
+          "X-Real-IP": "::1",
+          Forwarded: "for=127.0.0.1;host=localhost",
+        });
+        if (origin === null) forged.headers.delete("Origin");
+        expect((await upload(forged, "demo", remoteAddress)).status).toBe(403);
+      }
+      expect(put).not.toHaveBeenCalled();
+      expect(sink.observations.size).toBe(0);
+    },
+  );
+
+  it.each([
+    null,
+    "null",
+    "https://evil.example",
+    "http://localhost:9999",
+    "http://127.0.0.1",
+  ])(
+    "rejects missing or unexpected Origin %s even on loopback",
+    async (origin) => {
+      const put = vi.fn();
+      const sink = new InMemoryObservationSink();
+      const upload = createFrameUpload({
+        access: devFrameAccess(
+          { CAPTIONS_DEV_SESSION: "demo" },
+          "http://localhost",
+        ),
+        store: { put },
+        sink,
+      });
+      const incoming = request();
+      if (origin === null) incoming.headers.delete("Origin");
+      else incoming.headers.set("Origin", origin);
+      expect((await upload(incoming, "demo", "127.0.0.1")).status).toBe(403);
+      expect(put).not.toHaveBeenCalled();
+      expect(sink.observations.size).toBe(0);
+    },
+  );
+
+  it.each(["127.0.0.1", "::1", "::ffff:127.0.0.1"])(
+    "accepts opted-in uploads from %s with the expected Origin",
+    async (remoteAddress) => {
+      const put = vi.fn().mockResolvedValue(undefined);
+      const sink = new InMemoryObservationSink();
+      const upload = createFrameUpload({
+        access: devFrameAccess(
+          { CAPTIONS_DEV_SESSION: "demo" },
+          "http://localhost",
+        ),
+        store: { put },
+        sink,
+      });
+      expect((await upload(request(), "demo", remoteAddress)).status).toBe(200);
+      expect(put).toHaveBeenCalledTimes(1);
+      expect(sink.observations.size).toBe(1);
+    },
+  );
+});
