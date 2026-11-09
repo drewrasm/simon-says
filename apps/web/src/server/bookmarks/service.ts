@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import {
+  bookmarkEvidenceSchema,
   bookmarkResponseSchema,
   listBookmarksResponseSchema,
   revisionConflictErrorSchema,
@@ -91,7 +92,9 @@ const toResponse = (record: BookmarkRecord): BookmarkResponse =>
         : { startMs: record.actualStartMs, endMs: record.actualEndMs },
     clockUncertaintyMs: record.clockUncertaintyMs,
     completeness: record.completeness,
-    evidence: record.evidence ?? { segments: [], frames: [] },
+    evidence: bookmarkEvidenceSchema.parse(
+      record.evidence ?? { segments: [], frames: [] },
+    ),
     note: record.note,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),

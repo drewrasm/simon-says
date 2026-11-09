@@ -1,0 +1,98 @@
+# PROPOSAL ONLY: pending Track 3 requirements/agreement (C1).
+# Deliberately excluded from kustomization.yaml. Never apply without authorization.
+# Operator supplies Secret frame-storage: s3.json (SeaweedFS identities config).
+# Require credentials and bucket-scoped Read/Write/List actions on simon-says;
+# never include an anonymous identity. Create the private bucket with signed S3.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: frame-storage
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frame-storage
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: frame-storage
+  template:
+    metadata:
+      labels:
+        app: frame-storage
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seaweedfs
+          image: chrislusf/seaweedfs:3.80
+          args:
+            - server
+            - -dir=/data
+            - -ip=frame-storage
+            - -ip.bind=0.0.0.0
+            - -master.volumeSizeLimitMB=512
+            - -volume.max=6
+            - -s3
+            - -s3.config=/etc/seaweedfs/s3.json
+          ports:
+            - name: s3
+              containerPort: 8333
+            - name: master
+              containerPort: 9333
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: credentials
+              mountPath: /etc/seaweedfs
+              readOnly: true
+          readinessProbe:
+            tcpSocket: { port: s3 }
+          livenessProbe:
+            httpGet: { path: /cluster/status, port: master }
+          startupProbe:
+            tcpSocket: { port: s3 }
+            failureThreshold: 30
+            periodSeconds: 2
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: frame-storage
+        - name: credentials
+          secret:
+            secretName: frame-storage
+            defaultMode: 0440
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frame-storage
+spec:
+  type: ClusterIP
+  selector:
+    app: frame-storage
+  ports:
+    - name: s3
+      port: 8333
+      targetPort: s3

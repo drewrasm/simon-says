@@ -53,10 +53,10 @@ try {
   const hostCookie = cookieFrom(created);
   const session = createSessionResponseSchema.parse(await created.json());
   sessionId = session.sessionId;
-  const host = await database.session.findUniqueOrThrow({
-    where: { id: sessionId },
+  const host = await database.membership.findFirstOrThrow({
+    where: { sessionId, role: "host" },
   });
-  principalIds.push(host.hostPrincipalId);
+  principalIds.push(host.principalId);
   const attendees = [];
   for (let index = 0; index < 2; index++) {
     const joined = await send("/api/join", {

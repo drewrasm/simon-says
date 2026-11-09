@@ -7,6 +7,7 @@ import { WebSocketServer } from "ws";
 import { z } from "zod";
 import { createOpenAI } from "@ai-sdk/openai";
 import { CaptionTransport } from "../src/server/captions/transport";
+import { FrameTransport } from "../src/server/frames/transport";
 import { createIngestAuthority } from "../src/server/captions/access-authority";
 import { elasticsearchClient } from "../src/server/search/es-client";
 import { ElasticsearchSegmentSink } from "../src/server/search/elasticsearch-segment-sink";
@@ -53,8 +54,12 @@ const conf = dev
   : requiredServerFiles.parse(
       JSON.parse(await readFile(".next/required-server-files.json", "utf8")),
     ).config;
-const app = next({ dev, ...(conf ? { conf } : {}) });
+const app = next({ dev, port, ...(conf ? { conf } : {}) });
 const handle = app.getRequestHandler();
+const frames = new FrameTransport(
+  runtime.frameEnv,
+  new URL(`http://localhost:${port}`).origin,
+);
 const maxConnections = 16;
 const durationMs = 30_000;
 const drainMs = 10_000;
@@ -142,6 +147,7 @@ const server = createServer(async (req, res) => {
     res.writeHead(426).end();
     return;
   }
+  if (frames.handleHttp(req, res, req.socket.remoteAddress)) return;
   void handle(req, res).catch(() => {
     console.error("HTTP request failed");
     if (!res.headersSent) res.writeHead(500);
@@ -235,7 +241,9 @@ async function shutdown(exitCode: number) {
 }
 process.on("SIGTERM", () => void shutdown(0));
 process.on("SIGINT", () => void shutdown(0));
-server.listen(port, "0.0.0.0", () => console.log(`HTTP listening on ${port}`));
+server.listen(port, dev ? "127.0.0.1" : "0.0.0.0", () =>
+  console.log(`HTTP listening on ${port}`),
+);
 try {
   await app.prepare();
   if (!stopping) ready = true;

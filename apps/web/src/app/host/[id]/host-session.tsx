@@ -1,7 +1,7 @@
 "use client";
 
 import type { CaptureStateEvent } from "@simon-says/contracts/caption";
-import type { SessionStatus } from "@simon-says/contracts/session";
+import type { SessionStatus } from "@simon-says/contracts/session-status";
 import { Alert, AlertDescription } from "@simon-says/ui/components/alert";
 import { Button } from "@simon-says/ui/components/button";
 import {

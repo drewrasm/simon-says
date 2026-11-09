@@ -48,6 +48,7 @@ export class HostCapture {
   private source: MediaStreamAudioSourceNode | undefined;
   private client: IngestClient;
   private sequencer: FrameSequencer;
+  private clockStartTime: number | undefined;
   private started = false;
   private stopped = false;
   private closing: Promise<void> = Promise.resolve();
@@ -62,6 +63,22 @@ export class HostCapture {
       },
     );
   }
+  /** Same origin as the worklet's first PCM sample; unavailable when audio stops. */
+  getCaptureSampleOffset = (): number | undefined => {
+    if (
+      !this.context ||
+      this.context.state !== "running" ||
+      this.clockStartTime === undefined ||
+      this.stopped
+    )
+      return undefined;
+    return Math.max(
+      0,
+      Math.floor(
+        (this.context.currentTime - this.clockStartTime) * CAPTION_SAMPLE_RATE,
+      ),
+    );
+  };
   getSnapshot = (): CaptureHealth => this.health;
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -127,6 +144,16 @@ export class HostCapture {
       this.node.port.onmessage = (event: MessageEvent<unknown>) => {
         if (this.stopped) return;
         const data = event.data;
+        if (
+          typeof data === "object" &&
+          data !== null &&
+          "clockStartTime" in data &&
+          typeof data.clockStartTime === "number" &&
+          Number.isFinite(data.clockStartTime)
+        ) {
+          this.clockStartTime = data.clockStartTime;
+          return;
+        }
         if (
           typeof data !== "object" ||
           data === null ||
