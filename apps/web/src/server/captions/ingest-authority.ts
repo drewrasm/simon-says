@@ -1,11 +1,13 @@
 import "server-only";
 import type { IncomingMessage } from "node:http";
 
+export type HostAuthorization = boolean | "session_ended";
+
 export interface IngestAuthority {
   authorizeHost(
     sessionId: string,
     request: IncomingMessage,
-  ): boolean | Promise<boolean>;
+  ): HostAuthorization | Promise<HostAuthorization>;
   authorizeMember(
     sessionId: string,
     request: IncomingMessage,

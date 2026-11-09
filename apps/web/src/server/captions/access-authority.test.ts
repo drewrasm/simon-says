@@ -3,6 +3,9 @@ import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { WebSocket } from "ws";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { MockTranscriptionModelV4 } from "ai/test";
+import { encodeAudioFrame } from "@simon-says/contracts/audio-frame";
+import { InMemorySegmentSink } from "./segment-sink";
 import { AccessError } from "../access/errors";
 import { principalCookieName, signPrincipal } from "../access/credentials";
 import {
@@ -19,6 +22,7 @@ const access = vi.hoisted(() => ({
       role?: string;
     }) => {
       void _options;
+      return { session: { status: "setup" } };
     },
   ),
 }));
@@ -28,6 +32,7 @@ const hostId = "22222222-2222-4222-8222-222222222222";
 const attendeeId = "33333333-3333-4333-8333-333333333333";
 const secret = "synthetic-test-session-secret-32-characters";
 let revoked = false;
+let status = "setup";
 function cookie(id: string) {
   return `${principalCookieName}=${encodeURIComponent(signPrincipal({ principalId: id, secret }))}`;
 }
@@ -38,18 +43,21 @@ function request(value?: string) {
 }
 beforeEach(() => {
   revoked = false;
+  status = "setup";
   vi.stubEnv("SESSION_SECRET", secret);
   access.requireMembership.mockReset();
   access.requireMembership.mockImplementation(
     async ({ sessionId: id, principalId, role }) => {
       if (
         revoked ||
+        status === "expired" ||
         id !== sessionId ||
         ![hostId, attendeeId].includes(principalId ?? "") ||
         (role === "host" && principalId !== hostId)
       ) {
         throw new AccessError(404, "not_found");
       }
+      return { session: { status } };
     },
   );
 });
@@ -131,10 +139,13 @@ it("fences epochs independently for UUID sessions", () => {
   expect(authority.checkEpoch(attendeeId, 1)).toBe(true);
 });
 
-async function socketServer() {
+async function socketServer(
+  options: Partial<ConstructorParameters<typeof CaptionTransport>[0]> = {},
+) {
   const transport = new CaptionTransport({
     authority: new MembershipIngestAuthority(),
     membershipRecheckMs: 25,
+    ...options,
   });
   const server = createServer(async (req, res) => {
     if (!(await transport.handleHttp(req, res))) res.writeHead(404).end();
@@ -296,3 +307,193 @@ it("bounds stalled access checks instead of accepting or hanging an admission", 
     vi.useRealTimers();
   }
 });
+
+it.each(["setup", "live", "degraded"])(
+  "allows host ingest in %s",
+  async (state) => {
+    status = state;
+    expect(
+      await new MembershipIngestAuthority().authorizeHost(
+        sessionId,
+        request(cookie(hostId)),
+      ),
+    ).toBe(true);
+  },
+);
+
+it.each(["ended", "expired", "revoked"])(
+  "rejects initial ingest for %s sessions",
+  async (state) => {
+    status = state === "revoked" ? "live" : state;
+    revoked = state === "revoked";
+    const server = await socketServer();
+    try {
+      const ws = new WebSocket(
+        server.base.replace("http:", "ws:") + "/ingest",
+        { headers: { Cookie: cookie(hostId) } },
+      );
+      const message = once(ws, "message");
+      const closed = once(ws, "close");
+      expect(JSON.parse((await message)[0].toString())).toEqual({
+        type: "rejected",
+        reason: state === "ended" ? "session_ended" : "unauthorized",
+        retryable: false,
+      });
+      expect((await closed)[0]).toBe(1008);
+      if (state !== "ended") {
+        expect(
+          (
+            await fetch(server.base + "/events", {
+              headers: { Cookie: cookie(attendeeId) },
+            })
+          ).status,
+        ).toBe(404);
+      }
+    } finally {
+      await server.close();
+    }
+  },
+);
+
+it("keeps ended-session member SSE access through periodic checks", async () => {
+  status = "ended";
+  const server = await socketServer();
+  const controller = new AbortController();
+  try {
+    const response = await fetch(server.base + "/events", {
+      headers: { Cookie: cookie(attendeeId) },
+      signal: controller.signal,
+    });
+    expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain(
+      sessionId,
+    );
+    await vi.waitFor(() =>
+      expect(
+        access.requireMembership.mock.calls.filter(
+          ([options]) => options.role === undefined,
+        ).length,
+      ).toBeGreaterThanOrEqual(3),
+    );
+    let ended = false;
+    const reading = (async () => {
+      try {
+        while (!(await reader.read()).done) {
+          /* Drain queued snapshot frames. */
+        }
+      } catch {
+        /* Aborting the test request also ends the reader. */
+      }
+      ended = true;
+    })();
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    expect(ended).toBe(false);
+    controller.abort();
+    await reading;
+  } finally {
+    controller.abort();
+    await server.close();
+  }
+});
+
+it.each(["ended", "expired"])(
+  "closes open ingest when the session becomes %s",
+  async (state) => {
+    let committed = false;
+    let receivedSamples = 0;
+    const sink = new InMemorySegmentSink();
+    const model = new MockTranscriptionModelV4({
+      doStream: async ({ audio }) => ({
+        stream: new ReadableStream({
+          async start(controller) {
+            const reader = audio.getReader();
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (typeof value === "string")
+                throw new Error("unexpected_base64");
+              receivedSamples += value.byteLength / 2;
+            }
+            committed = true;
+            controller.enqueue({
+              type: "transcript-final",
+              text: "Tail caption.",
+            });
+            controller.enqueue({
+              type: "finish",
+              text: "Tail caption.",
+              segments: [],
+            });
+            controller.close();
+          },
+        }),
+      }),
+    });
+    const server = await socketServer({
+      model: {
+        specificationVersion: "v4",
+        provider: model.provider,
+        modelId: model.modelId,
+        doGenerate: model.doGenerate,
+        doStream: model.doStream!,
+      },
+      sink,
+      reconnectGraceMs: 60000,
+    });
+    let ws: WebSocket | undefined;
+    try {
+      ws = new WebSocket(server.base.replace("http:", "ws:") + "/ingest", {
+        headers: { Cookie: cookie(hostId) },
+      });
+      await once(ws, "open");
+      const ready = once(ws, "message");
+      ws.send(
+        JSON.stringify({
+          type: "hello",
+          epoch: 1,
+          lastSentSeq: -1,
+          sampleRate: 24000,
+        }),
+      );
+      expect(JSON.parse((await ready)[0].toString()).type).toBe("ready");
+      ws.send(
+        encodeAudioFrame({
+          epoch: 1,
+          seq: 0,
+          sampleOffset: 0,
+          samples: new Int16Array(2400).fill(1000),
+        }),
+      );
+      await vi.waitFor(() => expect(receivedSamples).toBe(2400));
+      expect(committed).toBe(false);
+      const rejected = once(ws, "message");
+      const closed = once(ws, "close");
+      status = state;
+      expect(JSON.parse((await rejected)[0].toString())).toEqual({
+        type: "rejected",
+        reason: state === "ended" ? "session_ended" : "unauthorized",
+        retryable: false,
+      });
+      expect((await closed)[0]).toBe(1008);
+      if (state === "ended") {
+        // The 60-second reconnect grace must not delay a normal stop's tail commit.
+        await vi.waitFor(() => expect(committed).toBe(true));
+        await vi.waitFor(() =>
+          expect([...sink.segments.values()]).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                text: "Tail caption.",
+                startMs: 0,
+                endMs: 100,
+              }),
+            ]),
+          ),
+        );
+      }
+    } finally {
+      ws?.terminate();
+      await server.close();
+    }
+  },
+);

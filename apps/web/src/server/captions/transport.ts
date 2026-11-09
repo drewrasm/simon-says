@@ -11,7 +11,7 @@ import {
 } from "@simon-says/contracts/ingest";
 import { CaptionAssembler } from "./assembler";
 import { EventHub } from "./event-hub";
-import type { IngestAuthority } from "./ingest-authority";
+import type { HostAuthorization, IngestAuthority } from "./ingest-authority";
 import type { CaptionDelay } from "./openai-window";
 import { InMemorySegmentSink, type SegmentSink } from "./segment-sink";
 import { SseSubscriber } from "./sse-subscriber";
@@ -165,28 +165,29 @@ export class CaptionTransport {
       this.options.authority.authorizeHost(id, req),
     );
     if (socket.destroyed) return true;
-    const session = allowed ? this.session(id) : undefined;
+    const session = allowed === true ? this.session(id) : undefined;
     if (
       this.stopping ||
-      (allowed && !session) ||
+      (allowed === true && !session) ||
       this.streams.size + this.wss.clients.size >= 32
     ) {
       reject(503);
       return true;
     }
     this.wss.handleUpgrade(req, socket, head, (ws) => {
-      if (!allowed || !session) {
+      if (allowed !== true || !session) {
+        const reason = allowed === "session_ended" ? allowed : "unauthorized";
         ws.on("error", () => {
           /* No content-bearing transport errors in logs. */
         });
         ws.send(
           JSON.stringify({
             type: "rejected",
-            reason: "unauthorized",
+            reason,
             retryable: false,
           }),
         );
-        ws.close(1008, "unauthorized");
+        ws.close(1008, reason);
         const deadline = setTimeout(() => ws.terminate(), 1000);
         ws.once("close", () => clearTimeout(deadline));
         return;
@@ -203,6 +204,7 @@ export class CaptionTransport {
     req: IncomingMessage,
   ) {
     let denied = false;
+    let sessionEnded = false;
     let epoch: number | undefined;
     let received = 0;
     const send = (message: unknown) => {
@@ -213,13 +215,14 @@ export class CaptionTransport {
     const reject = (reason: IngestRejectReason) => {
       if (denied) return;
       denied = true;
+      sessionEnded = reason === "session_ended";
       send({ type: "rejected", reason, retryable: reason === "overloaded" });
       ws.close(1008, reason);
       rejectDeadline = setTimeout(() => ws.terminate(), 1000);
     };
     const stopChecking = this.recheck(
       () => this.options.authority.authorizeHost(id, req),
-      () => reject("unauthorized"),
+      (result) => reject(result === "session_ended" ? result : "unauthorized"),
     );
     const helloTimeout = setTimeout(() => reject("invalid_frame"), 5000);
     const lifetime = setTimeout(
@@ -393,7 +396,8 @@ export class CaptionTransport {
           session.ended = true;
           void session.manager?.finish(this.options.finishTimeoutMs);
         };
-        if (code === 1000) finish();
+        const stopped = code === 1000 || sessionEnded;
+        if (stopped) finish();
         else
           session.reconnectTimer = setTimeout(
             finish,
@@ -401,8 +405,8 @@ export class CaptionTransport {
           );
         session.hub.publish({
           kind: "capture.state",
-          session: code === 1000 ? "ended" : "degraded",
-          audio: code === 1000 ? "stopped" : "stalled",
+          session: stopped ? "ended" : "degraded",
+          audio: stopped ? "stopped" : "stalled",
           captionLagMs: null,
         });
       }
@@ -410,7 +414,9 @@ export class CaptionTransport {
   }
 
   /** A stalled access backend must not keep a connection authorized indefinitely. */
-  private async authorized(check: () => boolean | Promise<boolean>) {
+  private async authorized<T extends HostAuthorization>(
+    check: () => T | Promise<T>,
+  ) {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([
@@ -429,17 +435,17 @@ export class CaptionTransport {
 
   /** One check at a time; cancellation prevents late results from restarting timers. */
   private recheck(
-    check: () => boolean | Promise<boolean>,
-    revoked: () => void,
+    check: () => HostAuthorization | Promise<HostAuthorization>,
+    revoked: (result: false | "session_ended") => void,
   ) {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const run = async () => {
       const allowed = await this.authorized(check);
       if (stopped) return;
-      if (!allowed) {
+      if (allowed !== true) {
         stopped = true;
-        revoked();
+        revoked(allowed);
       } else schedule();
     };
     const schedule = () => {

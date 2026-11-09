@@ -7,7 +7,11 @@ import {
 } from "../access/credentials";
 import { AccessError } from "../access/errors";
 import { requireMembership } from "../access/membership";
-import { DevIngestAuthority, type IngestAuthority } from "./ingest-authority";
+import {
+  DevIngestAuthority,
+  type IngestAuthority,
+  type HostAuthorization,
+} from "./ingest-authority";
 
 /** Node requests have no Next cookies() context. Use the same verifier as readPrincipal. */
 function principalId(request: IncomingMessage) {
@@ -35,13 +39,18 @@ export class MembershipIngestAuthority implements IngestAuthority {
     sessionId: string,
     request: IncomingMessage,
     host: boolean,
-  ) {
+  ): Promise<HostAuthorization> {
     try {
-      await requireMembership({
+      const membership = await requireMembership({
         sessionId,
         principalId: principalId(request),
         ...(host ? { role: "host" } : {}),
       });
+      if (
+        host &&
+        !["setup", "live", "degraded"].includes(membership.session.status)
+      )
+        return "session_ended";
       return true;
     } catch (error) {
       if (error instanceof AccessError) return false;
@@ -53,7 +62,9 @@ export class MembershipIngestAuthority implements IngestAuthority {
     return this.authorize(sessionId, request, true);
   }
   authorizeMember(sessionId: string, request: IncomingMessage) {
-    return this.authorize(sessionId, request, false);
+    return this.authorize(sessionId, request, false).then(
+      (result) => result === true,
+    );
   }
   checkEpoch(sessionId: string, epoch: number) {
     if (epoch < (this.epochs.get(sessionId) ?? 0)) return false;
