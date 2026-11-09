@@ -10,7 +10,7 @@ The starter describes a team cluster with Radar, Argo CD, and CloudNativePG avai
 
 The starter's default delivery uses public GitHub/GHCR access and Argo CD deployment from `main`. Do not change repository or image visibility without authorization; arrange read/pull credentials if private access is needed. Activating GitOps changes the effect of future pushes: a push can deploy.
 
-The provided environment ends November 13, 2026 according to the starter. Verify the cutoff with organizers and arrange authorized export, migration, or teardown before it. Event infrastructure availability cannot guarantee our proposed 30-day selected-evidence retention. The cluster ID, namespace, hostname, and quota are under [team environment](#team-environment).
+The provided environment ends November 13, 2026 according to the starter. Verify the cutoff with organizers. The [public-access policy](decisions.md#public-access-policy) sets the teardown: no team export of user data; before the cutoff, with operator approval, delete the Elastic Cloud indices or documents and revoke the app API key. The cutoff ends the 30-day selection retention early. The cluster ID, namespace, hostname, and quota are under [team environment](#team-environment).
 
 ## Team environment
 
@@ -160,7 +160,7 @@ After deployment authorization, verify the assigned cluster:
 
 ## Open operator decisions
 
-The backup destination and the post-event data plan are undecided. Removing screen sharing did not delete live data. The `observations-v1` index and `simon-says-observations` alias remain in the Elastic project, and an app key created from the earlier descriptor still covers them until it is rotated. Argo CD prunes the `frame-storage` Deployment and Service on the next sync because they left the manifests. The `frame-storage` PersistentVolumeClaim (annotated `Prune=false,Delete=false`), its stored objects, and the manually created `frame-storage` Secret remain in the cluster. The index, alias, key, claim, and Secret each need a manual, explicitly approved cleanup. Record actual commands in README only after running them successfully.
+The backup destination is undecided. The post-event plan is teardown under the [public-access policy](decisions.md#public-access-policy). Removing screen sharing did not delete live data. The `observations-v1` index and `simon-says-observations` alias remain in the Elastic project, and an app key created from the earlier descriptor still covers them until it is rotated. Argo CD prunes the `frame-storage` Deployment and Service on the next sync because they left the manifests. The `frame-storage` PersistentVolumeClaim (annotated `Prune=false,Delete=false`), its stored objects, and the manually created `frame-storage` Secret remain in the cluster. The index, alias, key, claim, and Secret each need a manual, explicitly approved cleanup. Record actual commands in README only after running them successfully.
 
 ## S3 caption configuration (server only)
 

@@ -31,7 +31,7 @@ In this repository:
 - [Contracts](docs/contracts.md): records, APIs, and event semantics.
 - [Deployment plan](docs/deployment.md): Kubernetes through Radar, prerequisites, and release checks.
 - [Design system](docs/design-system.md): shadcn preset, tokens, components, and reference page at `/design-system`.
-- [Decisions](docs/decisions.md): confirmed choices, proposals, and open questions.
+- [Decisions](docs/decisions.md): confirmed choices and proposals.
 - [Agent instructions](AGENTS.md): how to work in this repository, including the Shortcut workflow.
 
 ## Local setup
