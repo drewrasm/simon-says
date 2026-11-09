@@ -58,7 +58,7 @@ Elasticsearch is the system of record for shared source content from milestone 1
 
 Track 3 resolves bookmarks by `startMs`/`endMs` on the session clock against Elasticsearch, filtered to segment revisions. Fixed requested ranges never move when later content arrives. Track 3 also implements “Find the Right Talk” keyword search plus `semantic_text` over segments; track 1 owns its UI. The embedding endpoint is `.jina-embeddings-v5-text-small`. Results resolve to source ranges that attendees explicitly keep as paragraph-anchored selections; search never adds evidence automatically.
 
-Every Elasticsearch read, including search, resolution, and replay, checks current membership and access in Postgres first, including after revocation. Apply source revision, redaction, and expiry guards before returning content. Durable cleanup jobs remove expired/redacted/deleted documents and prevent retries restoring them. Materialize selected evidence before shared-source expiry.
+Every Elasticsearch read, including search, resolution, and replay, checks current membership and access in Postgres first, including after revocation. Apply source revision and expiry guards before returning content. Durable cleanup jobs remove expired documents and prevent retries restoring them. Materialize selected evidence before shared-source expiry.
 
 Use idempotent document IDs based on session, epoch, segment ID, and revision. Elasticsearch persistence is part of durable source acknowledgment. Write ordering across Elasticsearch, the Postgres finalized offset, audio acknowledgments, and replay events, including crash recovery, must be settled before source acknowledgment counts as durable. An Elasticsearch outage visibly degrades captions; retain/retry source content or expose a gap, never silently drop it. A search-only failure leaves captions and saved evidence usable when the content store is healthy.
 
@@ -159,10 +159,10 @@ The ingest client uses the shared binary encoder and validated JSON `hello`/`rea
 ## Access, retention, and operations
 
 - QR invitations issue distinct attendee memberships, never host credentials. Enforce session access and resource ownership on every API, search, and event stream.
-- Shared captions exclude private bookmark events. Hosts do not automatically see attendees' notes or recaps. Revocation stops further authorized delivery.
-- Proposed expiry: shared audio and transcript 24 hours after session end; selected evidence and recaps 30 days after selection. Confirm policy before real recording.
-- Materialize selected text revisions before shared-source expiry. Deletion, redaction, and expiry jobs must durably resume Elasticsearch document cleanup and invalidate dependent recaps.
-- Host redaction invalidates affected hosted selections and recaps. Personal deletion does not remove others' shared source. Downloaded exports cannot be recalled.
+- Shared captions exclude private bookmark events. Hosts do not automatically see attendees' notes or recaps. Hosts can end a session but cannot remove attendees or redact source.
+- Confirmed retention: shared transcript 24 hours after session end; each selection and recap 30 days after creation; sessions end automatically 4 hours after creation. The event environment ends November 13, 2026, which cuts all of these short. See the [public-access policy](decisions.md#public-access-policy).
+- Materialize selected text revisions before shared-source expiry. Expiry jobs must durably resume Elasticsearch document cleanup and invalidate dependent recaps.
+- Personal deletion does not remove others' shared source. Downloaded exports cannot be recalled.
 - Keep content out of logs, telemetry, session replay, and errors. Verify provider retention controls, including provider data-use opt-out where available. Never claim system-wide 30-second retention.
 - Measure ingest lag, caption lag, transcription failures, source gaps, durable-save latency, and recap errors. Verify Dash0 telemetry with real requests and inspect exported payloads for content leaks.
 
@@ -174,4 +174,4 @@ The custom server validates optional `ELASTICSEARCH_URL` / `ELASTICSEARCH_API_KE
 
 429, 5xx and connection/time-out failures retry with capped backoff inside a three-second total deadline, including conflict reads; SDK automatic retries are disabled and individual requests are capped at one second. Exhaustion/permanent failures use the existing degraded state and exact-window gap, without a final. Partially successful bulk writes can remain stored; they do not constitute a published complete window. Telemetry hooks expose only numeric `es_write_latency_ms`, `es_write_retries`, and `es_write_failures`; Dash0 export remains separate.
 
-Without complete ES configuration the development transport retains its in-memory sink and reports `missing_elasticsearch_config`; it does not establish source durability. Production authority still fails closed. `expiresAt` is permitted, not required, by the strict mapping. Ingest does not guess a wall-clock expiry: canonical retention is 24 hours after session end. A lifecycle follow-up must attach that deadline and perform cleanup when session-end persistence exists.
+Without complete ES configuration the development transport retains its in-memory sink and reports `missing_elasticsearch_config`; it does not establish source durability. Production authority still fails closed. `expiresAt` is permitted, not required, by the strict mapping. Ingest does not guess a wall-clock expiry: canonical retention is 24 hours after session end. The lifecycle cleanup (sc-102) persists session end and removes expired documents by session; it does not depend on `expiresAt` being set at ingest.
