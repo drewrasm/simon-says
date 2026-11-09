@@ -7,3 +7,7 @@ allowBuilds:
   esbuild: true
   prisma: true
   sharp: true
+
+# Elastic transport allows API 1.x, but its OTel core peer requires <1.10.
+overrides:
+  "@elastic/transport>@opentelemetry/api": "1.9.0"
