@@ -12,6 +12,7 @@ import { FrameTransport } from "../src/server/frames/transport";
 import { createIngestAuthority } from "../src/server/captions/access-authority";
 import { elasticsearchClient } from "../src/server/search/es-client";
 import { ElasticsearchSegmentSink } from "../src/server/search/elasticsearch-segment-sink";
+import { recordAcknowledgedSegments } from "../src/server/search/indexing-lag";
 import { ElasticsearchObservationSink } from "../src/server/search/elasticsearch-observation-sink";
 import {
   createFrameUpload,
@@ -44,11 +45,13 @@ const captions = new CaptionTransport({
   ...(elasticsearch
     ? {
         sink: {
-          writeSegments: (segments) =>
-            new ElasticsearchSegmentSink(
+          writeSegments: async (segments) => {
+            await new ElasticsearchSegmentSink(
               elasticsearchClient(elasticsearch),
               telemetry?.record,
-            ).writeSegments(segments),
+            ).writeSegments(segments);
+            recordAcknowledgedSegments(segments);
+          },
         },
       }
     : { sinkDegradedReason: "missing_elasticsearch_config" }),

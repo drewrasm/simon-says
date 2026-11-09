@@ -13,6 +13,7 @@ import {
 import { AccessError } from "../access/errors";
 import { requireMembership } from "../access/membership";
 import { requestElasticsearch } from "../evidence/elasticsearch";
+import { hasUnsearchableSegments } from "./indexing-lag";
 
 const segmentSchema = transcriptSegmentSchema.safeExtend({
   expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
@@ -214,7 +215,9 @@ export const searchSession = async ({
     result = searchResponseSchema.parse({
       results,
       nextCursor,
-      indexingState: "current",
+      indexingState: hasUnsearchableSegments(sessionId, latest)
+        ? "catching_up"
+        : "current",
     });
   } catch {
     result = unavailable;
