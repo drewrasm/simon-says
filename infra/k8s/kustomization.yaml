@@ -8,6 +8,6 @@ resources:
   - postgres.yaml
 images:
   - name: app
-    # Operator must replace with an authorized immutable image/digest before use.
-    newName: example.invalid/simon-says/app
-    newTag: REPLACE_BEFORE_DEPLOY
+    # Bootstrap only; merge the first deploy/<sha> PR before applying Argo CD.
+    newName: ghcr.io/drewrasm/simon-says
+    newTag: main
