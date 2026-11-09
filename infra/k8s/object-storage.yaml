@@ -1,12 +1,13 @@
-# PROPOSAL ONLY: pending Track 3 requirements/agreement (C1).
-# Deliberately excluded from kustomization.yaml. Never apply without authorization.
-# Operator supplies Secret frame-storage: s3.json (SeaweedFS identities config).
-# Require credentials and bucket-scoped Read/Write/List actions on simon-says;
-# never include an anonymous identity. Create the private bucket with signed S3.
+# Operator creates Secret frame-storage with s3.json, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY.
+# s3.json: exactly one identity, simon-says-app, with credentials matching those keys; no anonymous identity.
+# Actions: Admin:simon-says, Read:simon-says, Write:simon-says, List:simon-says, Tagging:simon-says.
+# Bucket-scoped Admin is required for signed bucket creation in SeaweedFS 3.80.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: frame-storage
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -43,7 +44,8 @@ spec:
           args:
             - server
             - -dir=/data
-            - -ip=frame-storage
+            # All-in-one daemons communicate inside this pod; the Service exposes only S3.
+            - -ip=127.0.0.1
             - -ip.bind=0.0.0.0
             - -master.volumeSizeLimitMB=512
             - -volume.max=6
@@ -73,7 +75,8 @@ spec:
             httpGet: { path: /cluster/status, port: master }
           startupProbe:
             tcpSocket: { port: s3 }
-            failureThreshold: 30
+            # Initial master election and filer startup can take over a minute.
+            failureThreshold: 60
             periodSeconds: 2
       volumes:
         - name: data
@@ -83,6 +86,9 @@ spec:
           secret:
             secretName: frame-storage
             defaultMode: 0440
+            items:
+              - key: s3.json
+                path: s3.json
 ---
 apiVersion: v1
 kind: Service
@@ -96,3 +102,68 @@ spec:
     - name: s3
       port: 8333
       targetPort: s3
+---
+# Signed, repeatable bucket bootstrap after storage is healthy. Failed jobs stay
+# available for diagnosis; the next sync replaces them. No public ACL is applied.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: frame-storage-init
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: create-bucket
+          image: amazon/aws-cli:2.27.41
+          workingDir: /tmp
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              attempts=0
+              until aws --endpoint-url http://frame-storage:8333 s3api head-bucket --bucket simon-says; do
+                if aws --endpoint-url http://frame-storage:8333 s3api create-bucket --bucket simon-says; then
+                  aws --endpoint-url http://frame-storage:8333 s3api head-bucket --bucket simon-says && exit 0
+                fi
+                attempts=$((attempts + 1))
+                [ "$attempts" -lt 30 ] || exit 1
+                sleep 2
+              done
+          env:
+            - name: HOME
+              value: /tmp
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
+            - name: AWS_MAX_ATTEMPTS
+              value: "2"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: frame-storage
+                  key: S3_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: frame-storage
+                  key: S3_SECRET_ACCESS_KEY
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
