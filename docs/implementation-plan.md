@@ -153,3 +153,9 @@ If the core slice fails, cut voice, OCR, repair transcription, advanced search f
 - Before public access: identity mechanism, host access, invitation expiry, limits, revocation, redaction, and storage policy.
 - Before recap: OpenAI model through the AI SDK, structured output, data handling, budget, and durable job execution.
 - Before deployment: database and private object store, migrations, connection recovery, cleanup scheduling, rollback, and operator ownership. GitOps enablement, publication, and deployment require authorization; routine future pushes may deploy after GitOps is enabled.
+
+## Track 2 automatic deploy-tag merge verification
+
+Local verification on November 9, 2026: frozen-lockfile install and `pnpm check` passed (lint, formatting, strict typechecks, nine Vitest files / 68 tests). `actionlint`, `bash -n scripts/propose-deploy.sh`, and `shellcheck scripts/propose-deploy.sh` passed. The guard's scratch-repository fixtures accepted the tag-only diff and rejected another key, another file, an incorrect SHA, and a file-mode change. CI runs these guard fixtures too. A separate scratch-repository run with a mock GitHub CLI passed existing-PR merge, already-merged retry, closed-PR retry, pause, unsafe-diff skip, and superseded-source closure; this is local simulation, not live GitHub verification.
+
+The release flow now merges only guarded machine-generated tag PRs, with freshness checks, pinned-head merging, retry handling, and the default-enabled `AUTO_DEPLOY` pause variable. See [deployment](deployment.md#release-flow-c1a) and [decisions](decisions.md#c1a-release-tags). Live workflow merging and cluster rollout remain unverified; this work performs no cluster operations, repository setting changes, or PR comments.

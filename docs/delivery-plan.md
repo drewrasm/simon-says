@@ -152,7 +152,7 @@ Edit inside your track's paths. Changing another track's paths needs that owner'
 
 - One branch per checkpoint slice, named `<type>/t<track>-<description>`, for example `feat/t3-session-join`. Keep PRs small and merge them as soon as CI passes and Gitar has reviewed.
 - Rebase on `main` before pushing. Do not force-push a branch another builder is using.
-- Every change, including docs, lands through a PR that passes CI and Gitar review; never commit to `main` ([decisions](decisions.md)). The Gitar track judges whether "features land through PRs it reviewed".
+- Every change, including docs, lands through a PR that passes CI and Gitar review (the sole exception is [guarded machine-generated deploy-tag PRs](decisions.md#c1a-release-tags)); never commit to `main` ([decisions](decisions.md)). The Gitar track judges whether "features land through PRs it reviewed".
 - Once Argo CD is applied, every merge to `main` deploys. Check Radar after each merge that changes runtime code.
 
 ### Agents
