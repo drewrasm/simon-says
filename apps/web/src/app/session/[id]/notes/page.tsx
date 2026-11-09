@@ -10,6 +10,8 @@ import { NoteComposer } from "../note-composer";
 import { NotJoined } from "../not-joined";
 import { NotesExportActions } from "./note-card-actions";
 import { NotesList } from "./notes-list";
+import { RecapSection } from "./recap-section";
+import { SearchSection } from "./search-section";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "My notes · Simon Says" };
@@ -64,6 +66,9 @@ const NotesPage = async ({ params }: NotesPageProps) => {
           title={session.title ?? "Live session"}
           bookmarks={bookmarks}
         />
+
+        <RecapSection sessionId={id} bookmarks={bookmarks} />
+        <SearchSection sessionId={id} />
 
         {session.status === "live" ? (
           <Link

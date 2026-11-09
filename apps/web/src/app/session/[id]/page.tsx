@@ -50,6 +50,7 @@ const SessionPage = async ({ params }: SessionPageProps) => {
         noteCount={notes.length}
         notesPanel={
           <NotesPanel
+            sessionId={id}
             title={title}
             bookmarks={notes}
             actions={<KeepThatButton sessionId={id} className="w-full" />}
