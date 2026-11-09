@@ -20,12 +20,10 @@ import { ClockIcon, SquarePenIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { formatTalkTime } from "./talk-time";
 import { NOTE_MAX_LENGTH, useNoteDraft } from "./use-note-draft";
 
 type NoteComposerProps = {
   sessionId: string;
-  elapsedAtRenderMs: number;
   triggerLabel: string;
   triggerClassName?: string;
   /** Where to go once saved: the notes page, or stay and refresh it. */
@@ -35,7 +33,6 @@ type NoteComposerProps = {
 /** Phone "New note" sheet: a private note pinned to the moment it opened. */
 export const NoteComposer = ({
   sessionId,
-  elapsedAtRenderMs,
   triggerLabel,
   triggerClassName,
   afterSave,
@@ -43,21 +40,19 @@ export const NoteComposer = ({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const {
-    draft,
     note,
     setNote,
-    pin,
+    start,
     discardIfEmpty,
     submit,
     saving,
     canSubmit,
     failureMessage,
-  } = useNoteDraft({ sessionId, elapsedAtRenderMs });
+  } = useNoteDraft({ sessionId });
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
-    // Pin when the sheet opens: that is the moment the attendee reacted to.
-    if (next) pin();
+    if (next) start();
     else discardIfEmpty();
   };
 
@@ -100,11 +95,10 @@ export const NoteComposer = ({
         >
           <DrawerHeader className="p-0 text-left">
             <DrawerTitle>New note</DrawerTitle>
-            <DrawerDescription className="flex items-center gap-1.5 tabular-nums">
+            <DrawerDescription className="flex items-center gap-1.5">
               <ClockIcon aria-hidden="true" className="size-3.5" />
-              {draft
-                ? `Pinned to about ${formatTalkTime(draft.markedAtMs)} in the session`
-                : "Pinned to now in the session"}
+              Saved with the time you add it. Pinning to a moment in the talk
+              arrives with live captions.
             </DrawerDescription>
           </DrawerHeader>
 

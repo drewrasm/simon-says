@@ -8,7 +8,6 @@ import { readPrincipal } from "@/server/access/principal";
 import { listBookmarks } from "@/server/bookmarks/service";
 import { NoteComposer } from "../note-composer";
 import { NotJoined } from "../not-joined";
-import { sessionElapsedMs } from "../talk-time";
 import { NotesList } from "./notes-list";
 
 export const dynamic = "force-dynamic";
@@ -82,7 +81,6 @@ const NotesPage = async ({ params }: NotesPageProps) => {
       <div className="sticky bottom-0 -mx-4 border-t bg-background px-4 py-3 sm:-mx-6 sm:px-6">
         <NoteComposer
           sessionId={id}
-          elapsedAtRenderMs={sessionElapsedMs(session.createdAt)}
           triggerLabel="New note"
           triggerClassName="w-full"
           afterSave="refresh"

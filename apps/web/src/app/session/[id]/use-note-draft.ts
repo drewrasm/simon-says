@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { draftForAttempt, withFreshIds } from "./note-draft";
 import { saveNote, type NoteDraft } from "./save-note";
-import { createSessionClock } from "./talk-time";
+import { UNPINNED_MARK_MS } from "./talk-time";
 
 export const NOTE_MAX_LENGTH = 4_000;
 
@@ -17,21 +17,14 @@ const FAILURE_MESSAGE = {
 
 const newId = () => crypto.randomUUID();
 
-type UseNoteDraftOptions = { sessionId: string; elapsedAtRenderMs: number };
+type UseNoteDraftOptions = { sessionId: string };
 
 /**
- * Draft state shared by the note sheet and the inline note form. A draft is
- * pinned to the session clock once, keeps its IDs across retries so a resend
- * is idempotent, and resets after a successful save.
+ * Draft state shared by the note sheet and the inline note form. A draft
+ * keeps its IDs across retries so a resend is idempotent, and resets after a
+ * successful save. Notes are unpinned until the capture clock exists.
  */
-export const useNoteDraft = ({
-  sessionId,
-  elapsedAtRenderMs,
-}: UseNoteDraftOptions) => {
-  const readClock = useMemo(
-    () => createSessionClock(elapsedAtRenderMs),
-    [elapsedAtRenderMs],
-  );
+export const useNoteDraft = ({ sessionId }: UseNoteDraftOptions) => {
   const [draft, setDraft] = useState<NoteDraft | null>(null);
   // Text last sent under the draft's IDs, or null if none was sent yet.
   const [sentText, setSentText] = useState<string | null>(null);
@@ -41,33 +34,33 @@ export const useNoteDraft = ({
     null,
   );
 
-  /** Pins the draft to now, unless it is already pinned. */
-  const pin = () =>
+  /** Starts a draft with new IDs, unless one is already started. */
+  const start = () =>
     setDraft(
       (current) =>
         current ?? {
           bookmarkId: newId(),
           operationId: newId(),
           sessionId,
-          markedAtMs: readClock(),
+          markedAtMs: UNPINNED_MARK_MS,
         },
     );
 
-  /** Drops the pin, so the next note pins to the moment it is started. */
-  const unpin = () => {
+  /** Drops the draft and its IDs. */
+  const reset = () => {
     setDraft(null);
     setSentText(null);
   };
 
   const setNote = (value: string) => {
     setNoteText(value);
-    if (value.trim()) pin();
-    else unpin();
+    if (value.trim()) start();
+    else reset();
   };
 
-  /** Drops an empty draft so the next one re-pins to a fresh moment. */
+  /** Drops an empty draft when the sheet closes. */
   const discardIfEmpty = () => {
-    if (!note.trim()) unpin();
+    if (!note.trim()) reset();
   };
 
   /** Saves the draft; resolves true once saved. */
@@ -90,7 +83,7 @@ export const useNoteDraft = ({
       setFailure(result.kind);
       return false;
     }
-    unpin();
+    reset();
     setNoteText("");
     return true;
   };
@@ -99,7 +92,7 @@ export const useNoteDraft = ({
     draft,
     note,
     setNote,
-    pin,
+    start,
     discardIfEmpty,
     submit,
     saving,

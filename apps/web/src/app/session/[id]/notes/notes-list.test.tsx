@@ -29,6 +29,21 @@ describe("notes list", () => {
     expect(html).toContain("Clips 0");
   });
 
+  it("shows an unpinned note's save time instead of a talk time", () => {
+    const html = renderToStaticMarkup(
+      <NotesList
+        bookmarks={[
+          note({
+            anchor: { kind: "live", markedAtMs: 0 },
+            requestedRange: { startMs: 0, endMs: 0 },
+          }),
+        ]}
+      />,
+    );
+    expect(html).toContain('<time dateTime="2026-11-09T20:13:24.000Z">');
+    expect(html).not.toContain("00:00:00");
+  });
+
   it("shows a clip with its quoted captions", () => {
     const html = renderToStaticMarkup(
       <NotesList

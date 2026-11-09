@@ -7,7 +7,6 @@ import { CaptionReader } from "./caption-reader";
 import { NoteComposer } from "./note-composer";
 import { NoteForm } from "./note-form";
 import { NotesPanel } from "./notes/notes-panel";
-import { sessionElapsedMs } from "./talk-time";
 import { NotJoined } from "./not-joined";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +34,6 @@ const SessionPage = async ({ params }: SessionPageProps) => {
     principalId: membership.principalId,
     sessionId: id,
   });
-  const elapsedAtRenderMs = sessionElapsedMs(session.createdAt);
 
   return (
     <CaptionReader
@@ -44,17 +42,11 @@ const SessionPage = async ({ params }: SessionPageProps) => {
       status={session.status}
       noteCount={notes.length}
       notesPanel={
-        <NotesPanel
-          bookmarks={notes}
-          form={
-            <NoteForm sessionId={id} elapsedAtRenderMs={elapsedAtRenderMs} />
-          }
-        />
+        <NotesPanel bookmarks={notes} form={<NoteForm sessionId={id} />} />
       }
       actions={
         <NoteComposer
           sessionId={id}
-          elapsedAtRenderMs={elapsedAtRenderMs}
           triggerLabel="Note"
           afterSave="open-notes"
         />

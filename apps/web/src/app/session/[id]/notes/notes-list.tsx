@@ -13,7 +13,8 @@ import {
   TabsTrigger,
 } from "@simon-says/ui/components/tabs";
 import { ScissorsIcon, SquarePenIcon } from "lucide-react";
-import { formatTalkTime } from "../talk-time";
+import { formatTalkTime, isUnpinned } from "../talk-time";
+import { SavedTime } from "./saved-time";
 
 /** Newest first, by creation time then ID, so the list order is stable. */
 export const newestFirst = (bookmarks: BookmarkResponse[]) =>
@@ -43,7 +44,15 @@ const NoteCard = ({ bookmark }: { bookmark: BookmarkResponse }) => {
           ) : (
             <SquarePenIcon aria-hidden="true" />
           )}
-          {clip ? pinTime(bookmark) : `Note · ${pinTime(bookmark)}`}
+          {clip ? (
+            pinTime(bookmark)
+          ) : isUnpinned(bookmark) ? (
+            <>
+              Note · <SavedTime iso={bookmark.createdAt} />
+            </>
+          ) : (
+            `Note · ${pinTime(bookmark)}`
+          )}
         </Badge>
       </div>
       {clip ? (
@@ -67,18 +76,12 @@ const NoteCard = ({ bookmark }: { bookmark: BookmarkResponse }) => {
 };
 
 const EMPTY = {
-  all: [
-    "No notes yet",
-    "Tap New note to save a thought pinned to this moment.",
-  ],
+  all: ["No notes yet", "Tap New note to save a private thought."],
   clips: [
     "No clips yet",
     "Clips of what was said arrive once live captions start.",
   ],
-  notes: [
-    "No notes yet",
-    "Tap New note to save a thought pinned to this moment.",
-  ],
+  notes: ["No notes yet", "Tap New note to save a private thought."],
 } as const;
 
 const List = ({

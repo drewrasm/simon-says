@@ -63,7 +63,7 @@ Logan confirmed these on November 9, 2026. Neither decision proves a live integr
 
 ## Proposed implementation defaults
 
-- **Approximate note clock (Track 1, November 9):** notes pin `markedAtMs` to time since session creation until Track 2 supplies a capture-aligned session clock; see [contracts](contracts.md#track-3-payloads). Notes use Track 3's bookmark API.
+- **Unpinned notes until the capture clock exists (Track 1, November 9):** notes are saved with `markedAtMs: 0`, a zero-width range that evidence resolution never matches, and show their local save time. This replaces an earlier approximate clock (time since session creation), which would have matched notes to the wrong captions once they existed. Notes pin to real source times after Track 2 records when the capture clock starts; see [contracts](contracts.md#track-3-payloads). Notes use Track 3's bookmark API.
 
 - **LLM workflows:** recaps use OpenAI through the Vercel AI SDK (`ai`), as [decided](#confirmed-by-the-track-3-owner). Proposal: Agent/tool-loop APIs and durable job execution remain implementation choices; vendoring guidance does not install or validate an integration.
 
