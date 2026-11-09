@@ -20,6 +20,19 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: simon_says
+          POSTGRES_USER: simon_says
+          POSTGRES_PASSWORD: local-simon-says
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U simon_says -d simon_says"
+          --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      DATABASE_URL: postgresql://simon_says:local-simon-says@127.0.0.1:5432/simon_says
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
@@ -28,6 +41,9 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @simon-says/db migrate:deploy
+      - run: pnpm db:generate
+      - run: pnpm db:check
       - run: pnpm check
       - name: Test deploy-tag diff guard offline
         run: python3 scripts/test-deploy-diff.py
@@ -36,6 +52,19 @@ jobs:
   container:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: simon_says
+          POSTGRES_USER: simon_says
+          POSTGRES_PASSWORD: local-simon-says
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U simon_says -d simon_says"
+          --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      DATABASE_URL: postgresql://simon_says:local-simon-says@127.0.0.1:5432/simon_says
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -43,6 +72,10 @@ jobs:
           node-version-file: .node-version
       - name: Build image without publishing
         run: docker build --platform linux/amd64 -t simon-says:ci .
+      - name: Run the migration Job command in the image
+        run: |
+          docker run --rm --network host -w /app/migrate -e DATABASE_URL simon-says:ci \
+            node node_modules/prisma/build/index.js migrate deploy
       - name: Check container transport locally
         env:
           PROBE_TOKEN: local-checkpoint-0a-probe-token-12345

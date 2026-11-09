@@ -6,6 +6,7 @@ resources:
   - service.yaml
   - httproute.yaml
   - postgres.yaml
+  - migration-job.yaml
 images:
   - name: app
     newName: ghcr.io/drewrasm/simon-says
