@@ -33,7 +33,7 @@ Bookmark evidence is nullable JSON for materialized segment revisions and frame 
 
 The access layer owns signed-cookie identity, token hashing, title limits, membership checks, range validation, and evidence validation. It must create a host membership together with its session. The `host` membership role is the only record of who hosts a session; a session can have several hosts after host-link claims. The deprecated `sessions.hostPrincipalId` column is nullable and still written on create for rollback compatibility, but never read; later releases stop writing it and then drop it. Database ownership fields do not enforce API access isolation.
 
-This migration excludes ingest leases, epochs, clock mapping, transcript offsets, and retention fields pending Track 2's requirements. Recap and job tables are deferred to a later migration. The shared contracts and milestone evidence need these scope and verification notes when their owning lane updates the shared docs.
+This migration excludes ingest leases, epochs, clock mapping, transcript offsets, and retention fields pending Track 2's requirements. Recap and job tables are deferred to a later migration. The shared contracts and the owning Shortcut story need these scope and verification notes when their owning lane updates them.
 
 ## Local verification
 

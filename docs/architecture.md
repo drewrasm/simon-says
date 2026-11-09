@@ -27,7 +27,7 @@ flowchart TD
 
 The workspace uses pnpm, one lockfile, and `workspace:` dependencies. The web, UI, and database foundations are scaffolded. `packages/contracts` and `packages/domain` are reserved packages with README files; their APIs remain unimplemented. Other paths and responsibilities in the table describe planned work.
 
-The [building tracks](building-tracks.md) divide feature ownership, including the UI/capture boundary and shared migration coordination.
+The [building tracks](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzlmLWMzMDMtNGUwYy1hOTBhLWM4MzJjZGU3ZDQwNSI=) divide feature ownership, including the UI/capture boundary and shared migration coordination.
 
 | Path                  | Owns                                                                                                          |
 | --------------------- | ------------------------------------------------------------------------------------------------------------- |
@@ -45,7 +45,7 @@ One Next.js application owns the UI and backend. HTTP endpoints use App Router R
 
 ## Kubernetes runtime
 
-Deploy the existing Next.js app as a Node.js container. Radar supplies cluster visibility, investigations, and deployment operations; Kubernetes runs the app. Keep product HTTP APIs in Route Handlers. Checkpoint 0A adds a custom Node entry point for health/transport probes, WebSocket upgrades, and Next.js HTTP, explicitly compiled and packaged without standalone output. See [0A local evidence](implementation-plan.md#checkpoint-0a-local-evidence) for packaging, development HMR, and shutdown verification; cluster behavior remains unverified. Do not assume a Route Handler supports upgrades outside Vercel.
+Deploy the existing Next.js app as a Node.js container. Radar supplies cluster visibility, investigations, and deployment operations; Kubernetes runs the app. Keep product HTTP APIs in Route Handlers. Checkpoint 0A adds a custom Node entry point for health/transport probes, WebSocket upgrades, and Next.js HTTP, explicitly compiled and packaged without standalone output. See [0A local evidence](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzODUyLTVmY2MtNGU0YS05Y2IwLTNlMjc4MGY4M2UxOSI=) for packaging, development HMR, and shutdown verification; cluster behavior remains unverified. Do not assume a Route Handler supports upgrades outside Vercel.
 
 Start with one application replica, but keep all leases, replay cursors, audio acknowledgments, and transcript progress durable. Rolling deployments can overlap pods. Reconnect with backoff, replay frames the host still holds, deduplicate overlap, and preserve the source clock. Pod termination must not end a session; audio beyond host resend capacity becomes a visible gap while raw-audio persistence is deferred. Keep missing audio distinct from missing transcript.
 
@@ -59,13 +59,13 @@ Recap and source cleanup work need durable Postgres jobs, retries, and leases. P
 
 Elasticsearch is the system of record for shared source content from milestone 1: every finalized transcript segment revision with live/corrected/repaired provenance, and screen observations with capture time, frame ID, checksum, glossary terms, and private image object key. Track 2 writes these during ingest. Postgres owns identity, sessions, membership, host lease/epoch, audio acknowledgments, finalized-transcript offset, bookmarks, notes, recaps, and job queue. No private data or identity-linked search queries enter Elasticsearch.
 
-Track 3 resolves bookmarks by `startMs`/`endMs` on the session clock against Elasticsearch, filtered to segment revisions and frames. Fixed requested ranges never move when later content arrives. Track 3 also implements “Find the Right Talk” keyword search plus `semantic_text` over segments and glossary terms; track 1 owns its UI. The embedding endpoint is `.jina-embeddings-v5-text-small`, confirmed in the Elastic project ([evidence](implementation-plan.md#elastic-cloud-setup-evidence)). Results resolve to source ranges that attendees explicitly keep as paragraph-anchored selections; search never adds evidence automatically.
+Track 3 resolves bookmarks by `startMs`/`endMs` on the session clock against Elasticsearch, filtered to segment revisions and frames. Fixed requested ranges never move when later content arrives. Track 3 also implements “Find the Right Talk” keyword search plus `semantic_text` over segments and glossary terms; track 1 owns its UI. The embedding endpoint is `.jina-embeddings-v5-text-small`, confirmed in the Elastic project ([evidence](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzODUyLTVmY2MtNGU0YS05Y2IwLTNlMjc4MGY4M2UxOSI=)). Results resolve to source ranges that attendees explicitly keep as paragraph-anchored selections; search never adds evidence automatically.
 
 Every Elasticsearch read, including search, resolution, and replay, checks current membership and access in Postgres first, including after revocation. Apply source revision, redaction, and expiry guards before returning content. Durable cleanup jobs remove expired/redacted/deleted documents and prevent retries restoring them. Materialize selected evidence before shared-source expiry.
 
 Use idempotent document IDs based on session, epoch, segment ID, and revision; frame observations use stable observation identity. Elasticsearch persistence is part of durable source acknowledgment. Milestone 1 must settle write ordering across Elasticsearch, the Postgres finalized offset, audio acknowledgments, and replay events, including crash recovery. An Elasticsearch outage visibly degrades captions; retain/retry source content or expose a gap, never silently drop it. A search-only failure leaves captions and saved evidence usable when the content store is healthy.
 
-Dash0 receives content-free OpenTelemetry from the Node runtime and worker. Allowlist attributes and suppress captured text, queries, notes, model prompts, credentials, and signed URLs. Disable content-bearing automatic instrumentation. Radar handles cluster operations; Dash0 handles application traces and metrics. The [hackathon plan](hackathon.md) defines evidence and ownership for all four tracks.
+Dash0 receives content-free OpenTelemetry from the Node runtime and worker. Allowlist attributes and suppress captured text, queries, notes, model prompts, credentials, and signed URLs. Disable content-bearing automatic instrumentation. Radar handles cluster operations; Dash0 handles application traces and metrics. The [hackathon plan](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzc1LTA2YmQtNDllNS04NjZhLTg0NmY2NTczYzk5NyI=) defines evidence and ownership for all four tracks.
 
 ## Transcription and text passes
 
