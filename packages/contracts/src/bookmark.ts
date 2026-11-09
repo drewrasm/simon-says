@@ -44,6 +44,11 @@ export const bookmarkFrameEvidenceSchema = z.object({
   imageUrl: z.url({ protocol: /^https?$/ }).nullable(),
 });
 
+export const bookmarkEvidenceSchema = z.object({
+  segments: z.array(bookmarkSegmentEvidenceSchema),
+  frames: z.array(bookmarkFrameEvidenceSchema),
+});
+
 export const bookmarkResponseSchema = z.object({
   id: z.uuid(),
   sessionId: id,
@@ -53,10 +58,7 @@ export const bookmarkResponseSchema = z.object({
   actualRange: sourceRangeSchema.nullable(),
   clockUncertaintyMs: ms,
   completeness: z.enum(["pending", "complete", "incomplete"]),
-  evidence: z.object({
-    segments: z.array(bookmarkSegmentEvidenceSchema),
-    frames: z.array(bookmarkFrameEvidenceSchema),
-  }),
+  evidence: bookmarkEvidenceSchema,
   note: note.nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -80,6 +82,7 @@ export type BookmarkSegmentEvidence = z.infer<
   typeof bookmarkSegmentEvidenceSchema
 >;
 export type BookmarkFrameEvidence = z.infer<typeof bookmarkFrameEvidenceSchema>;
+export type BookmarkEvidence = z.infer<typeof bookmarkEvidenceSchema>;
 export type BookmarkResponse = z.infer<typeof bookmarkResponseSchema>;
 export type ListBookmarksResponse = z.infer<typeof listBookmarksResponseSchema>;
 export type RevisionConflictError = z.infer<typeof revisionConflictErrorSchema>;

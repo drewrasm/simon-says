@@ -113,6 +113,10 @@ describe("caption contracts", () => {
     expect(
       captionEventSchema.safeParse({ ...events[2], endMs: 1 }).success,
     ).toBe(false);
+    expect(
+      captionEventSchema.safeParse({ ...events[3], session: "expired" })
+        .success,
+    ).toBe(false);
   });
 
   it("validates ingest control messages", () => {
