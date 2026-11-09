@@ -17,6 +17,8 @@ Keep durable choices here. Mark proposals explicitly; add rationale and conseque
 
 ## Proposed implementation defaults
 
+- **LLM tooling (proposal):** use the Vercel AI SDK (`ai`), including its Agent and tool-loop APIs, in server-owned LLM workflows. Verify APIs against the version selected during implementation. Provider/model selection and durable recap job execution remain open; vendoring guidance does not install or validate an integration.
+
 - Next.js Route Handlers and Vercel Node.js functions, managed Postgres, private object storage, and a server-side Deepgram adapter. Propose reconnectable SSE for attendees and a Vercel WebSocket function for host ingest. Verify routing, duration limits, shared event delivery, and durable lease fencing in milestone 1.
 - Choose hosted database and storage vendors, a recap job mechanism, and cleanup scheduling before their milestones. Vercel hosting does not select these services or authorize provisioning. Isolate provider adapters from domain rules.
 - Thirty-second marks, one-second screen observations, and a two-minute resend cap. Validate actual timing and readability.
