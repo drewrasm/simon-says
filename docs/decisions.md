@@ -14,8 +14,8 @@ Keep durable choices here. Mark proposals explicitly; add rationale and conseque
 - **Workspace:** strict TypeScript, pnpm workspaces, and shared shadcn components. The foundation includes a shadcn Button from the official registry with manual setup.
 - **Workflow:** no direct commits to `main`. Every change, including docs and CI, goes through a branch and pull request that passes `pnpm check` CI and Gitar review before merge, except the guarded machine-generated deploy-tag PRs described below. Auto-apply, automatic pushes, and merges by tools stay disabled unless separately authorized.
 - **Agent entry point:** `AGENTS.md` only; no `agent.md` alias.
-- **Hackathon scope:** use technology from all four sponsor tracks: Radar, Dash0, Sonar/Gitar, and Elasticsearch. These are selected integrations, not completed setup. See [scope and evidence](hackathon.md).
-- **Team:** three builders, with UI and transcription interests. Proposed ownership is in the [implementation plan](implementation-plan.md#three-builder-tracks).
+- **Hackathon scope:** use technology from all four sponsor tracks: Radar, Dash0, Sonar/Gitar, and Elasticsearch. These are selected integrations, not completed setup. See [scope and evidence](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzc1LTA2YmQtNDllNS04NjZhLTg0NmY2NTczYzk5NyI=).
+- **Team:** three builders, with UI and transcription interests. Ownership is in [building tracks](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzlmLWMzMDMtNGUwYy1hOTBhLWM4MzJjZGU3ZDQwNSI=).
 
 ## Confirmed by the Track 2 owner
 
@@ -58,7 +58,7 @@ Private data never enters Elasticsearch. Every source read checks current member
 
 Logan confirmed these on November 9, 2026. Neither decision proves a live integration.
 
-- **Embedding endpoint:** `.jina-embeddings-v5-text-small`, configured through `ELASTICSEARCH_INFERENCE_ID`. Availability and processing settings (zero data retention, AWS `us-west-2`) were confirmed in the Elastic project and operator setup completed on November 9 ([evidence](implementation-plan.md#elastic-cloud-setup-evidence)); the per-token rate is not shown by the inference API.
+- **Embedding endpoint:** `.jina-embeddings-v5-text-small`, configured through `ELASTICSEARCH_INFERENCE_ID`. Availability and processing settings (zero data retention, AWS `us-west-2`) were confirmed in the Elastic project and operator setup completed on November 9 ([evidence](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzODUyLTVmY2MtNGU0YS05Y2IwLTNlMjc4MGY4M2UxOSI=)); the per-token rate is not shown by the inference API.
 - **Recap model:** OpenAI through the AI SDK, reusing `OPENAI_API_KEY` from Secret `app-credentials`. The model id is configurable through server-only `RECAP_MODEL`. Recaps send only the owner's selected passages.
 
 ## Proposed implementation defaults
@@ -75,7 +75,7 @@ Logan confirmed these on November 9, 2026. Neither decision proves a live integr
 
 ## Selected hackathon integrations
 
-Use [hackathon.md](hackathon.md) as the integration scope and account checklist. Radar owns deployment operations, Dash0 application observability, and Sonar/Gitar development review. Elasticsearch is the core shared-content store and passage retrieval layer. Captions come first; Elasticsearch stores segments from milestone 1, with search and private highlights in milestone 2.
+Use the [hackathon integrations doc](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzc1LTA2YmQtNDllNS04NjZhLTg0NmY2NTczYzk5NyI=) as the integration scope and account checklist. Radar owns deployment operations, Dash0 application observability, and Sonar/Gitar development review. Elasticsearch is the core shared-content store and passage retrieval layer. Captions come first; Elasticsearch stores segments from milestone 1, with search and private highlights in milestone 2.
 
 Detailed adapters and service plans remain proposals. Gitar's normal review writes PR comments; resolve repository-admin enablement explicitly before installing it. Coding agents must not post PR comments. Automatic fixes, pushes, merges, and deployment are not authorized by this documentation update.
 
@@ -134,7 +134,7 @@ Use optional `DEPLOY_TOKEN` for a fine-grained PAT or dedicated installed GitHub
 
 Track 2 supplies strict `segments-v1` and `observations-v1` mappings behind write aliases, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).
 
-The `.jina-embeddings-v5-text-small` default is [decided by Track 3](#confirmed-by-the-track-3-owner), configurable through `ELASTICSEARCH_INFERENCE_ID`. Processing settings are confirmed in the cloud project ([evidence](implementation-plan.md#elastic-cloud-setup-evidence)); per-token cost and cloud app-key behavior remain unverified. Local smoke uses `.multilingual-e5-small-elasticsearch`; automatic inference and semantic search passed with zero cluster privileges. The v9 client is pinned to available 9.5.1; cloud 9.7.0 remains an authorized operator verification gate.
+The `.jina-embeddings-v5-text-small` default is [decided by Track 3](#confirmed-by-the-track-3-owner), configurable through `ELASTICSEARCH_INFERENCE_ID`. Processing settings are confirmed in the cloud project ([evidence](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzODUyLTVmY2MtNGU0YS05Y2IwLTNlMjc4MGY4M2UxOSI=)); per-token cost and cloud app-key behavior remain unverified. Local smoke uses `.multilingual-e5-small-elasticsearch`; automatic inference and semantic search passed with zero cluster privileges. The v9 client is pinned to available 9.5.1; cloud 9.7.0 remains an authorized operator verification gate.
 
 ## PR #13 caption review decisions (November 9, 2026)
 
