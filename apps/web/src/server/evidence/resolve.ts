@@ -9,13 +9,13 @@ import type {
 } from "@simon-says/contracts/bookmark";
 import { searchSources } from "./elasticsearch";
 
-const expiresAt = z.iso.datetime().nullable().optional();
+const expiresAt = z.iso.datetime({ offset: true }).nullable().optional();
 const segmentSchema = transcriptSegmentSchema.safeExtend({ expiresAt });
 const observationSchema = z.object({
   sessionId: transcriptSegmentSchema.shape.sessionId,
   frameId: transcriptSegmentSchema.shape.sessionId,
   captureMs: z.number().nonnegative(),
-  captureState: z.enum(["live", "stopped"]),
+  captureState: z.string(),
   expiresAt,
 });
 
@@ -146,7 +146,7 @@ export const resolveEvidence = async ({
     const frames = observations
       .filter(
         (o) =>
-          o.captureState === "live" &&
+          o.captureState !== "stopped" &&
           unexpired(o, now) &&
           o.captureMs <= range.endMs,
       )

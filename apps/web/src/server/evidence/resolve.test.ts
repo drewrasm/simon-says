@@ -204,6 +204,26 @@ describe("bookmark range resolution (synthetic Elasticsearch HTTP)", () => {
     });
   });
 
+  it("accepts ingest capture states and offset expiry timestamps", async () => {
+    serve({
+      segments: [
+        {
+          ...syntheticSegment({ endMs: 40_000 }),
+          expiresAt: "2099-01-01T00:00:00+00:00",
+        },
+      ],
+      atStart: [syntheticObservation(4000, "captured")],
+      inside: [syntheticObservation(20_000, "live")],
+    });
+    expect(await resolveEvidence({ sessionId, range })).toMatchObject({
+      completeness: "complete",
+      evidence: {
+        segments: [{ segmentId: "segment-1" }],
+        frames: [{ frameId: "frame-4000" }, { frameId: "frame-20000" }],
+      },
+    });
+  });
+
   it("keeps frame-only evidence incomplete and unindexed ranges pending", async () => {
     serve({
       segments: [],

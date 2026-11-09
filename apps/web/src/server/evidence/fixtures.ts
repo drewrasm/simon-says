@@ -21,7 +21,10 @@ export const syntheticSegment = (
   expiresAt: "2099-01-01T00:00:00.000Z",
 });
 
-export const syntheticObservation = (captureMs = 0, captureState = "live") => ({
+export const syntheticObservation = (
+  captureMs = 0,
+  captureState = "captured",
+) => ({
   sessionId: "synthetic-session",
   epoch: 1,
   observationId: `observation-${captureMs}`,
