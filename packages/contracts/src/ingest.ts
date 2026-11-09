@@ -28,7 +28,12 @@ export const ingestReadySchema = z.object({
   ackedThroughSeq: z.number().int().min(-1).max(0xffff_ffff),
 });
 
-/** Server → host: frames through `throughSeq` are durably received. */
+/**
+ * Server → host: frames through `throughSeq` are received into the server
+ * ring buffer. This is receipt, not durable storage: raw-audio persistence is
+ * deferred, so after a pod restart only audio the host still holds can be
+ * replayed. Transcript finalization is tracked separately.
+ */
 export const ingestAckSchema = z.object({
   type: z.literal("ack"),
   epoch,
