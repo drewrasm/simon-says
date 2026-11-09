@@ -28,14 +28,17 @@
   },
   "devDependencies": {
     "@elastic/elasticsearch": "9.5.1",
+    "@simon-says/contracts": "workspace:*",
     "@types/node": "22.19.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.2",
     "eslint": "9.39.1",
     "eslint-config-next": "16.4.5",
     "prettier": "^3",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "ws": "^8.22.2"
   }
 }
