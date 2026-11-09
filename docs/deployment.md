@@ -36,6 +36,14 @@ The team cluster budget is 2 CPU / 4 GiB requests and 4 CPU / 8 GiB limits total
 
 Inject server-only `ELASTICSEARCH_URL` and `ELASTICSEARCH_API_KEY` from a cluster Secret at runtime. Scope the key to the required project/index ingest, read, and cleanup operations; confirm exact privileges before milestone 1. Permit and verify TLS network egress from the app/worker/cleanup workloads to Elastic Cloud, including the chosen inference endpoint’s network requirements. Never put keys in images, build arguments, client props, or `NEXT_PUBLIC_` variables. Agent access to the project is verified; app key scope and cluster connectivity remain unverified.
 
+## Caption provider configuration
+
+OpenAI is the only model provider, paid with hackathon OpenAI credits. Inject server-only `OPENAI_API_KEY` from Secret `app-credentials` in namespace `team-simon-says`; configure `CAPTION_MODEL=gpt-realtime-whisper` and `CAPTION_DELAY=low` server-side. Never use `NEXT_PUBLIC_` variables. The browser connects only to our ingest server, never directly to OpenAI; no client secrets or ephemeral tokens.
+
+Permit TLS/WebSocket egress to `api.openai.com`. When the key is issued, verify credits, quota, and cluster connectivity. Check OpenAI API data-retention terms for the capture/join disclosures before real recording. The first real transcription call happens in the cluster with the key in the Secret; key-free domain unit tests and fake transcription-model tests precede it. No provider call or key access is part of this documentation change.
+
+Raw-audio object persistence is deferred today; the two-minute host resend and pod ring buffers bound recovery. Single-replica in-process SSE fan-out requires a shared event source before multi-replica delivery, including rolling overlap. Tune `delay` and window thresholds on a real microphone before milestone 1 acceptance.
+
 ## Local foundation
 
 `apps/web/server/index.ts` owns HTTP and upgrades. Next builds normally (no standalone output); TypeScript explicitly compiles the server, and `pnpm deploy --prod --legacy` packages its production dependency closure. The runtime image contains the build and production dependencies, runs as UID/GID 1000, and excludes environment files. Node 22.22.0 and pnpm 11.24.0 are pinned. Prisma generation is a build step; the current shell does not import the database client, and the runtime is not a migration image.
