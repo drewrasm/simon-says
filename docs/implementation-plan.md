@@ -141,7 +141,7 @@ PR #10 was merged with `origin/main` (`7ea1c01`) locally on November 9, 2026, pr
 Owner: Logan. Milestones 1–4 stay open until their deployed gates pass.
 
 - Merged: Track 3 contracts for session, bookmark, search, and recap schemas (PR #11); Prisma models for principals, sessions, memberships, and bookmarks with the first migration (PR #12). The migration was applied to local Postgres; the cluster migration is pending.
-- In progress: device identity, session creation, invitation join, and the membership check (PR #18, open). A migration Job and CI Postgres change is being drafted for Track 2 review.
+- In progress: device identity, session creation, invitation join, and the membership check (PR #18, open). The migration Job and CI Postgres service merged with PR #24.
 
 ## Acceptance fixtures
 
