@@ -4,6 +4,7 @@ import { createServer, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 import next from "next";
 import { WebSocketServer } from "ws";
+import { FrameTransport } from "../src/server/frames/transport";
 import { readRuntimeEnv } from "./env.js";
 
 const { port, probeToken } = readRuntimeEnv(process.env);
@@ -16,6 +17,7 @@ const conf = dev
       .config;
 const app = next({ dev, port, ...(conf ? { conf } : {}) });
 const handle = app.getRequestHandler();
+const frames = new FrameTransport(process.env);
 const maxConnections = 16;
 const durationMs = 30_000;
 const drainMs = 10_000;
@@ -102,6 +104,7 @@ const server = createServer((req, res) => {
     res.writeHead(426).end();
     return;
   }
+  if (frames.handleHttp(req, res)) return;
   void handle(req, res).catch(() => {
     console.error("HTTP request failed");
     if (!res.headersSent) res.writeHead(500);

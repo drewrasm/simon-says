@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx server/index.ts --dev",
-    "build": "next build && tsc -p tsconfig.server.json",
+    "dev": "node server/build.mjs && node dist/index.js --dev",
+    "build": "next build && node server/build.mjs",
     "start": "NODE_ENV=production node dist/index.js",
     "typecheck": "next typegen && tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.5",
     "@types/ws": "8.18.1",
-    "tailwindcss": "4.3.5"
+    "tailwindcss": "4.3.5",
+    "esbuild": "^0.28.2"
   }
 }

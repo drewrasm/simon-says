@@ -1,10 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": false,
-    "outDir": "dist",
-    "rootDir": "server"
+    "noEmit": true,
+    "outDir": "dist"
   },
-  "include": ["server/**/*.ts"],
-  "exclude": ["server/**/*.test.ts"]
+  "include": ["server/**/*.ts", "src/server/frames/**/*.ts"],
+  "exclude": ["**/*.test.ts"]
 }
