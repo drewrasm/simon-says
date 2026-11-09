@@ -59,6 +59,8 @@ model Session {
   hostPrincipal     Principal?    @relation(fields: [hostPrincipalId], references: [id], onDelete: Restrict)
   hostLinkTokenHash String        @unique
   inviteCode        String        @unique
+  /// Short typed join code. Nullable so sessions created before it, or by the previous image during a rollout, stay valid.
+  joinCode          String?       @unique
   createdAt         DateTime      @default(now())
   endedAt           DateTime?
   memberships       Membership[]

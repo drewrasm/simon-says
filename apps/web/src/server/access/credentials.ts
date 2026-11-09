@@ -1,9 +1,14 @@
 import "server-only";
 
 import {
+  joinCodeAlphabet,
+  joinCodeLength,
+} from "@simon-says/contracts/session";
+import {
   createHash,
   createHmac,
   randomBytes,
+  randomInt,
   timingSafeEqual,
 } from "node:crypto";
 import { z } from "zod";
@@ -53,6 +58,12 @@ export const verifyPrincipal = ({ value, secret }: VerifyPrincipalOptions) => {
 };
 
 export const createToken = () => randomBytes(32).toString("base64url");
+
+export const createJoinCode = () =>
+  Array.from(
+    { length: joinCodeLength },
+    () => joinCodeAlphabet[randomInt(joinCodeAlphabet.length)],
+  ).join("");
 
 export const hashToken = (token: string) =>
   createHash("sha256").update(token).digest("hex");

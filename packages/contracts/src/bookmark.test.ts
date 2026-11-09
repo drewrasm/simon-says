@@ -19,6 +19,7 @@ import {
 import {
   createSessionRequestSchema,
   createSessionResponseSchema,
+  joinCodeSchema,
   joinSessionRequestSchema,
   joinSessionResponseSchema,
   membershipSchema,
@@ -79,6 +80,15 @@ describe("Track 3 contracts", () => {
         hostPath: "/host/s1",
         inviteCode,
         joinPath: `/join/${inviteCode}`,
+        joinCode: "7KM2QX",
+      }).success,
+    ).toBe(true);
+    expect(
+      createSessionResponseSchema.safeParse({
+        sessionId: "s1",
+        hostPath: "/host/s1",
+        inviteCode,
+        joinPath: `/join/${inviteCode}`,
       }).success,
     ).toBe(true);
     expect(joinSessionRequestSchema.parse({ inviteCode })).toEqual({
@@ -109,6 +119,34 @@ describe("Track 3 contracts", () => {
       }).success,
     ).toBe(false);
     expect(sessionStatusSchema.parse("expired")).toBe("expired");
+  });
+
+  it("normalizes typed join codes and rejects ambiguous letters", () => {
+    expect(joinCodeSchema.parse(" 7km2qx ")).toBe("7KM2QX");
+    for (const invalid of [
+      "7KM2Q",
+      "7KM2QXY",
+      "7KM2QI",
+      "7KM2QL",
+      "OKM2QX",
+      "UKM2QX",
+      "7KM-QX",
+    ]) {
+      expect(joinCodeSchema.safeParse(invalid).success).toBe(false);
+    }
+  });
+
+  it("joins with exactly one of an invite code or a join code", () => {
+    expect(joinSessionRequestSchema.parse({ joinCode: "7km2qx" })).toEqual({
+      joinCode: "7KM2QX",
+    });
+    for (const invalid of [
+      {},
+      { inviteCode, joinCode: "7KM2QX" },
+      { joinCode: "7KM2QX", extra: true },
+    ]) {
+      expect(joinSessionRequestSchema.safeParse(invalid).success).toBe(false);
+    }
   });
 
   it("accepts zero-length ranges and rejects inverted or negative times, allowing fractional caption times", () => {
