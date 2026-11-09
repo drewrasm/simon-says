@@ -14,6 +14,7 @@ export type NoteDraft = {
 export type SaveNoteResult =
   | { kind: "saved"; bookmark: BookmarkResponse }
   | { kind: "rejected" }
+  | { kind: "conflict" }
   | { kind: "error" };
 
 /**
@@ -47,6 +48,8 @@ export const saveNote = async (
   if (response.status === 400 || response.status === 404) {
     return { kind: "rejected" };
   }
+  // The draft's IDs are already taken by different content.
+  if (response.status === 409) return { kind: "conflict" };
   if (!response.ok) return { kind: "error" };
 
   const parsed = bookmarkResponseSchema.safeParse(

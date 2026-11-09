@@ -143,6 +143,16 @@ export const putNote = async ({
     if (retry.id !== bookmarkId) {
       throw new RevisionConflictError(bookmarkId, null, null);
     }
+    // A retry must repeat the stored request exactly; changed content under an
+    // existing operation conflicts instead of returning the old note as saved.
+    if (
+      retry.sessionId !== request.sessionId ||
+      retry.anchorKind !== "live" ||
+      retry.markedAtMs !== markedAtMs ||
+      retry.note !== note
+    ) {
+      throw new RevisionConflictError(bookmarkId, null, retry.revision);
+    }
     return toBookmarkResponse(retry);
   };
 

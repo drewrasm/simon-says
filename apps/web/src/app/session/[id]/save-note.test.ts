@@ -62,6 +62,21 @@ describe("saveNote", () => {
     }
   });
 
+  it("reports 409 as a conflict, not a retryable error", async () => {
+    expect(
+      await saveNote(
+        draft,
+        "edited",
+        reply(409, {
+          error: "revision_conflict",
+          id: draft.bookmarkId,
+          expectedRevision: null,
+          currentRevision: 1,
+        }),
+      ),
+    ).toEqual({ kind: "conflict" });
+  });
+
   it("rejects a note over the contract limit without a request", async () => {
     let called = false;
     const result = await saveNote(draft, "a".repeat(4_001), async () => {

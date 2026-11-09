@@ -128,6 +128,26 @@ describe("putNote", () => {
     expect(saved.id).toBe(bookmarkId);
   });
 
+  it.each([
+    ["different note text", request({ note: "An edited note" })],
+    [
+      "a different mark",
+      request({ anchor: { kind: "live", markedAtMs: 8 * 60_000 } }),
+    ],
+    ["a different session", request({ sessionId: randomUUID() })],
+  ])("conflicts when a retried operation carries %s", async (_label, body) => {
+    findUnique.mockResolvedValue(row());
+    await expect(
+      putNote({ principalId, bookmarkId, request: body, now }),
+    ).rejects.toMatchObject({
+      constructor: RevisionConflictError,
+      id: bookmarkId,
+      expectedRevision: null,
+      currentRevision: 1,
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("answers a concurrent duplicate from the stored row", async () => {
     findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(row());
     create.mockRejectedValue(
