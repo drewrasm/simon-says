@@ -22,7 +22,7 @@ const note = (overrides: Partial<BookmarkResponse> = {}): BookmarkResponse => ({
   actualRange: null,
   clockUncertaintyMs: 5_000,
   completeness: "pending",
-  evidence: { segments: [], frames: [] },
+  evidence: { segments: [] },
   note: "Check the mics in our own venue.",
   createdAt: "2026-11-09T20:13:24.000Z",
   updatedAt: "2026-11-09T20:13:24.000Z",
@@ -68,7 +68,6 @@ describe("notes list", () => {
                   text: "They missed about half of it.",
                 },
               ],
-              frames: [],
             },
           }),
         ]}
@@ -131,39 +130,12 @@ describe("notes list", () => {
                   text: "Half of it.",
                 },
               ],
-              frames: [],
             },
           }),
         ]}
       />,
     );
     expect(html).toContain("wasn&#x27;t captioned");
-  });
-
-  it("shows an aligned frame only when the API returns its URL", () => {
-    const withFrame = (imageUrl: string | null) =>
-      renderToStaticMarkup(
-        <NotesList
-          bookmarks={[
-            note({
-              evidence: {
-                segments: [],
-                frames: [
-                  {
-                    frameId: "frame-1",
-                    capturedAtMs: 800_000,
-                    imageUrl,
-                  },
-                ],
-              },
-            }),
-          ]}
-        />,
-      );
-    expect(withFrame(null)).not.toContain("<img");
-    expect(withFrame("https://example.test/f.png")).toContain(
-      'src="https://example.test/f.png"',
-    );
   });
 
   it("links pinned cards back to their moment only when asked", () => {

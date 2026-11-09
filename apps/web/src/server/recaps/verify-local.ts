@@ -107,7 +107,6 @@ try {
               text: `Synthetic ${label} evidence: shorter meetings leave more time to build useful software.`,
             },
           ],
-          frames: [],
         },
       },
     });

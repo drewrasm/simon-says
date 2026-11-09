@@ -8,7 +8,6 @@
     "./caption": "./src/caption.ts",
     "./ingest": "./src/ingest.ts",
     "./recap": "./src/recap.ts",
-    "./screen": "./src/screen.ts",
     "./search": "./src/search.ts",
     "./session": "./src/session.ts",
     "./session-status": "./src/session-status.ts",

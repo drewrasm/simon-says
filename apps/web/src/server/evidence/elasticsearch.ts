@@ -15,7 +15,7 @@ const searchResponseSchema = z.object({
 });
 
 type SearchOptions<T> = {
-  index: "simon-says-segments" | "simon-says-observations";
+  index: "simon-says-segments";
   query: object;
   sort: object[];
   schema: z.ZodType<T>;
@@ -81,22 +81,19 @@ export const searchSources = async <T>({
     signal,
     body: JSON.stringify({
       size: latestOnly ? 1 : 1000,
-      _source:
-        index === "simon-says-segments"
-          ? [
-              "sessionId",
-              "epoch",
-              "windowId",
-              "segmentId",
-              "revision",
-              "startMs",
-              "endMs",
-              "timing",
-              "text",
-              "provenance",
-              "expiresAt",
-            ]
-          : ["sessionId", "frameId", "captureMs", "captureState", "expiresAt"],
+      _source: [
+        "sessionId",
+        "epoch",
+        "windowId",
+        "segmentId",
+        "revision",
+        "startMs",
+        "endMs",
+        "timing",
+        "text",
+        "provenance",
+        "expiresAt",
+      ],
       track_total_hits: true,
       timeout: "1s",
       query,

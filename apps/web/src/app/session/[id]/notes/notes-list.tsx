@@ -70,7 +70,6 @@ type NoteCardProps = { bookmark: BookmarkResponse; showJump: boolean };
 const NoteCard = ({ bookmark, showJump }: NoteCardProps) => {
   const clip = isClip(bookmark);
   const quote = quoteText(bookmark);
-  const frame = bookmark.evidence.frames.find(({ imageUrl }) => imageUrl);
   const unpinned = isUnpinned(bookmark);
   return (
     <article className="flex flex-col gap-2.5 rounded-xl border bg-card p-4">
@@ -97,15 +96,6 @@ const NoteCard = ({ bookmark, showJump }: NoteCardProps) => {
           label={clip ? "Remove clip" : "Remove note"}
         />
       </div>
-      {frame?.imageUrl ? (
-        // Private, short-lived URL from the owner-only bookmark read.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={frame.imageUrl}
-          alt="Shared screen at this moment"
-          className="w-full rounded-lg border"
-        />
-      ) : null}
       {quote ? (
         <blockquote className="text-[15px] leading-relaxed text-muted-foreground">
           “{quote}”

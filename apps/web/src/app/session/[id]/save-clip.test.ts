@@ -25,7 +25,7 @@ const savedBody = (url: string, body: { anchor: unknown; note?: string }) => ({
   actualRange: null,
   clockUncertaintyMs: 0,
   completeness: "pending",
-  evidence: { segments: [], frames: [] },
+  evidence: { segments: [] },
   note: body.note ?? null,
   createdAt: "2026-11-09T20:13:24.000Z",
   updatedAt: "2026-11-09T20:13:24.000Z",

@@ -12,7 +12,7 @@ const base: BookmarkResponse = {
   actualRange: null,
   clockUncertaintyMs: 0,
   completeness: "complete",
-  evidence: { segments: [], frames: [] },
+  evidence: { segments: [] },
   note: null,
   createdAt: "2026-11-09T20:13:24.000Z",
   updatedAt: "2026-11-09T20:13:24.000Z",
@@ -46,7 +46,6 @@ describe("notesMarkdown", () => {
               text: "first",
             },
           ],
-          frames: [],
         },
       },
     ]);

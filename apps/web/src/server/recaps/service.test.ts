@@ -94,7 +94,7 @@ describe("recap generation and citations", () => {
       [{ ...selection.evidence.segments[0], text: "  " }],
     ]) {
       bookmark.findMany.mockResolvedValue([
-        { ...selection, evidence: { segments, frames: [] } },
+        { ...selection, evidence: { segments } },
       ]);
       await generateRecap(id);
       expectStatus("failed", "no_resolved_evidence");
@@ -102,21 +102,11 @@ describe("recap generation and citations", () => {
     expect(model).not.toHaveBeenCalled();
   });
 
-  it("passes only selected passages and IDs, never notes or frame URLs", async () => {
+  it("passes only selected passages and IDs, never notes", async () => {
     bookmark.findMany.mockResolvedValue([
       {
         ...selection,
         note: "private note",
-        evidence: {
-          ...selection.evidence,
-          frames: [
-            {
-              frameId: "frame",
-              capturedAtMs: 0,
-              imageUrl: "https://private.example/frame",
-            },
-          ],
-        },
       },
     ]);
     await generateRecap(id);
@@ -166,31 +156,10 @@ describe("recap generation and citations", () => {
           {
             ...citation,
             range: { startMs: 1_000, endMs: 3_000 },
-            frameId: "synthetic-frame",
           },
         ],
       },
     ]);
-  });
-
-  it("cites the stored frame shown when the cited segment ends", () => {
-    const frames = [
-      { frameId: "frame-after", capturedAtMs: 5_000, imageUrl: null },
-      { frameId: "frame-at-start", capturedAtMs: 0, imageUrl: null },
-      { frameId: "frame-during", capturedAtMs: 2_000, imageUrl: null },
-    ];
-    const [takeaway] = validateTakeaways(syntheticRecapOutput(selection.id), [
-      { ...selection, evidence: { ...selection.evidence, frames } },
-    ]);
-    expect(takeaway?.citations[0]?.frameId).toBe("frame-during");
-
-    const [uncovered] = validateTakeaways(syntheticRecapOutput(selection.id), [
-      {
-        ...selection,
-        evidence: { ...selection.evidence, frames: [frames[0]!] },
-      },
-    ]);
-    expect(uncovered?.citations[0]?.frameId).toBeNull();
   });
 
   it("fails when every citation is invalid", async () => {
@@ -434,7 +403,7 @@ describe("owner-only creation and reads", () => {
     const markdown = await exportRecapMarkdown({ principalId, id });
     expect(markdown).toContain("# My recap");
     expect(markdown).toContain(
-      `bookmark ${selection.id}; segment synthetic-selected-segment revision 2; 1000–3000 ms; frame synthetic-frame`,
+      `bookmark ${selection.id}; segment synthetic-selected-segment revision 2; 1000–3000 ms`,
     );
     expect(markdown).toContain("> shorter meetings leave more time to build");
   });

@@ -22,7 +22,6 @@
     "db:generate": "pnpm --filter @simon-says/db generate",
     "db:validate": "pnpm --filter @simon-says/db validate",
     "db:check": "pnpm --filter @simon-says/db check",
-    "storage:check": "sh infra/check-storage.sh",
     "es:setup": "tsx scripts/es-setup.ts",
     "es:smoke": "tsx scripts/es-smoke.ts",
     "es:test:local": "tsx scripts/es-test-local.ts"

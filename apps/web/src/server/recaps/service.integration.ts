@@ -128,7 +128,6 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
               text: "Synthetic attendee B kept deployment details.",
             },
           ],
-          frames: [],
         },
       },
     });
@@ -190,7 +189,6 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
     ).toEqual([selection.id]);
     expect(recap.takeaways[0]?.citations[0]).toMatchObject({
       range: { startMs: 1_000, endMs: 3_000 },
-      frameId: "synthetic-frame",
     });
     expect(await exportRecapMarkdown({ principalId: attendeeA, id })).toContain(
       `bookmark ${selection.id}`,
@@ -276,7 +274,7 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
   it("makes no model call for empty evidence and preserves the bookmark", async () => {
     await database.bookmark.update({
       where: { id: selection.id },
-      data: { evidence: { segments: [], frames: [] } },
+      data: { evidence: { segments: [] } },
     });
     const {
       response: { id },

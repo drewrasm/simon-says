@@ -163,19 +163,6 @@ export const createRecap = async ({
   }
 };
 
-const frameShownAt = (
-  frames: SelectedBookmark["evidence"]["frames"],
-  atMs: number,
-) =>
-  frames.reduce<(typeof frames)[number] | undefined>(
-    (shown, frame) =>
-      frame.capturedAtMs <= atMs &&
-      frame.capturedAtMs >= (shown?.capturedAtMs ?? -1)
-        ? frame
-        : shown,
-    undefined,
-  )?.frameId ?? null;
-
 export const validateTakeaways = (
   output: z.infer<typeof modelRecapSchema>,
   bookmarks: SelectedBookmark[],
@@ -198,7 +185,6 @@ export const validateTakeaways = (
           segmentRevision: segment.revision,
           range: segment.range,
           excerpt: segment.text.slice(offset, offset + citation.excerpt.length),
-          frameId: frameShownAt(bookmark.evidence.frames, segment.range.endMs),
         },
       ];
     });
@@ -267,9 +253,7 @@ export const generateRecap = async (id: string) => {
         .map((bookmark) => ({
           id: bookmark.id,
           revision: bookmark.revision,
-          evidence: evidenceSchema.parse(
-            bookmark.evidence ?? { segments: [], frames: [] },
-          ),
+          evidence: evidenceSchema.parse(bookmark.evidence ?? { segments: [] }),
         }));
       const passages = limitPassages(
         bookmarks.flatMap((bookmark) =>
@@ -404,7 +388,7 @@ export const exportRecapMarkdown = async (options: OwnerOptions) => {
             ...citation.excerpt
               .split(/\r?\n/)
               .map((line) => `> ${escapeMarkdown(line)}`),
-            `Source: bookmark ${citation.bookmarkId}; segment ${citation.segmentId} revision ${citation.segmentRevision}; ${citation.range.startMs}–${citation.range.endMs} ms${citation.frameId ? `; frame ${citation.frameId}` : ""}`,
+            `Source: bookmark ${citation.bookmarkId}; segment ${citation.segmentId} revision ${citation.segmentRevision}; ${citation.range.startMs}–${citation.range.endMs} ms`,
           ].join("\n"),
         ),
       ]),

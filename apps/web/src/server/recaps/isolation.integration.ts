@@ -29,7 +29,6 @@ import { handleCreateRecap, handleGetRecap, handleExportRecap } from "./http";
 import { generateTakeaways } from "./model";
 import {
   syntheticSegment,
-  syntheticObservation,
   syntheticSearchResponse,
 } from "../evidence/fixtures";
 
@@ -88,9 +87,6 @@ const save = async (owner: string) => {
   );
   const bookmark = bookmarkResponseSchema.parse(await response.json());
   expect(bookmark.evidence.segments).toHaveLength(1);
-  expect(bookmark.evidence.frames).toEqual([
-    { frameId: "frame-0", capturedAtMs: 0, imageUrl: null },
-  ]);
   return { id, body, bookmark };
 };
 const create = async (owner: string, bookmarkId: string) => {
@@ -139,14 +135,12 @@ beforeEach(async () => {
   vi.stubEnv("ELASTICSEARCH_API_KEY", "synthetic-test-key");
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string | URL | Request, init?: RequestInit) =>
+    vi.fn(async (url: string | URL | Request) =>
       Response.json(
         syntheticSearchResponse(
           String(url).includes("simon-says-segments")
             ? [syntheticSegment({ sessionId })]
-            : String(init?.body).includes('"gt"')
-              ? []
-              : [{ ...syntheticObservation(), sessionId }],
+            : [],
         ),
       ),
     ),
@@ -188,7 +182,7 @@ afterAll(async () => {
   }
 });
 
-it("isolates successful notes, frame references, cited recaps and exports through HTTP handlers and Postgres", async () => {
+it("isolates successful notes, cited recaps and exports through HTTP handlers and Postgres", async () => {
   const a = await save(attendeeA);
   const b = await save(attendeeB);
   for (const [owner, own] of [
@@ -210,7 +204,6 @@ it("isolates successful notes, frame references, cited recaps and exports throug
     expect(
       recap.takeaways.flatMap((t) => t.citations.map((c) => c.bookmarkId)),
     ).toEqual([own.id]);
-    expect(recap.takeaways[0]?.citations[0]?.frameId).toBe("frame-0");
     const exported = await checked(await handleExportRecap(request(), id), 200);
     expect(exported.headers.get("content-type")).toContain("text/markdown");
     expect(exported.headers.get("content-disposition")).toContain(
@@ -218,7 +211,6 @@ it("isolates successful notes, frame references, cited recaps and exports throug
     );
     const markdown = await exported.text();
     expect(markdown).toContain(own.id);
-    expect(markdown).toContain("frame-0");
     expect(markdown).not.toContain("Private note");
     expect(markdown).not.toContain(owner === attendeeA ? b.id : a.id);
 

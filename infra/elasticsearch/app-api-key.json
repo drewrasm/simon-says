@@ -6,12 +6,7 @@
       "cluster": [],
       "indices": [
         {
-          "names": [
-            "simon-says-segments",
-            "simon-says-observations",
-            "segments-v1",
-            "observations-v1"
-          ],
+          "names": ["simon-says-segments", "segments-v1"],
           "privileges": ["read", "write", "view_index_metadata"],
           "allow_restricted_indices": false
         }

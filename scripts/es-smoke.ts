@@ -40,7 +40,6 @@ async function main() {
   const first = samples[0];
   assert.ok(first, "Smoke requires at least one sample");
   const ids = samples.map((sample) => sample.id);
-  const observationId = `${sessionId}:1:observation-1`;
   try {
     console.log(`Local smoke: ${config.node}; inference=${config.inferenceId}`);
     for (const { id, document } of samples) {
@@ -133,38 +132,6 @@ async function main() {
         ),
     );
     console.log("dynamic: strict rejected unknownField: HTTP 400");
-    await client.index({
-      index: "simon-says-observations",
-      id: observationId,
-      require_alias: true,
-      refresh: "wait_for",
-      document: {
-        sessionId,
-        epoch: 1,
-        observationId: "observation-1",
-        frameId: "frame-1",
-        checksum: "synthetic-checksum",
-        objectKey: "smoke/frame-1.png",
-        captureState: "captured",
-        width: 1280,
-        height: 720,
-        captureMs: 500,
-        glossaryTerms: ["Solar energy"],
-        expiresAt: "2099-01-01T00:00:00.000Z",
-      },
-    });
-    const glossary = await client.search({
-      index: "simon-says-observations",
-      _source: false,
-      query: {
-        bool: {
-          filter: [{ term: { sessionId } }],
-          must: [{ match: { "glossaryTerms.text": "solar" } }],
-        },
-      },
-    });
-    assert.equal(glossary.hits.hits[0]?._id, observationId);
-    console.log("Observation ID and glossaryTerms.text query verified");
     console.log("PASS");
   } finally {
     try {
@@ -175,14 +142,6 @@ async function main() {
           { ignore: [404] },
         );
       }
-      await client.delete(
-        {
-          index: "simon-says-observations",
-          id: observationId,
-          refresh: "wait_for",
-        },
-        { ignore: [404] },
-      );
       console.log("Cleaned up reserved smoke documents");
     } finally {
       await client.close();
