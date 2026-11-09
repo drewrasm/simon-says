@@ -43,7 +43,7 @@ Open the local URL printed by Next.js. Run `pnpm services:down` to stop the loca
 
 The deployment target is Kubernetes operated through Radar. Keep Next.js, shadcn/ui, and Prisma. Cluster access is being arranged; container packaging, GitOps, live transport, and deployment are not yet implemented or verified. `pnpm dev` still runs the existing Next.js foundation locally.
 
-The next checkpoint is **0A: Kubernetes deployment foundation**, followed by live captions in milestone 1. All four hackathon tracks are planned: Radar operations, Dash0 observability, Sonar/Gitar development review, and Elasticsearch passage search. See the [deployment plan](docs/deployment.md) and [integration scope](docs/hackathon.md).
+The next checkpoint is **0A: Kubernetes deployment foundation**, followed by live captions in milestone 1. All four hackathon tracks are planned: Radar operations, Dash0 observability, Sonar/Gitar development review, and Elasticsearch as the core shared-content store and passage search layer. See the [deployment plan](docs/deployment.md) and [integration scope](docs/hackathon.md).
 
 ## Agent skills
 
