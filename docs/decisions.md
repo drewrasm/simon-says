@@ -19,14 +19,24 @@ Keep durable choices here. Mark proposals explicitly; add rationale and conseque
 
 ## Confirmed by the Track 2 owner
 
-Dylan confirmed this direction on November 9, 2026. A first local spike ran the same day; production behavior remains unverified.
+Dylan confirmed **Plan B** on November 9, 2026. OpenAI is the only model provider, paid with hackathon OpenAI credits. Runtime behavior remains unverified; this decision does not install dependencies or prove an integration.
 
-**Spike evidence (November 9, 2026, local only):** llama.cpp 0.9.0 (Homebrew) on an Apple M4 Max served `LiquidAI/LFM3-Audio-2B-GGUF:Q4_K_M` with `llama serve`. A Node client streamed synthetic macOS `say` speech (16 kHz PCM16, known reference text) to `/v1/realtime?intent=transcription` at real-time pace in 100 ms appends. `session.created` reported a 16 kHz input rate. The stock GGUF transcribed live: deltas arrived in bursts about every second, roughly 0.1–0.3 s after the audio that contained them, and `.completed` followed the final commit. A 20 s clip transcribed correctly apart from `open telemetry` and `dash zero` for OpenTelemetry and Dash0. On a 63 s clip, the whole stream stayed one item; each context restart appeared as a newline inside it, and text after restarts dropped a leading word and garbled jargon (`Elastic's Arx`). The adapter must split items on newlines and its own commits, and treat post-restart text as lower confidence. Not yet measured: real microphone or room audio, word error rate, long sessions, mid-stream commits, and the OpenAI swap. The server logs that audio input is experimental.
+- **Live captions:** `gpt-realtime-whisper` for live word-by-word deltas; `gpt-live-transcribe` is a same-price configuration swap. Live captions justify the higher cost: about $0.77 per 45-minute talk, within credits. Verify credits and quota when the key is issued.
+- **SDK:** server-only `ai` 7.0.x `experimental_streamTranscribe` with `@ai-sdk/openai` 4.0.x `openai.transcription(model)`. SDK source inspection shows a server-side WebSocket to `wss://api.openai.com/v1/realtime?intent=transcription`, `session.update` with `turn_detection: null`, forwarded `input_audio_buffer.append`, and one commit when input closes. It maps events to `transcript-delta` / `transcript-final`, ends at the first final, and returns `segments: []`.
+- **Lifecycle:** successive windows accommodate that SDK lifecycle; a WindowManager owns rotation and a CaptionAssembler owns interim replacement and ordered finals. Source timing comes from our audio offsets, never provider timestamps. See [Plan B architecture](architecture.md#transcription-and-text-passes).
+- **Configuration:** server-only `OPENAI_API_KEY`, `CAPTION_MODEL`, and `CAPTION_DELAY`; start `providerOptions.openai.streaming.delay` at `low` (choices: `minimal`, `low`, `medium`, `high`, `xhigh`). Streaming `prompt` and keywords warn as unsupported: no live vocabulary hints.
 
-- **First transcription provider:** Liquid AI LFM3-Audio-2B, open weights under the LFM Open License v1.0. Use LiveASR with system prompt `Perform live ASR.`: English only, about 0.96 s chunks, 16 kHz input, and text context restarts about every 30 s. Serve through llama.cpp `llama serve` v0.8.0 or newer at WebSocket `/v1/realtime?intent=transcription`. Stock GGUF LiveASR worked in the local synthetic-speech spike; real-microphone latency and accuracy still need verification.
-- **Wire protocol and swap provider:** llama.cpp documents compatibility with OpenAI's `/v1/realtime` schema: send `input_audio_buffer.append`/`commit`; consume `conversation.item.input_audio_transcription.delta`/`completed`. OpenAI realtime transcription, for example `gpt-realtime-whisper`, is the swap provider. Switching changes only base URL, model ID, credentials, and input sample rate: 16 kHz for LFM3-Audio, versus 24 kHz PCM16 in OpenAI's example. Verify interchangeability against OpenAI; only the llama.cpp side has been exercised.
-- **Caption adapter:** implement the protocol directly in a server-only adapter in `apps/web/src/server`. Own commit boundaries, handle many items per session, and resample per provider. Stamp text with our source clock from the audio offsets sent, not provider timestamps. Provider choice and credentials are server-only configuration, with no `NEXT_PUBLIC_` variables.
-- **AI SDK boundary:** do not use `experimental_streamTranscribe` for the caption stream. In `@ai-sdk/openai` 4.0.x it sends one commit at end of input, closes on the first `.completed` event, and returns no segment timestamps; that lifecycle cannot cover a whole talk. Reserve `ai` for text and vision passes below. This records the design rationale, not a verified integration.
+Estimated cost per minute, verified November 9, 2026 by the Track 2 owner from [OpenAI API pricing](https://developers.openai.com/api/docs/pricing):
+
+| Model                    | Estimated USD/min | Caption behavior                   |
+| ------------------------ | ----------------- | ---------------------------------- |
+| `gpt-4o-mini-transcribe` | $0.003            | HTTP batch; no live text           |
+| `gpt-transcribe`         | $0.0045           | WebSocket; per committed turn      |
+| `gpt-4o-transcribe`      | $0.006            | Transcription alternative          |
+| `gpt-realtime-whisper`   | $0.017            | Selected; live word-by-word deltas |
+| `gpt-live-transcribe`    | $0.017            | Same-price configuration swap      |
+
+Unverified until a key exists: session length limits, faster-than-realtime replay, how often finals differ from deltas, latency per `delay`, and rate limits. First real call is in the cluster with the key in the runtime Secret; domain unit tests and fake transcription-model tests need no key.
 
 ## Core content store confirmed by the Track 2 owner
 
@@ -46,14 +56,13 @@ Private data never enters Elasticsearch. Every source read checks current member
 
 ## Proposed implementation defaults
 
-- **LLM tooling (proposal):** use the Vercel AI SDK (`ai`), including its Agent and tool-loop APIs, in server-owned LLM workflows. Verify APIs against the version selected during implementation. Recap provider/model selection and durable recap job execution remain open; vendoring guidance does not install or validate an integration.
+- **LLM workflows (proposal):** use OpenAI through the Vercel AI SDK (`ai`) for server-owned recap workflows. Specific recap model, Agent/tool-loop APIs, and durable job execution remain implementation choices; vendoring guidance does not install or validate an integration.
 
 - Next.js Route Handlers with a custom Node WebSocket entry point, reconnectable SSE, and the confirmed server-only caption adapter. Prove packaging in checkpoint 0A and cross-pod recovery in milestone 1. Propose a durable Postgres event log with bounded polling; leases and replay cannot depend on pod memory.
 - Use CloudNativePG for PostgreSQL; propose private S3-compatible storage, a Postgres-backed job worker, and Kubernetes CronJobs for cleanup. Storage location, job library, capacity, and post-hackathon hosting remain open. Isolate provider adapters from domain rules.
 - Thirty-second marks, one-second screen observations, and a two-minute resend cap. Validate actual timing and readability.
 - Shared-source expiry 24 hours after session end; selected-content expiry 30 days after selection. Confirm permission and cleanup behavior before claiming these guarantees.
-- **Slide glossary and caption correction (proposal, milestones 2–3):** use `ai` through `createOpenAICompatible` pointed at `llama serve`, or through `@ai-sdk/openai`. A Liquid vision model (LFM2.5-VL or LFM3-VL family) reads each changed screen frame to extract on-screen terms. A small Liquid text model uses that glossary to correct finalized segments asynchronously, writing new `TranscriptSegment` revisions with existing `corrected` provenance and preserving original text. Never put correction on the live caption path. Treat screen and transcript text as untrusted data, never instructions. This is outside milestone 1; the recap model remains undecided.
-- **Model hosting (open):** local `llama serve` is for development. How the Kubernetes deployment reaches a model is undecided: use OpenAI, or `llama serve` on a reachable host. Resolve before milestone 1 acceptance; see the [open questions](implementation-plan.md#resolve-before-the-affected-milestone).
+- **Slide glossary and caption correction (proposal, milestones 2–3):** use OpenAI through the AI SDK; choose the cheapest OpenAI model that passes the check at implementation. Extract glossary terms from changed screen frames and correct finalized captions asynchronously, preserving originals and writing new `corrected` revisions. Keep both passes off the live caption path. Treat screen and transcript text as untrusted data, never instructions.
 
 ## Selected hackathon integrations
 
@@ -63,13 +72,15 @@ Detailed adapters and service plans remain proposals. Gitar's normal review writ
 
 ## Superseded and deferred
 
+**Superseded LiveASR spike (November 9, 2026, local only):** llama.cpp 0.9.0 `llama serve` ran Liquid AI LFM3-Audio-2B stock GGUF on an Apple M4 Max. Synthetic speech at 16 kHz PCM16 in 100 ms appends produced live deltas about every second; context restarts degraded leading words and jargon. Real-microphone and deployment behavior were not verified. Liquid audio, VL/text models, local model hosting, and the direct-protocol adapter are superseded by OpenAI through the AI SDK. Retain the lesson: timing comes from our source clock, not provider timestamps.
+
 Vite and the separate `apps/api` service remain superseded by the full-stack Next.js app. Vercel hosting, its experimental WebSocket API, `vercel dev`, and Vercel-specific job assumptions are superseded by the Kubernetes plan.
 
-Elasticsearch as optional stretch work, a derived index with Postgres authoritative for shared content, and search sequenced after private saves are superseded by Dylan’s November 9, 2026 core-content-store decision. Radar being set aside is superseded by the decision to use all four hackathon tracks. The Vercel AI SDK proposal and vendored React guidance remain independent of hosting.
+Elasticsearch as optional stretch work, a derived index with Postgres authoritative for shared content, and search sequenced after private saves are superseded by Dylan’s November 9, 2026 core-content-store decision. Radar being set aside is superseded by the decision to use all four hackathon tracks. The Vercel AI SDK and vendored React guidance remain independent of hosting.
 
 The personal-device recorder with a strict 30-second discard buffer is superseded. Central session retention supports late marks, reconnects, and optional repair. Do not carry its privacy promise into this design.
 
-Voice commands, continuous video playback, on-device transcription, translation, and multiple-room operations are deferred. Screen interpretation and repair transcription are optional extensions. No vendor integration, cost, accuracy, or winning probability is validated yet.
+Voice commands, continuous video playback, on-device transcription, translation, and multiple-room operations are deferred. Screen interpretation and repair transcription are optional extensions. No vendor runtime integration, measured cost, accuracy, or winning probability is validated yet.
 
 ## Primary references
 
@@ -79,10 +90,10 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 - [Next.js Route Handlers](https://nextjs.org/docs/app/getting-started/route-handlers), [shadcn Next.js setup](https://ui.shadcn.com/docs/installation/next), [shadcn monorepos](https://ui.shadcn.com/docs/monorepo), [pnpm workspaces](https://pnpm.io/workspaces).
 - [Next.js self-hosting](https://nextjs.org/docs/app/guides/self-hosting), [custom server](https://nextjs.org/docs/app/guides/custom-server), and [Radar starter](https://github.com/skyhook-io/cnh-starter): validate the Node entry point, container, gateway, and cluster configuration before deployment.
 - [Browser screen capture](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia): permission and audio availability constraints.
-- [Liquid AI LFM3-Audio-2B](https://huggingface.co/LiquidAI/LFM3-Audio-2B): LiveASR prompt, English-only mode, chunking, input rate, context restarts, and license.
-- [LFM3-Audio-2B GGUF](https://huggingface.co/LiquidAI/LFM3-Audio-2B-GGUF): llama.cpp v0.8.0 or newer; realtime support does not establish stock GGUF LiveASR behavior.
-- [llama.cpp server README](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#websocket-v1realtime-realtime-transcription): WebSocket `/v1/realtime` schema and transcription intent. The local spike confirmed stock GGUF LiveASR on this endpoint; see the spike evidence above.
-- [AI SDK `experimental_streamTranscribe`](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-transcribe): streaming API and OpenAI example. The caption adapter uses the protocol directly for the lifecycle reasons above.
+- Superseded: [Liquid AI LFM3-Audio-2B](https://huggingface.co/LiquidAI/LFM3-Audio-2B): LiveASR prompt, English-only mode, chunking, input rate, context restarts, and license.
+- Superseded: [LFM3-Audio-2B GGUF](https://huggingface.co/LiquidAI/LFM3-Audio-2B-GGUF): llama.cpp v0.8.0 or newer; realtime support does not establish stock GGUF LiveASR behavior.
+- Superseded: [llama.cpp server README](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#websocket-v1realtime-realtime-transcription): WebSocket `/v1/realtime` schema and transcription intent. The local spike confirmed stock GGUF LiveASR on this endpoint; see the spike evidence above.
+- [AI SDK `experimental_streamTranscribe`](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-transcribe): streaming API and OpenAI example. Plan B uses successive windows for the SDK lifecycle described above.
 - [Hackathon resources](https://www.wemakedevs.org/hackathons/cnh/resources), [rules](https://www.wemakedevs.org/hackathons/cnh/rules), [schedule](https://www.wemakedevs.org/hackathons/cnh/schedule).
 - [Plaud highlights](https://support.plaud.ai/hc/en-us/articles/63429919023385-Highlight-a-moment-while-recording-for-v4-0-x-or-later): marking recorded moments already exists. Simon Says emphasizes shared session capture with private, illustrated selections; uniqueness is not established.
 
