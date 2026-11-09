@@ -2,14 +2,22 @@ import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
-import next from "next";
+import next, { type NextConfig } from "next";
 import { WebSocketServer } from "ws";
+import { z } from "zod";
 import { createOpenAI } from "@ai-sdk/openai";
 import { CaptionTransport } from "../src/server/captions/transport";
 import { FrameTransport } from "../src/server/frames/transport";
 import { createIngestAuthority } from "../src/server/captions/access-authority";
 import { elasticsearchClient } from "../src/server/search/es-client";
 import { ElasticsearchSegmentSink } from "../src/server/search/elasticsearch-segment-sink";
+import { ElasticsearchObservationSink } from "../src/server/search/elasticsearch-observation-sink";
+import {
+  createFrameUpload,
+  InMemoryObservationSink,
+} from "../src/server/frames/upload";
+import { createFrameAccess } from "../src/server/frames/access-authority";
+import { s3FrameStore } from "../src/server/frames/s3";
 import { readRuntimeEnv } from "./env.js";
 
 const runtime = readRuntimeEnv(process.env);
@@ -43,16 +51,42 @@ const captions = new CaptionTransport({
 const dev = process.argv.includes("--dev");
 // Read Next's built configuration: runtime needs neither TS config compilation
 // nor standalone's unrelated server.js. This Node entry point is bundled separately.
+const requiredServerFiles = z.object({
+  config: z.custom<NextConfig>(
+    (value) =>
+      typeof value === "object" && value !== null && !Array.isArray(value),
+  ),
+});
 const conf = dev
   ? undefined
-  : JSON.parse(await readFile(".next/required-server-files.json", "utf8"))
-      .config;
+  : requiredServerFiles.parse(
+      JSON.parse(await readFile(".next/required-server-files.json", "utf8")),
+    ).config;
 const app = next({ dev, port, ...(conf ? { conf } : {}) });
 const handle = app.getRequestHandler();
 const frames = new FrameTransport(
   runtime.frameEnv,
   new URL(`http://localhost:${port}`).origin,
-  undefined,
+  () =>
+    createFrameUpload({
+      access: createFrameAccess(
+        runtime.frameEnv,
+        new URL(`http://localhost:${port}`).origin,
+        authority,
+      ),
+      store: s3FrameStore(runtime.frameEnv),
+      sink: elasticsearch
+        ? {
+            put: (observation) =>
+              new ElasticsearchObservationSink(
+                elasticsearchClient(elasticsearch),
+              ).put(observation),
+          }
+        : new InMemoryObservationSink(),
+      ...(!elasticsearch
+        ? { sinkDegradedReason: "missing_elasticsearch_config" }
+        : {}),
+    }),
   authority,
 );
 const maxConnections = 16;

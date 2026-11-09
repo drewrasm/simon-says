@@ -7,7 +7,11 @@ import { AccessError } from "../access/errors";
 import { createIngestAuthority } from "../captions/access-authority";
 import { createFrameAccess } from "./access-authority";
 import { FrameTransport } from "./transport";
-import { createFrameUpload, InMemoryObservationSink } from "./upload";
+import {
+  createFrameUpload,
+  InMemoryObservationSink,
+  ObservationConflictError,
+} from "./upload";
 import { readRuntimeEnv } from "../../../server/env";
 
 const access = vi.hoisted(() => ({
@@ -200,7 +204,7 @@ it("keeps strict development access and never grants a production dev bypass", a
   }
 });
 
-it("serves production-mode HTTP through membership and rechecks after storage before publishing", async () => {
+it("serves production-mode HTTP with membership, observation conflicts, and a post-storage access recheck", async () => {
   const authority = createIngestAuthority(env);
   authority.checkEpoch(sessionId, 2);
   const sink = new InMemoryObservationSink();
@@ -257,6 +261,14 @@ it("serves production-mode HTTP through membership and rechecks after storage be
       ).status,
     ).toBe(403);
     expect(put).not.toHaveBeenCalled();
+    const persist = vi
+      .spyOn(sink, "put")
+      .mockRejectedValueOnce(new ObservationConflictError());
+    const conflict = await fetch(url, { method: "POST", headers, body: bytes });
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toEqual({ error: "sequence_conflict" });
+    expect(sink.observations.size).toBe(0);
+    expect(persist).toHaveBeenCalledTimes(1);
     expect(
       (await fetch(url, { method: "POST", headers, body: bytes })).status,
     ).toBe(200);

@@ -40,6 +40,7 @@ for (const args of [
     "vitest",
     "run",
     "apps/web/src/server/search/elasticsearch.integration.test.ts",
+    "apps/web/src/server/frames/elasticsearch.integration.test.ts",
   ],
 ]) {
   const result = spawnSync("pnpm", args, { env, stdio: "inherit" });
