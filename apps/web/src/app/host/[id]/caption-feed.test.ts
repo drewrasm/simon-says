@@ -103,6 +103,42 @@ describe("caption feed", () => {
     ]);
   });
 
+  it("keeps a later Go live after earlier captions though its clock restarts", () => {
+    const second = { ...base, epoch: 2, windowId: "w2" } as const;
+    const feed = fold([
+      {
+        kind: "caption.final",
+        cursor: "1",
+        ...base,
+        segments: [
+          segment("a", 1, 0, "First take, start."),
+          segment("b", 1, 8000, "First take, end."),
+        ],
+      },
+      {
+        kind: "caption.final",
+        cursor: "2",
+        ...second,
+        segments: [{ ...segment("c", 1, 2000, "Second take."), ...second }],
+      },
+      {
+        kind: "caption.interim",
+        cursor: "3",
+        ...second,
+        windowId: "w3",
+        text: "still talking",
+        startMs: 4000,
+        estimatedEndMs: 5000,
+      },
+    ]);
+    expect(feedLines(feed).map((line) => line.text)).toEqual([
+      "First take, start.",
+      "First take, end.",
+      "Second take.",
+      "still talking",
+    ]);
+  });
+
   it("formats the session clock", () => {
     expect(formatClock(0)).toBe("00:00:00");
     expect(formatClock(3_725_400)).toBe("01:02:05");

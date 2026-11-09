@@ -5,6 +5,8 @@ import type {
 
 export type FeedLine = Readonly<{
   key: string;
+  /** Capture epoch; each Go live restarts the source clock at zero. */
+  epoch: number;
   startMs: number;
   text: string;
   kind: "final" | "interim" | "gap";
@@ -44,6 +46,7 @@ export const applyCaptionEvent = (
       if (event.text.trim()) {
         interims.set(key, {
           key: `interim:${key}`,
+          epoch: event.epoch,
           startMs: event.startMs,
           text: event.text,
           kind: "interim",
@@ -60,6 +63,7 @@ export const applyCaptionEvent = (
           revision: segment.revision,
           line: {
             key: `final:${segment.segmentId}`,
+            epoch: event.epoch,
             startMs: segment.startMs,
             text: segment.text,
             kind: "final",
@@ -75,6 +79,7 @@ export const applyCaptionEvent = (
       const key = `${event.epoch}:${event.startMs}:${event.endMs}`;
       gaps.set(key, {
         key: `gap:${key}`,
+        epoch: event.epoch,
         startMs: event.startMs,
         text:
           event.reason === "audio_missing"
@@ -91,17 +96,18 @@ export const applyCaptionEvent = (
   }
 };
 
-/** Finals and gaps in source-clock order, then any interim text still being spoken. */
+const byEpochThenTime = (a: FeedLine, b: FeedLine) =>
+  a.epoch - b.epoch || a.startMs - b.startMs;
+
+/** Finals and gaps in (epoch, source-clock) order, then any interim text still being spoken. */
 export const feedLines = (feed: CaptionFeed, limit = 200): FeedLine[] => {
   const settled = [
     ...[...feed.finals.values()].map(({ line }) => line),
     ...feed.gaps.values(),
   ]
     .filter((line) => line.kind === "gap" || line.text.trim())
-    .sort((a, b) => a.startMs - b.startMs);
-  const interim = [...feed.interims.values()].sort(
-    (a, b) => a.startMs - b.startMs,
-  );
+    .sort(byEpochThenTime);
+  const interim = [...feed.interims.values()].sort(byEpochThenTime);
   return [...settled.slice(-limit), ...interim];
 };
 
