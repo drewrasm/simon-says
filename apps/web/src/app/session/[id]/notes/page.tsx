@@ -93,7 +93,7 @@ const NotesPage = async ({ params }: NotesPageProps) => {
         <NoteComposer
           sessionId={id}
           triggerLabel="New note"
-          triggerClassName="w-full"
+          triggerClassName="h-11 w-full"
           afterSave="refresh"
         />
       </div>
