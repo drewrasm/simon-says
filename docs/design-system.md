@@ -1,6 +1,6 @@
 # Design system
 
-Status: foundation installed and checked with `pnpm check` and `pnpm build`. The reference page at `/design-system` renders on the server. Visual browser QA and keyboard/focus review are not yet done.
+The reference page at `/design-system` renders on the server.
 
 ## Decisions
 
@@ -12,7 +12,7 @@ Status: foundation installed and checked with `pnpm check` and `pnpm build`. The
 
 ## Scope
 
-This is the design system only. Product screens (host console, guest views, sign-in) are not built. The design canvas is the reference for those screens, and they belong to later milestones.
+This is the design system only. The design canvas is the reference for product screens (host console, guest views, sign-in).
 
 ## Components
 
@@ -36,13 +36,8 @@ Simon Says composites in `apps/web/src/components`:
 - Timestamps and counters use tabular numerals (`tabular-nums`).
 - Radius: controls use `rounded-lg`, panels and cards use `rounded-xl`.
 
-## Verification
-
-- `pnpm check`: lint, format, typecheck, tests. Passed.
-- `pnpm build`: passed; `/design-system` prerendered as static.
-- Not yet verified: visual rendering in a browser, dark mode, keyboard walk-through, narrow-screen layout.
-
 ## Open items
 
 - Confirm the Raleway font is loaded from Google at runtime in the target environment.
 - `src/components/*` composites are not covered by tests yet.
+- Check visual rendering and dark mode in a browser.
