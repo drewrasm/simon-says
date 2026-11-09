@@ -502,11 +502,11 @@ async function socketServer(
     reconnectGraceMs,
     ...(sink ? { sink } : {}),
   });
-  const server = createServer((req, res) => {
-    if (!transport.handleHttp(req, res)) res.writeHead(404).end();
+  const server = createServer(async (req, res) => {
+    if (!(await transport.handleHttp(req, res))) res.writeHead(404).end();
   });
-  server.on("upgrade", (req, socket, head) => {
-    if (!transport.handleUpgrade(req, socket, head)) socket.destroy();
+  server.on("upgrade", async (req, socket, head) => {
+    if (!(await transport.handleUpgrade(req, socket, head))) socket.destroy();
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -648,7 +648,7 @@ it("missing key exposes a clear degraded SSE state without crashing the server",
     await reader.cancel();
     expect(
       (await fetch(`${server.base}/api/sessions/other/events`)).status,
-    ).toBe(403);
+    ).toBe(404);
   } finally {
     abort.abort();
     await server.close();

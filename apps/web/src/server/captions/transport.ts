@@ -11,7 +11,7 @@ import {
 } from "@simon-says/contracts/ingest";
 import { CaptionAssembler } from "./assembler";
 import { EventHub } from "./event-hub";
-import type { IngestAuthority } from "./ingest-authority";
+import type { HostAuthorization, IngestAuthority } from "./ingest-authority";
 import type { CaptionDelay } from "./openai-window";
 import { InMemorySegmentSink, type SegmentSink } from "./segment-sink";
 import { SseSubscriber } from "./sse-subscriber";
@@ -55,6 +55,7 @@ export class CaptionTransport {
       telemetry?: CaptionTelemetry;
       reconnectGraceMs?: number;
       finishTimeoutMs?: number;
+      membershipRecheckMs?: number;
       managerConfig?: Pick<
         ConstructorParameters<typeof WindowManager>[0],
         "planner" | "timeoutMs"
@@ -87,14 +88,22 @@ export class CaptionTransport {
     return session;
   }
 
-  handleHttp(req: IncomingMessage, res: ServerResponse): boolean {
+  async handleHttp(
+    req: IncomingMessage,
+    res: ServerResponse,
+  ): Promise<boolean> {
     const match = route.exec((req.url ?? "").split("?")[0]!);
     if (!match) return false;
     const id = match[1]!;
-    if (!this.options.authority.authorizeMember(id, req)) {
-      res.writeHead(403).end();
+    if (
+      !(await this.authorized(() =>
+        this.options.authority.authorizeMember(id, req),
+      ))
+    ) {
+      res.writeHead(404).end();
       return true;
     }
+    if (res.destroyed) return true;
     if (match[2] === "ingest") {
       res.writeHead(426).end();
       return true;
@@ -119,6 +128,10 @@ export class CaptionTransport {
     });
     res.flushHeaders();
     this.streams.add(res);
+    const stopChecking = this.recheck(
+      () => this.options.authority.authorizeMember(id, req),
+      () => res.destroy(),
+    );
     const lastId = req.headers["last-event-id"];
     const subscriber = new SseSubscriber(res);
     const unsubscribe = session.hub.subscribeBatch(
@@ -129,6 +142,7 @@ export class CaptionTransport {
     // Bound idle/lost clients; EventSource reconnects with Last-Event-ID.
     const lifetime = setTimeout(() => res.end(), 30 * 60 * 1000);
     res.once("close", () => {
+      stopChecking();
       clearTimeout(lifetime);
       subscriber.close();
       unsubscribe();
@@ -137,48 +151,86 @@ export class CaptionTransport {
     return true;
   }
 
-  handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean {
+  async handleUpgrade(
+    req: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+  ): Promise<boolean> {
     const match = route.exec((req.url ?? "").split("?")[0]!);
     if (!match || match[2] !== "ingest") return false;
     const id = match[1]!;
     const reject = (status: number) =>
       socket.end(`HTTP/1.1 ${status} Rejected\r\nConnection: close\r\n\r\n`);
-    if (!this.options.authority.authorizeHost(id, req)) {
-      reject(403);
-      return true;
-    }
-    const session = this.session(id);
+    const allowed = await this.authorized(() =>
+      this.options.authority.authorizeHost(id, req),
+    );
+    if (socket.destroyed) return true;
+    const session = allowed === true ? this.session(id) : undefined;
     if (
       this.stopping ||
-      !session ||
+      (allowed === true && !session) ||
       this.streams.size + this.wss.clients.size >= 32
     ) {
       reject(503);
       return true;
     }
-    this.wss.handleUpgrade(req, socket, head, (ws) =>
-      this.connect(ws, session, id),
-    );
+    this.wss.handleUpgrade(req, socket, head, (ws) => {
+      if (allowed !== true || !session) {
+        const reason = allowed === "session_ended" ? allowed : "unauthorized";
+        ws.on("error", () => {
+          /* No content-bearing transport errors in logs. */
+        });
+        ws.send(
+          JSON.stringify({
+            type: "rejected",
+            reason,
+            retryable: false,
+          }),
+        );
+        ws.close(1008, reason);
+        const deadline = setTimeout(() => ws.terminate(), 1000);
+        ws.once("close", () => clearTimeout(deadline));
+        return;
+      }
+      this.connect(ws, session, id, req);
+    });
     return true;
   }
 
-  private connect(ws: WebSocket, session: Session, id: string) {
+  private connect(
+    ws: WebSocket,
+    session: Session,
+    id: string,
+    req: IncomingMessage,
+  ) {
+    let denied = false;
+    let sessionEnded = false;
     let epoch: number | undefined;
     let received = 0;
     const send = (message: unknown) => {
       if (ws.readyState === WebSocket.OPEN)
         ws.send(JSON.stringify(serverIngestMessageSchema.parse(message)));
     };
+    let rejectDeadline: ReturnType<typeof setTimeout> | undefined;
     const reject = (reason: IngestRejectReason) => {
+      if (denied) return;
+      denied = true;
+      sessionEnded = reason === "session_ended";
       send({ type: "rejected", reason, retryable: reason === "overloaded" });
       ws.close(1008, reason);
+      rejectDeadline = setTimeout(() => ws.terminate(), 1000);
     };
+    const stopChecking = this.recheck(
+      () => this.options.authority.authorizeHost(id, req),
+      (result) => reject(result === "session_ended" ? result : "unauthorized"),
+    );
     const helloTimeout = setTimeout(() => reject("invalid_frame"), 5000);
     const lifetime = setTimeout(
       () => ws.close(1012, "reconnect"),
       30 * 60 * 1000,
     );
     const ack = () => {
+      if (denied) return;
       const throughSeq = session.manager?.ackedThroughSeq ?? -1;
       if (epoch !== undefined && received > 0 && throughSeq >= 0) {
         send({ type: "ack", epoch, throughSeq });
@@ -190,6 +242,7 @@ export class CaptionTransport {
       /* Content-bearing provider/transport errors are never logged. */
     });
     ws.on("message", (data, binary) => {
+      if (denied || ws.readyState !== WebSocket.OPEN) return;
       if (epoch === undefined) {
         if (binary) {
           reject("invalid_frame");
@@ -330,6 +383,8 @@ export class CaptionTransport {
       if (received >= 5) ack();
     });
     ws.once("close", (code) => {
+      stopChecking();
+      clearTimeout(rejectDeadline);
       clearTimeout(helloTimeout);
       clearTimeout(lifetime);
       clearInterval(interval);
@@ -341,7 +396,8 @@ export class CaptionTransport {
           session.ended = true;
           void session.manager?.finish(this.options.finishTimeoutMs);
         };
-        if (code === 1000) finish();
+        const stopped = code === 1000 || sessionEnded;
+        if (stopped) finish();
         else
           session.reconnectTimer = setTimeout(
             finish,
@@ -349,12 +405,60 @@ export class CaptionTransport {
           );
         session.hub.publish({
           kind: "capture.state",
-          session: code === 1000 ? "ended" : "degraded",
-          audio: code === 1000 ? "stopped" : "stalled",
+          session: stopped ? "ended" : "degraded",
+          audio: stopped ? "stopped" : "stalled",
           captionLagMs: null,
         });
       }
     });
+  }
+
+  /** A stalled access backend must not keep a connection authorized indefinitely. */
+  private async authorized<T extends HostAuthorization>(
+    check: () => T | Promise<T>,
+  ) {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(check),
+        new Promise<false>((resolve) => {
+          timeout = setTimeout(() => resolve(false), 5000);
+        }),
+      ]);
+    } catch {
+      // Access/backend failures visibly deny admission or close an existing stream.
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  /** One check at a time; cancellation prevents late results from restarting timers. */
+  private recheck(
+    check: () => HostAuthorization | Promise<HostAuthorization>,
+    revoked: (result: false | "session_ended") => void,
+  ) {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const run = async () => {
+      const allowed = await this.authorized(check);
+      if (stopped) return;
+      if (allowed !== true) {
+        stopped = true;
+        revoked(allowed);
+      } else schedule();
+    };
+    const schedule = () => {
+      timer = setTimeout(
+        () => void run(),
+        this.options.membershipRecheckMs ?? 30000,
+      );
+    };
+    schedule();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
   }
 
   async close(drainMs = 5000) {
