@@ -1,0 +1,54 @@
+{
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "sessionId": {
+        "type": "keyword"
+      },
+      "epoch": {
+        "type": "integer"
+      },
+      "windowId": {
+        "type": "keyword"
+      },
+      "segmentId": {
+        "type": "keyword"
+      },
+      "revision": {
+        "type": "integer"
+      },
+      "startMs": {
+        "type": "long"
+      },
+      "endMs": {
+        "type": "long"
+      },
+      "timing": {
+        "type": "object",
+        "dynamic": "strict",
+        "properties": {
+          "kind": {
+            "type": "keyword"
+          },
+          "uncertaintyMs": {
+            "type": "long"
+          }
+        }
+      },
+      "text": {
+        "type": "text",
+        "copy_to": "text_semantic"
+      },
+      "text_semantic": {
+        "type": "semantic_text",
+        "inference_id": "${ELASTICSEARCH_INFERENCE_ID}"
+      },
+      "provenance": {
+        "type": "keyword"
+      },
+      "expiresAt": {
+        "type": "date"
+      }
+    }
+  }
+}

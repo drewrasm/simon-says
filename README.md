@@ -4,7 +4,7 @@ One conference session feed. Personal, illustrated takeaways.
 
 The host captures the speaker's microphone and screen once. Attendees join by QR code, read live captions, and save moments. Each attendee gets a private recap with source passages and aligned screenshots.
 
-**Status:** milestone 0 foundation is implemented and locally verified; evidence is tracked in the [implementation plan](docs/implementation-plan.md). Product flows and provider integrations are not implemented.
+**Status:** milestone 0 foundation is implemented and locally verified; evidence is tracked in the [implementation plan](docs/implementation-plan.md). Product flows and deployed provider integrations are not implemented. Local Elasticsearch mapping/query verification is recorded in the implementation plan.
 
 ## Start here
 
@@ -40,6 +40,28 @@ pnpm dev
 Open the local URL printed by Next.js. Run `pnpm services:down` to stop the local services. The Compose configuration uses PostgreSQL and a private SeaweedFS S3 bucket with local credentials. The root `.env` configures the database scripts; Next.js loads app-specific settings from `apps/web/.env.local` when needed. Do not use local credentials for deployed services.
 
 `pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection. The workspace uses Next.js and shadcn/ui for the application, with Prisma for PostgreSQL. See the implementation plan for completed verification and remaining work.
+
+### Local Elasticsearch mappings and smoke check
+
+Use Elastic start-local in Docker, separately from the repository's Postgres/object-store Compose services. If installed at `~/simon-says-elastic-local`, start it there with `./start.sh`. Load its local credentials without printing them (the generated `.env` uses shell variable expansion):
+
+```sh
+set -a
+. "$HOME/simon-says-elastic-local/.env"
+set +a
+export ELASTICSEARCH_URL=http://localhost:9200
+export ELASTICSEARCH_API_KEY="$ES_LOCAL_API_KEY"
+export ELASTICSEARCH_INFERENCE_ID=.multilingual-e5-small-elasticsearch
+pnpm es:setup --dry-run
+pnpm es:setup
+pnpm es:setup
+pnpm es:smoke
+unset ELASTICSEARCH_API_KEY ES_LOCAL_API_KEY ES_LOCAL_PASSWORD
+```
+
+Setup creates `segments-v1` / `observations-v1` and their `simon-says-*` write aliases, verifies mappings on rerun, fails on drift, and repairs aliases atomically. `--dry-run` performs reads only. Smoke accepts only `http://localhost:9200` and the local E5 endpoint; it writes three synthetic finalized segments and an observation under reserved session `es-smoke-c1b`, checks overlap/semantic queries, duplicate IDs, create conflicts and strict fields, then deletes only those reserved documents. Do not use that session ID for application data or run the smoke concurrently. The first E5 inference may need a model download/deployment and adequate Docker memory; failures are reported, not replaced with fake vectors. No cloud connection is part of local verification.
+
+The mappings' inference endpoint is parameterized and defaults to proposed Jina; production endpoint selection remains Track 3's decision. See [storage contracts](docs/contracts.md#elasticsearch-v1-storage-boundary) and [approval-gated operator setup](docs/deployment.md#elasticsearch-setup-operator-approval-required).
 
 ## Deployment and hackathon scope
 
