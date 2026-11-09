@@ -1,15 +1,18 @@
 # Architecture
 
-Status: the milestone 0 workspace foundation is complete with local verification. Next.js on Vercel and Prisma for PostgreSQL are confirmed. The product runtime design below remains proposed and unverified. See [decisions](decisions.md) for choices requiring validation.
+Status: the milestone 0 workspace foundation is complete with local verification. Next.js on Kubernetes operated through Radar and Prisma for PostgreSQL are confirmed. Cluster access is pending. The product runtime design below remains proposed and unverified. See [decisions](decisions.md) for choices requiring validation.
 
 ## Data flow
 
 ```mermaid
 flowchart TD
-  Host[Host: mic and screen] --> Ingest[Vercel: authenticated ingest]
+  Host[Host: mic and screen] --> Ingest[Kubernetes: authenticated ingest]
   Ingest --> STT[One transcription stream per session]
   STT --> Timeline[Timestamped transcript and frame timeline]
   Ingest --> Media[Private media storage]
+  Timeline --> Search[Elasticsearch passage index]
+  Search --> Results[Authorized source results]
+  Results --> Selections
   Timeline --> Feed[Shared caption feed]
   Feed --> A[Attendee A]
   Feed --> B[Attendee B]
@@ -25,35 +28,39 @@ The workspace uses pnpm, one lockfile, and `workspace:` dependencies. The web, U
 
 The [building tracks](building-tracks.md) divide feature ownership, including the UI/capture boundary and shared migration coordination.
 
-| Path                  | Owns                                                                                            |
-| --------------------- | ----------------------------------------------------------------------------------------------- |
-| `apps/web`            | Next.js App Router, host and attendee UI, browser capture, server routes, and Vercel deployment |
-| `apps/web/src/server` | Authentication, ingest, caption delivery, provider adapters, and recap jobs                     |
-| `packages/ui`         | shadcn/ui components, theme, shared presentation primitives                                     |
-| `packages/contracts`  | Runtime request/event schemas and derived TypeScript types                                      |
-| `packages/domain`     | Pure timeline, selection, alignment, and revision rules                                         |
-| `packages/db`         | Prisma schema and client; planned migrations, repositories, and synthetic seeds                 |
-| `infra`               | Local services, deployment definitions, telemetry configuration                                 |
-| `tests/fixtures`      | Authorized audio, screen frames, expected words and timestamps                                  |
-| `tests/e2e`           | Host/attendee flows and cross-user isolation checks                                             |
+| Path                  | Owns                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| `apps/web`            | Next.js App Router, host and attendee UI, browser capture, server routes, and Node.js runtime  |
+| `apps/web/src/server` | Authentication, ingest, caption delivery, provider adapters, search/indexing, and durable jobs |
+| `packages/ui`         | shadcn/ui components, theme, shared presentation primitives                                    |
+| `packages/contracts`  | Runtime request/event schemas and derived TypeScript types                                     |
+| `packages/domain`     | Pure timeline, selection, alignment, and revision rules                                        |
+| `packages/db`         | Prisma schema and client; planned migrations, repositories, and synthetic seeds                |
+| `infra`               | Local services, deployment definitions, telemetry configuration                                |
+| `tests/fixtures`      | Authorized audio, screen frames, expected words and timestamps                                 |
+| `tests/e2e`           | Host/attendee flows and cross-user isolation checks                                            |
 
 One Next.js application owns the UI and backend. HTTP endpoints use App Router Route Handlers; capture and interactive captions use Client Components. `domain` and `contracts` have no UI, database, or provider dependencies. Only server code imports `db` or server provider SDKs. Mark server modules with `server-only`. Keep application-specific components in web.
 
-## Vercel runtime
+## Kubernetes runtime
 
-Deploy `apps/web` as one Vercel project. Use Node.js functions for server work, with managed Postgres and private object storage as proposed dependencies. Persist transcript revisions, replay cursors, and session leases outside function memory. Storage vendors remain undecided.
+Deploy the existing Next.js app as a Node.js container. Radar supplies cluster visibility, investigations, and deployment operations; Kubernetes runs the app. Keep HTTP APIs in Route Handlers. A proposed custom Node entry point owns WebSocket upgrades and delegates HTTP to Next.js. Prove its packaging, development command, and graceful shutdown in checkpoint 0A; do not assume a Route Handler supports upgrades outside Vercel. A custom server must be packaged explicitly rather than assuming Next.js standalone output includes it.
 
-Propose a Vercel WebSocket function for host audio and a server-side Deepgram adapter. HTTP persists bookmarks and frames; SSE distributes captions. Verify WebSocket routing alongside Next.js before committing to the transport. Vercel documents WebSocket support, but connection duration is bounded. See the [WebSocket guide](https://vercel.com/kb/guide/real-time-chat-websockets) and [function duration limits](https://vercel.com/docs/functions/configuring-functions/duration).
+Start with one application replica, but keep all leases, replay cursors, audio acknowledgments, and transcript progress durable. Rolling deployments can overlap pods. Reconnect with backoff, replay from the last finalized source offset, deduplicate overlap, and preserve the source clock. Pod termination must not end a session or silently discard acknowledged audio. Keep missing audio distinct from missing transcript.
 
-WebSocket support is public beta. The Next.js guide uses the Vercel-only `experimental_upgradeWebSocket` API in a Route Handler and requires `vercel dev` for local development. CLI compatibility still needs verification. Keep transport behind the ingest adapter; if milestone 1 transport checks fail, revisit the proposal before proceeding.
+Propose a Postgres event log with bounded polling for cross-pod SSE delivery. Notification mechanisms may reduce latency but cannot replace durable replay. Validate latency and load in milestone 1. The gateway must pass WebSocket upgrades and unbuffered SSE. Bound uploads, connection counts, and backpressure; keep authorization at each boundary.
 
-Function instances do not share memory. Use durable leases to fence competing hosts and a shared event source for caption delivery across instances. Select and test the event delivery mechanism in milestone 1. Reconnect audio and caption connections with backoff, cursor replay, and explicit gap reporting. Map each replacement provider connection back to the source clock; never reset session time when a function restarts. Persist transcript-finalization progress separately from durable audio acknowledgments. On reconnect, replay retained audio from the last finalized source offset and deduplicate any overlap. Expose unrecoverable transcript ranges separately from missing audio.
+Propose CloudNativePG for cluster Postgres, subject to access and persistence verification. Private object storage remains a deployment decision; the local SeaweedFS setup proves only local behavior. Use runtime Secrets and explicit migration Jobs. See the [deployment plan](deployment.md) for packaging, rollout, and teardown gates.
 
-Recap generation needs durable status and retries. Select a Vercel-compatible job mechanism before milestone 3; do not rely on an unawaited promise after a response. Cleanup must also resume safely after interruption. Bound media uploads to platform request limits, or authorize direct private uploads and validate ownership, epoch, and metadata before accepting them.
+Recap and indexing work need durable jobs, retries, and leases. Propose Postgres-backed jobs consumed by a worker from the same repository and image; select the library before milestone 2. Scheduled cleanup can use a Kubernetes CronJob, but progress must survive interruption. Never rely on an unawaited promise or pod-local files for durable work.
 
-Elasticsearch remains an optional derived index. An always-on API service and a separate deployment are outside this plan.
+## Search and observability
 
-If search is added, purge indexed passages when their sources expire, are redacted, or are deleted. Recheck current membership and source access against Postgres before returning results, including after revocation.
+Elasticsearch passage search is required hackathon scope after private highlights work. Postgres remains authoritative. Index finalized shared transcript passages with session, source range, segment IDs, revisions, and expiry; never index private notes or recaps. Use keyword search first, then semantic search with an explicitly selected inference endpoint. Elastic Cloud Serverless is proposed to avoid adding a search cluster to the application cluster.
+
+Search returns candidates. Recheck membership, current source revisions, redaction, and expiry in Postgres before exposing text or accepting a selection. Search selection uses the existing paragraph bookmark path and source clock. Durable indexing jobs update revisions and purge expired or removed passages; an index outage must not interrupt capture or private saves. Search never silently adds evidence to a recap.
+
+Dash0 receives content-free OpenTelemetry from the Node runtime and worker. Allowlist attributes and suppress captured text, queries, notes, model prompts, credentials, and signed URLs. Disable content-bearing automatic instrumentation. Radar handles cluster operations; Dash0 handles application traces and metrics. The [hackathon plan](hackathon.md) defines evidence and ownership for all four tracks.
 
 ## Timeline invariants
 
@@ -82,6 +89,6 @@ Number audio chunks, attach time ranges/checksums, and acknowledge durable write
 - Materialize selected text revisions and retain authorized selected image references before shared-source expiry. Deletion and expiry jobs must handle references and invalidate dependent recaps.
 - Host redaction invalidates affected hosted selections and recaps. Personal deletion does not remove others' shared source. Downloaded exports cannot be recalled.
 - Keep content out of logs, telemetry, session replay, and errors. Verify provider retention controls, including Deepgram opt-out. Never claim system-wide 30-second retention.
-- Measure ingest lag, caption lag, transcription failures, source gaps, durable-save latency, and recap errors. Vercel is the confirmed hosting choice; Dash0 and Elasticsearch are [under consideration](decisions.md#tools-under-consideration).
+- Measure ingest lag, caption lag, transcription failures, source gaps, durable-save latency, and recap errors. Verify Dash0 telemetry with real requests and inspect exported payloads for content leaks.
 
 Use authenticated object access and short-lived image links. Exports embed selected images and sanitized text, with no access tokens. Source and provider text are untrusted data.

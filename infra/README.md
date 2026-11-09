@@ -10,4 +10,6 @@ These credentials are for local development only. The bucket initializer is idem
 
 With the services running, `./infra/check-storage.sh` verifies signed object writes and reads, rejects an anonymous read, and removes its probe object.
 
-Production database and private object-storage vendors remain undecided. These local services do not establish production retention or access guarantees.
+The deployment target is Kubernetes operated through Radar. CloudNativePG is proposed for deployed PostgreSQL; private object storage remains undecided. These local services do not establish deployed retention or access guarantees.
+
+See the [deployment plan](../docs/deployment.md) for checkpoint 0A. Container packaging, cluster manifests, CI delivery, Secrets, and migration Jobs are planned, not present. Preserve local Compose for development.

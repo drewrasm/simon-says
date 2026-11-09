@@ -13,6 +13,8 @@ The host captures the speaker's microphone and screen once. Attendees join by QR
 - [Contracts](docs/contracts.md): records, APIs, and event semantics.
 - [Implementation plan](docs/implementation-plan.md): ordered milestones and acceptance checks.
 - [Building tracks](docs/building-tracks.md): three-builder ownership, handoffs, and first working slices.
+- [Hackathon integrations](docs/hackathon.md): four sponsor tracks, accounts, owners, and evidence.
+- [Deployment plan](docs/deployment.md): Kubernetes through Radar, prerequisites, and release checks.
 - [Decisions](docs/decisions.md): confirmed choices, proposals, and open questions.
 - [Agent instructions](AGENTS.md): how to work in this repository.
 
@@ -35,13 +37,13 @@ pnpm dev
 
 Open the local URL printed by Next.js. Run `pnpm services:down` to stop the local services. The Compose configuration uses PostgreSQL and a private SeaweedFS S3 bucket with local credentials. The root `.env` configures the database scripts; Next.js loads app-specific settings from `apps/web/.env.local` when needed. Do not use local credentials for deployed services.
 
-`pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection. The workspace uses Next.js and shadcn/ui for the Vercel application, with Prisma for PostgreSQL. See the implementation plan for completed verification and remaining work.
+`pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection. The workspace uses Next.js and shadcn/ui for the application, with Prisma for PostgreSQL. See the implementation plan for completed verification and remaining work.
 
-## Vercel and live transport
+## Deployment and hackathon scope
 
-The Vercel project root is `apps/web`. Install from the workspace lockfile and generate Prisma before the Next.js build. Hosted credentials and provisioning remain separate setup work.
+The deployment target is Kubernetes operated through Radar. Keep Next.js, shadcn/ui, and Prisma. Cluster access is being arranged; container packaging, GitOps, live transport, and deployment are not yet implemented or verified. `pnpm dev` still runs the existing Next.js foundation locally.
 
-`pnpm dev` runs ordinary Next.js development. The proposed WebSocket upgrade route requires `vercel dev`; that route and local CLI compatibility are milestone 1 work and are not verified by this foundation. No deployment has been created.
+The next checkpoint is **0A: Kubernetes deployment foundation**, followed by live captions in milestone 1. All four hackathon tracks are planned: Radar operations, Dash0 observability, Sonar/Gitar development review, and Elasticsearch passage search. See the [deployment plan](docs/deployment.md) and [integration scope](docs/hackathon.md).
 
 ## Agent skills
 
