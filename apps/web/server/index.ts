@@ -7,6 +7,7 @@ import { WebSocketServer } from "ws";
 import { z } from "zod";
 import { createOpenAI } from "@ai-sdk/openai";
 import { CaptionTransport } from "../src/server/captions/transport";
+import { startTelemetry } from "../src/server/telemetry/runtime";
 import { FrameTransport } from "../src/server/frames/transport";
 import { createIngestAuthority } from "../src/server/captions/access-authority";
 import { elasticsearchClient } from "../src/server/search/es-client";
@@ -21,10 +22,24 @@ import { s3FrameStore } from "../src/server/frames/s3";
 import { readRuntimeEnv } from "./env.js";
 
 const runtime = readRuntimeEnv(process.env);
+// Package metadata is read only when telemetry is enabled; initialization does no network I/O.
+const telemetry = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+  ? startTelemetry(
+      process.env,
+      z
+        .object({ version: z.string() })
+        .parse(
+          JSON.parse(
+            await readFile(new URL("../package.json", import.meta.url), "utf8"),
+          ),
+        ).version,
+    )
+  : undefined;
 const { port, probeToken } = runtime;
 const elasticsearch = runtime.elasticsearch;
 const authority = createIngestAuthority(process.env);
 const captions = new CaptionTransport({
+  ...(telemetry ? { telemetry: telemetry.record } : {}),
   authority,
   ...(elasticsearch
     ? {
@@ -32,6 +47,7 @@ const captions = new CaptionTransport({
           writeSegments: (segments) =>
             new ElasticsearchSegmentSink(
               elasticsearchClient(elasticsearch),
+              telemetry?.record,
             ).writeSegments(segments),
         },
       }
@@ -252,6 +268,7 @@ async function shutdown(exitCode: number) {
   for (const res of streams) res.end();
   for (const ws of wss.clients) ws.close(1012, "service restart");
   await captions.close(5000);
+  await telemetry?.shutdown(2000);
   server.close(() => {
     wss.close(() => {
       void app

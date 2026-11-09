@@ -5,6 +5,7 @@ import {
 } from "@simon-says/contracts/caption";
 
 export interface SegmentSink {
+  readonly kind?: "elasticsearch";
   /** Resolve only after the implementation's persistence boundary completes. */
   writeSegments(segments: readonly TranscriptSegment[]): Promise<void>;
 }

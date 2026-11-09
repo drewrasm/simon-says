@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, WebSocket } from "ws";
@@ -137,6 +138,11 @@ export class CaptionTransport {
     });
     res.flushHeaders();
     this.streams.add(res);
+    const connectionId = randomUUID();
+    this.options.telemetry?.("sse_start", 1, {
+      session_id: id,
+      connection_id: connectionId,
+    });
     const stopChecking = this.recheck(
       () => this.options.authority.authorizeMember(id, req),
       () => res.destroy(),
@@ -156,6 +162,10 @@ export class CaptionTransport {
       subscriber.close();
       unsubscribe();
       this.streams.delete(res);
+      this.options.telemetry?.("sse_end", 1, {
+        session_id: id,
+        connection_id: connectionId,
+      });
     });
     return true;
   }
@@ -214,6 +224,11 @@ export class CaptionTransport {
   ) {
     let denied = false;
     let sessionEnded = false;
+    const connectionId = randomUUID();
+    this.options.telemetry?.("ingest_start", 1, {
+      session_id: id,
+      connection_id: connectionId,
+    });
     let epoch: number | undefined;
     let received = 0;
     const send = (message: unknown) => {
@@ -314,6 +329,7 @@ export class CaptionTransport {
           session.ended = false;
           session.manager = undefined;
           session.epoch = hello.data.epoch;
+          const managerEpoch = session.epoch;
           if (this.options.model)
             session.manager = new WindowManager({
               ...this.options.managerConfig,
@@ -322,12 +338,20 @@ export class CaptionTransport {
                 session.hub,
                 this.options.sink ?? new InMemorySegmentSink(),
                 session.epoch,
+                this.options.telemetry,
               ),
               hub: session.hub,
               epoch: session.epoch,
               ...(this.options.delay ? { delay: this.options.delay } : {}),
               ...(this.options.telemetry
-                ? { telemetry: this.options.telemetry }
+                ? {
+                    telemetry: (metric, value, metadata) =>
+                      this.options.telemetry?.(metric, value, {
+                        session_id: id,
+                        window_id: `${managerEpoch}`,
+                        ...metadata,
+                      }),
+                  }
                 : {}),
             });
         }
@@ -398,6 +422,10 @@ export class CaptionTransport {
       if (received >= 5) ack();
     });
     ws.once("close", (code) => {
+      this.options.telemetry?.("ingest_end", 1, {
+        session_id: id,
+        connection_id: connectionId,
+      });
       stopChecking();
       clearTimeout(rejectDeadline);
       clearTimeout(helloTimeout);

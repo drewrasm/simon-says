@@ -10,6 +10,7 @@ import {
   type TranscriptSegment,
 } from "@simon-says/contracts/caption";
 import { EventHub } from "./event-hub";
+import type { CaptionTelemetry } from "./telemetry";
 import type { SegmentSink } from "./segment-sink";
 
 export type WindowResult = {
@@ -31,6 +32,7 @@ export class CaptionAssembler {
     private readonly hub: EventHub,
     private readonly sink: SegmentSink,
     private readonly epoch: number,
+    private readonly telemetry?: CaptionTelemetry,
   ) {}
 
   cancel() {
@@ -103,10 +105,20 @@ export class CaptionAssembler {
           sessionId: this.hub.sessionId,
           cursor: "validation",
         });
-        await this.sink.writeSegments(segments);
+        const started = performance.now();
+        try {
+          await this.sink.writeSegments(segments);
+        } finally {
+          if (this.sink.kind === "elasticsearch")
+            this.telemetry?.(
+              "es_write_latency_ms",
+              performance.now() - started,
+            );
+        }
         if (this.enabled) this.hub.publish(event);
       } catch {
         if (!this.enabled) return;
+        this.telemetry?.("errors", 1, { error_code: "segment_sink_failed" });
         this.hub.publish({
           kind: "capture.state",
           session: "degraded",
@@ -120,6 +132,7 @@ export class CaptionAssembler {
   }
 
   private gap(result: WindowResult) {
+    this.telemetry?.("gaps", 1);
     this.hub.publish({
       kind: "caption.gap",
       epoch: this.epoch,
