@@ -133,6 +133,19 @@ export const createRecap = async ({
   }
 };
 
+const frameShownAt = (
+  frames: SelectedBookmark["evidence"]["frames"],
+  atMs: number,
+) =>
+  frames.reduce<(typeof frames)[number] | undefined>(
+    (shown, frame) =>
+      frame.capturedAtMs <= atMs &&
+      frame.capturedAtMs >= (shown?.capturedAtMs ?? -1)
+        ? frame
+        : shown,
+    undefined,
+  )?.frameId ?? null;
+
 export const validateTakeaways = (
   output: z.infer<typeof modelRecapSchema>,
   bookmarks: SelectedBookmark[],
@@ -155,10 +168,7 @@ export const validateTakeaways = (
           segmentRevision: segment.revision,
           range: segment.range,
           excerpt: segment.text.slice(offset, offset + citation.excerpt.length),
-          frameId:
-            bookmark.evidence.frames.find(
-              (f) => f.capturedAtMs <= segment.range.endMs,
-            )?.frameId ?? null,
+          frameId: frameShownAt(bookmark.evidence.frames, segment.range.endMs),
         },
       ];
     });

@@ -170,6 +170,26 @@ describe("recap generation and citations", () => {
     ]);
   });
 
+  it("cites the stored frame shown when the cited segment ends", () => {
+    const frames = [
+      { frameId: "frame-after", capturedAtMs: 5_000, imageUrl: null },
+      { frameId: "frame-at-start", capturedAtMs: 0, imageUrl: null },
+      { frameId: "frame-during", capturedAtMs: 2_000, imageUrl: null },
+    ];
+    const [takeaway] = validateTakeaways(syntheticRecapOutput(selection.id), [
+      { ...selection, evidence: { ...selection.evidence, frames } },
+    ]);
+    expect(takeaway?.citations[0]?.frameId).toBe("frame-during");
+
+    const [uncovered] = validateTakeaways(syntheticRecapOutput(selection.id), [
+      {
+        ...selection,
+        evidence: { ...selection.evidence, frames: [frames[0]!] },
+      },
+    ]);
+    expect(uncovered?.citations[0]?.frameId).toBeNull();
+  });
+
   it("fails when every citation is invalid", async () => {
     model.mockResolvedValue(syntheticRecapOutput(randomUUID()));
     await generateRecap(id);
