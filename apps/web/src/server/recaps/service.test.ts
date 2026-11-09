@@ -5,6 +5,7 @@ import {
   exportRecapMarkdown,
   generateRecap,
   getRecap,
+  limitPassages,
   validateTakeaways,
 } from "./service";
 import { generateTakeaways } from "./model";
@@ -20,6 +21,7 @@ const { recap, bookmark, membership, transaction } = vi.hoisted(() => ({
     findUnique: vi.fn(),
     findUniqueOrThrow: vi.fn(),
     create: vi.fn(),
+    count: vi.fn(),
     updateMany: vi.fn(),
   },
   bookmark: { findMany: vi.fn() },
@@ -68,8 +70,9 @@ beforeEach(() => {
   recap.findUniqueOrThrow.mockResolvedValue(record);
   recap.updateMany.mockResolvedValue({ count: 1 });
   recap.create.mockResolvedValue(record);
+  recap.count.mockResolvedValue(0);
   transaction.mockImplementation(async (callback) =>
-    callback({ recap, bookmark }),
+    callback({ recap, bookmark, $executeRaw: vi.fn() }),
   );
   model.mockResolvedValue(syntheticRecapOutput(selection.id));
 });
@@ -243,6 +246,26 @@ describe("recap generation and citations", () => {
     expect(recap.updateMany).toHaveBeenCalledTimes(writes);
   });
 
+  it("sends a bounded prefix of whole passages in selection order", async () => {
+    const passage = (text: string) => ({
+      bookmarkId: selection.id,
+      segmentId: text.slice(0, 1),
+      segmentRevision: 1,
+      text,
+    });
+    const passages = [
+      passage("a".repeat(50_000)),
+      passage("b".repeat(20_000)),
+      passage("c"),
+      passage("d"),
+    ];
+    expect(limitPassages(passages)).toEqual(passages.slice(0, 1));
+    const short = Array.from({ length: 10_000 }, () => passage("x"));
+    expect(JSON.stringify(limitPassages(short)).length).toBeLessThanOrEqual(
+      60_000,
+    );
+  });
+
   it("claims pending work once", async () => {
     recap.updateMany.mockResolvedValue({ count: 0 });
     await generateRecap(id);
@@ -275,6 +298,24 @@ describe("owner-only creation and reads", () => {
         status: "pending",
       },
     });
+  });
+
+  it("rejects a new operation while the owner's recap is active in the session", async () => {
+    recap.findUnique.mockResolvedValue(null);
+    recap.count.mockResolvedValue(1);
+    await expect(createRecap(options)).rejects.toMatchObject({
+      status: 429,
+      code: "recap_in_progress",
+    });
+    expect(recap.count).toHaveBeenCalledWith({
+      where: {
+        ownerPrincipalId: principalId,
+        sessionId,
+        status: { in: ["pending", "running"] },
+        updatedAt: { gt: expect.any(Date) },
+      },
+    });
+    expect(recap.create).not.toHaveBeenCalled();
   });
 
   it("hides missing, cross-owner and cross-session bookmarks", async () => {

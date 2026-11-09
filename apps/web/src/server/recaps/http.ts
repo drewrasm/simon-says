@@ -15,6 +15,10 @@ import {
   getRecap,
 } from "./service";
 
+// One replica today, so an in-process counter bounds concurrent model calls.
+const maxActiveGenerations = 4;
+let activeGenerations = 0;
+
 const handleRecap = async (operation: () => Promise<Response>) => {
   try {
     return await operation();
@@ -42,14 +46,31 @@ export const handleCreateRecap = (request: Request, sessionId: string) =>
     const owner = await principalId();
     await requireMembership({ principalId: owner, sessionId });
     const body = await parseBody(request, createRecapRequestSchema);
-    const result = await createRecap({
-      principalId: owner,
-      sessionId,
-      request: body,
-    });
-    if (result.created)
-      after(() => generateRecap(result.response.id).catch(() => undefined));
-    return respond(result.response, result.created ? 201 : 200);
+    if (activeGenerations >= maxActiveGenerations)
+      throw new AccessError(429, "recaps_busy");
+
+    activeGenerations += 1;
+    let scheduled = false;
+    try {
+      const result = await createRecap({
+        principalId: owner,
+        sessionId,
+        request: body,
+      });
+      if (result.created) {
+        after(() =>
+          generateRecap(result.response.id)
+            .catch(() => undefined)
+            .finally(() => {
+              activeGenerations -= 1;
+            }),
+        );
+        scheduled = true;
+      }
+      return respond(result.response, result.created ? 201 : 200);
+    } finally {
+      if (!scheduled) activeGenerations -= 1;
+    }
   });
 
 export const handleGetRecap = (_request: Request, id: string) =>

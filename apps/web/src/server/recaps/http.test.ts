@@ -11,6 +11,7 @@ import { handleCreateRecap, handleExportRecap, handleGetRecap } from "./http";
 import { readPrincipal } from "../access/principal";
 import { requireMembership } from "../access/membership";
 import { AccessError } from "../access/errors";
+import { maxRecapBookmarks } from "@simon-says/contracts/recap";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/server", () => ({ after: vi.fn() }));
@@ -60,6 +61,38 @@ it("returns the persisted ID and schedules generation after the response", async
   if (typeof task !== "function") throw new Error("Expected an after callback");
   await task();
   expect(generateRecap).toHaveBeenCalledWith(id);
+});
+
+it("fails fast when the process already runs its maximum generations", async () => {
+  const responses = [];
+  for (let count = 0; count < 5; count += 1)
+    responses.push(await handleCreateRecap(request(), sessionId));
+  expect(responses.map((response) => response.status)).toEqual([
+    201, 201, 201, 201, 429,
+  ]);
+  expect(await responses[4]?.json()).toEqual({ error: "recaps_busy" });
+  expect(createRecap).toHaveBeenCalledTimes(4);
+
+  const tasks = vi.mocked(after).mock.calls.map(([task]) => task);
+  await Promise.all(
+    tasks.map((task) => (typeof task === "function" ? task() : task)),
+  );
+  expect((await handleCreateRecap(request(), sessionId)).status).toBe(201);
+  const last = vi.mocked(after).mock.calls.at(-1)?.[0];
+  if (typeof last === "function") await last();
+});
+
+it("rejects more selections than a recap accepts", async () => {
+  const bookmarks = Array.from({ length: maxRecapBookmarks + 1 }, () => ({
+    bookmarkId: randomUUID(),
+    expectedRevision: 1,
+  }));
+  const response = await handleCreateRecap(
+    request({ ...body, bookmarks }),
+    sessionId,
+  );
+  expect(response.status).toBe(400);
+  expect(createRecap).not.toHaveBeenCalled();
 });
 
 it("does not schedule duplicate work for an operation retry", async () => {

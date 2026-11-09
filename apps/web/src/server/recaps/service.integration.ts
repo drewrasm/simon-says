@@ -220,6 +220,24 @@ describe("recaps with real local Postgres and synthetic resolved evidence/model"
     expect((await createRecap(request)).response).toEqual(results[0]?.response);
   });
 
+  it("allows one active recap per owner and session", async () => {
+    const results = await Promise.allSettled([
+      createRecap(options()),
+      createRecap(options()),
+    ]);
+    const created = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    expect(created).toHaveLength(1);
+    expect(
+      results.find((result) => result.status === "rejected"),
+    ).toMatchObject({ reason: { status: 429, code: "recap_in_progress" } });
+    expect(await database.recap.count({ where: { sessionId } })).toBe(1);
+
+    await generateRecap(created[0]!.response.id);
+    expect((await createRecap(options())).created).toBe(true);
+  });
+
   it("hides other owners, host bypass, cross-session IDs and reused cross-session operations", async () => {
     const request = options();
     const {

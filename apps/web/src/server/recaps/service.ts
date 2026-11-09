@@ -13,9 +13,16 @@ import { getDatabase } from "../access/database";
 import { AccessError } from "../access/errors";
 import { requireMembership } from "../access/membership";
 import { RevisionConflict } from "../bookmarks/service";
-import { generateTakeaways, modelRecapSchema } from "./model";
+import {
+  generateTakeaways,
+  modelRecapSchema,
+  type SelectedPassage,
+} from "./model";
 
-const snapshotSchema = createRecapRequestSchema.shape.bookmarks;
+// Stored snapshots are not re-limited by the request maximum.
+const snapshotSchema = z.array(
+  createRecapRequestSchema.shape.bookmarks.element,
+);
 const evidenceSchema = bookmarkResponseSchema.shape.evidence;
 type RecapRecord = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getDatabase>["recap"]["findUnique"]>>
@@ -34,6 +41,7 @@ type CreateOptions = {
 };
 const generationTimeoutMs = 45_000;
 const interruptedAfterMs = 90_000;
+const maxPassageCharacters = 60_000;
 
 const requireId = (id: string) => {
   if (!z.uuid().safeParse(id).success) throw new AccessError(404, "not_found");
@@ -109,6 +117,19 @@ export const createRecap = async ({
           });
         }
       }
+
+      // Serializes concurrent creates for one owner and session so only one can become active.
+      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${principalId.toLowerCase()}), hashtext(${sessionId.toLowerCase()}))`;
+      const active = await transaction.recap.count({
+        where: {
+          ownerPrincipalId: principalId,
+          sessionId,
+          status: { in: ["pending", "running"] },
+          updatedAt: { gt: new Date(Date.now() - interruptedAfterMs) },
+        },
+      });
+      if (active) throw new AccessError(429, "recap_in_progress");
+
       return transaction.recap.create({
         data: {
           ownerPrincipalId: principalId,
@@ -121,9 +142,14 @@ export const createRecap = async ({
     });
     return { response: createRecapResponseSchema.parse(record), created: true };
   } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "P2002"))
-      throw error;
+    const duplicate =
+      error instanceof Error && "code" in error && error.code === "P2002";
+    // A concurrent retry of the same operation sees its winner as the active recap.
+    const busy = error instanceof AccessError && error.status === 429;
+    if (!duplicate && !busy) throw error;
+
     const winner = await database.recap.findUnique({ where: operation });
+    if (!winner && busy) throw error;
     if (!winner || winner.sessionId !== sessionId)
       throw new AccessError(404, "not_found");
     return {
@@ -175,6 +201,15 @@ export const validateTakeaways = (
     return citations.length ? [{ text: takeaway.text, citations }] : [];
   });
 
+// Budgets the serialized prompt and keeps whole passages in selection order so cited excerpts stay verbatim.
+export const limitPassages = (passages: SelectedPassage[]) => {
+  let characters = 0;
+  return passages.filter((passage) => {
+    characters += JSON.stringify(passage).length + 1;
+    return characters <= maxPassageCharacters;
+  });
+};
+
 export const generateRecap = async (id: string) => {
   const database = getDatabase();
   const claimed = await database.recap.updateMany({
@@ -201,22 +236,27 @@ export const generateRecap = async (id: string) => {
       });
       return;
     }
-    const bookmarks = records.map((bookmark) => ({
-      id: bookmark.id,
-      revision: bookmark.revision,
-      evidence: evidenceSchema.parse(
-        bookmark.evidence ?? { segments: [], frames: [] },
+    const snapshotOrder = snapshot.map((selected) => selected.bookmarkId);
+    const bookmarks = records
+      .sort((a, b) => snapshotOrder.indexOf(a.id) - snapshotOrder.indexOf(b.id))
+      .map((bookmark) => ({
+        id: bookmark.id,
+        revision: bookmark.revision,
+        evidence: evidenceSchema.parse(
+          bookmark.evidence ?? { segments: [], frames: [] },
+        ),
+      }));
+    const passages = limitPassages(
+      bookmarks.flatMap((bookmark) =>
+        bookmark.evidence.segments
+          .filter((segment) => segment.text.trim())
+          .map((segment) => ({
+            bookmarkId: bookmark.id,
+            segmentId: segment.segmentId,
+            segmentRevision: segment.revision,
+            text: segment.text,
+          })),
       ),
-    }));
-    const passages = bookmarks.flatMap((bookmark) =>
-      bookmark.evidence.segments
-        .filter((segment) => segment.text.trim())
-        .map((segment) => ({
-          bookmarkId: bookmark.id,
-          segmentId: segment.segmentId,
-          segmentRevision: segment.revision,
-          text: segment.text,
-        })),
     );
     if (!passages.length) {
       await database.recap.updateMany({
