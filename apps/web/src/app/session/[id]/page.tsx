@@ -3,7 +3,6 @@ import { AccessError } from "@/server/access/errors";
 import { requireMembership } from "@/server/access/membership";
 import { readPrincipal } from "@/server/access/principal";
 import { listBookmarks } from "@/server/bookmarks/service";
-import { AskPanel } from "./ask-panel";
 import { ClipProvider } from "./clip-context";
 import { ClipControls } from "./clip-controls";
 import { ClipReader } from "./clip-reader";
@@ -49,7 +48,6 @@ const SessionPage = async ({ params }: SessionPageProps) => {
         title={session.title}
         status={session.status}
         noteCount={notes.length}
-        toolbarActions={<AskPanel sessionId={id} />}
         notesPanel={
           <NotesPanel
             sessionId={id}

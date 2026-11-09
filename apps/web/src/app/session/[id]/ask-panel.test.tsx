@@ -19,9 +19,10 @@ it("makes source timestamps clickable and leaves invented model citations inert"
     />,
   );
   expect(html).toContain('href="#t=192000"');
-  expect(html).toContain("[03:12]</a>");
+  expect(html).toContain("00:03:12</a>");
   expect(html).toContain("[09:99]");
   expect(html).not.toContain('href="#t=599000"');
   expect(html).not.toContain("<script>");
-  expect(html).toContain('aria-label="Caption sources"');
+  expect(html).toContain('aria-label="Jump to 00:03:12 in the transcript"');
+  expect((html.match(/<a /g) ?? []).length).toBe(1);
 });
