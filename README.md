@@ -43,7 +43,34 @@ Open the local URL printed by Next.js. Run `pnpm services:down` to stop the loca
 
 ## Deployment and hackathon scope
 
-The deployment target is Kubernetes operated through Radar. Keep Next.js, shadcn/ui, and Prisma. The team cluster is provisioned; container packaging, GitOps, live transport, and deployment are not yet implemented or verified. `pnpm dev` still runs the existing Next.js foundation locally.
+The deployment target is Kubernetes operated through Radar. The team cluster is provisioned. The local 0A foundation includes an explicitly compiled Next.js custom server, non-root container, offline manifests, and build-only CI. GitOps activation and cluster deployment require separate authorization. See the [0A evidence](docs/implementation-plan.md#checkpoint-0a-local-evidence) for verification and remaining gates.
+
+### Local container and transport probes
+
+```sh
+docker build -t simon-says:checkpoint-0a .
+docker run -d --name simon-says-0a -p 127.0.0.1:18080:8080 \
+  -e DATABASE_URL=postgresql://dummy:dummy@127.0.0.1:5432/dummy \
+  -e PROBE_TOKEN=local-checkpoint-0a-probe-token-12345 simon-says:checkpoint-0a
+curl -f http://127.0.0.1:18080/healthz
+curl -f http://127.0.0.1:18080/readyz
+curl -f http://127.0.0.1:18080/
+PROBE_TOKEN=local-checkpoint-0a-probe-token-12345 node scripts/probe.mjs http://127.0.0.1:18080
+curl -N -H 'Authorization: Bearer local-checkpoint-0a-probe-token-12345' \
+  http://127.0.0.1:18080/api/probe/sse
+docker exec simon-says-0a id
+docker stop --time 20 simon-says-0a
+docker logs simon-says-0a
+docker rm simon-says-0a
+docker buildx build --platform linux/amd64 --load -t simon-says:checkpoint-0a-amd64 .
+KUBECONFIG=/dev/null kubectl kustomize infra/k8s
+```
+
+Wait for `Next prepared` in container logs before probing readiness. The dummy database URL requires no running database for this app shell. `/healthz` checks process liveness; `/readyz` checks Next preparation and becomes unavailable during shutdown. Provider/database health is excluded until persistence-backed routes exist.
+
+These are **transport probes**, not product capture APIs. Set server-only `PROBE_TOKEN` (32–128 URL-safe characters) to enable them; leave it unset to disable them. Use a fresh secret outside local development. SSE requires a Bearer header; WebSocket clients offer subprotocols `simon-probe` and `token.<PROBE_TOKEN>` (the server selects only `simon-probe`). Never put tokens in URLs or logs. Probes accept only fixed `ping` → `pong` and heartbeat messages, cap connections at 16 combined, and end after 30 seconds. SSE bypasses compression and sets `X-Accel-Buffering: no`. The Node 22 script checks unauthorized SSE and incremental delivery too.
+
+`pnpm dev` uses the custom entry point with Next HMR (default port 8080; override with `PORT`). Server TypeScript changes require restarting it. `pnpm build` generates Prisma, builds Next, and compiles the server into `apps/web/dist`; `pnpm start` runs it without `tsx`. No standalone output is used. SIGTERM ends SSE, closes WebSockets with code 1012, and drains for at most 10 seconds inside the manifest's 20-second grace period.
 
 The next checkpoint is **0A: Kubernetes deployment foundation**, followed by live captions in milestone 1. All four hackathon tracks are planned: Radar operations, Dash0 observability, Sonar/Gitar development review, and Elasticsearch as the core shared-content store and passage search layer. See the [deployment plan](docs/deployment.md) and [integration scope](docs/hackathon.md).
 

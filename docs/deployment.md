@@ -1,6 +1,6 @@
 # Kubernetes deployment plan
 
-Status: selected target, pending implementation and verification. The team cluster is provisioned; see [team environment](#team-environment). Milestone 0 remains locally verified; checkpoint 0A prepares this deployment. This document does not authorize provisioning, publishing, GitOps activation, or deployment.
+Status: checkpoint 0A local runtime, image, manifests, and build-only CI implemented; see [local evidence](implementation-plan.md#checkpoint-0a-local-evidence). The team cluster is provisioned; see [team environment](#team-environment). App deployment and provider connectivity remain unverified. This document does not authorize provisioning, publishing, GitOps activation, or deployment.
 
 ## Target and platform facts
 
@@ -36,9 +36,19 @@ The team cluster budget is 2 CPU / 4 GiB requests and 4 CPU / 8 GiB limits total
 
 Inject server-only `ELASTICSEARCH_URL` and `ELASTICSEARCH_API_KEY` from a cluster Secret at runtime. Scope the key to the required project/index ingest, read, and cleanup operations; confirm exact privileges before milestone 1. Permit and verify TLS network egress from the app/worker/cleanup workloads to Elastic Cloud, including the chosen inference endpoint’s network requirements. Never put keys in images, build arguments, client props, or `NEXT_PUBLIC_` variables. Agent access to the project is verified; app key scope and cluster connectivity remain unverified.
 
-## Proposed implementation
+## Local foundation
 
-Track 2 owns runtime, image, manifests, and CI. Track 3 owns database schema, migration contents, storage requirements, and jobs. Track 1 verifies the delivered UI. These are implementation proposals to validate in checkpoint 0A:
+`apps/web/server/index.ts` owns HTTP and upgrades. Next builds normally (no standalone output); TypeScript explicitly compiles the server, and `pnpm deploy --prod --legacy` packages its production dependency closure. The runtime image contains the build and production dependencies, runs as UID/GID 1000, and excludes environment files. Node 22.22.0 and pnpm 11.24.0 are pinned. Prisma generation is a build step; the current shell does not import the database client, and the runtime is not a migration image.
+
+Readiness currently means Next is prepared and shutdown has not started. Liveness means the HTTP process is alive, including during preparation. External providers and persistence are deliberately excluded until core routes require them. Optional Secret references do not verify provider configuration or connectivity. `PORT` and the opt-in probe credential are validated at startup without logging values. Provider validation belongs at each provider's future initialization boundary.
+
+The content-free authenticated transport probes, bounds, commands, and shutdown behavior are documented in [README](../README.md#local-container-and-transport-probes). They prove transport only; product identity, membership, leases, replay, and revocation remain milestone 1 work. Unknown production upgrades are rejected before handshake. Development forwards Next's HMR upgrades after preparation.
+
+`infra/k8s` renders the app, Service `app:80` → 8080, starter HTTPRoute, and a one-instance CloudNativePG database. `infra/argocd/application.yaml` points at this repository and `infra/k8s` but has **no automatic sync policy** and has never been applied. The migration outline is commented and excluded from kustomization. CI on PRs and pushes installs, checks, builds Next/server and the image, and renders offline; it has read-only repository permissions and no publishing or deployment steps.
+
+## Delivery responsibilities
+
+Track 2 owns runtime, image, manifests, and CI. Track 3 owns database schema, migration contents, storage requirements, and jobs. Track 1 verifies the delivered UI. The following includes local implementation and pending operator/product work:
 
 1. Build from the repository root using the pinned Node/pnpm versions and frozen workspace lockfile. Generate Prisma and build Next.js. Package the required runtime files and workspace dependencies in a non-root Linux image; verify the cluster CPU architecture. Never include `.env` or provider credentials.
 2. Use one custom Node entry point for Next.js HTTP and authenticated WebSocket upgrades. Compile/package that entry point explicitly. Next.js [custom-server guidance](https://nextjs.org/docs/app/guides/custom-server) warns that standalone output does not trace custom server files. Prove this combination before finalizing the Dockerfile. Preserve development HMR and add a real local ingest command when implemented.
