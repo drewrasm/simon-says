@@ -127,6 +127,13 @@ export const useMicrophone = () => {
     [stop],
   );
 
+  /** Turns the test off, for example before real capture opens the device. */
+  const release = useCallback(() => {
+    attempt.current += 1;
+    stop();
+    setStatus("idle");
+  }, [stop]);
+
   useEffect(
     () => () => {
       attempt.current += 1;
@@ -135,5 +142,5 @@ export const useMicrophone = () => {
     [stop],
   );
 
-  return { status, devices, deviceId, level, start };
+  return { status, devices, deviceId, level, start, release };
 };

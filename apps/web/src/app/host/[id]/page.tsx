@@ -33,6 +33,7 @@ const HostPage = async ({ params }: HostPageProps) => {
   const { session } = membership;
   return (
     <HostSession
+      sessionId={id}
       title={session.title}
       status={session.status}
       joinPath={`/join/${session.inviteCode}`}

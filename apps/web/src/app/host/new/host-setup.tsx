@@ -5,7 +5,7 @@ import {
   createSessionResponseSchema,
 } from "@simon-says/contracts/session";
 import { Alert, AlertDescription } from "@simon-says/ui/components/alert";
-import { Button } from "@simon-says/ui/components/button";
+import { Button, buttonVariants } from "@simon-says/ui/components/button";
 import {
   Card,
   CardContent,
@@ -13,28 +13,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@simon-says/ui/components/card";
-import { Field, FieldLabel } from "@simon-says/ui/components/field";
-import { Input } from "@simon-says/ui/components/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@simon-says/ui/components/select";
-import { useState } from "react";
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@simon-says/ui/components/field";
+import { Input } from "@simon-says/ui/components/input";
+import Link from "next/link";
+import { useState, type FormEvent } from "react";
 import { BrandMark } from "../../../components/brand-mark";
-import { LevelMeter } from "../../../components/level-meter";
-import { useMicrophone } from "./use-microphone";
-
-const STATUS_MESSAGE = {
-  idle: "Test your microphone to see its level.",
-  requesting: "Waiting for microphone permission…",
-  active: "",
-  denied:
-    "Microphone access was blocked. Allow it in your browser's site settings, then try again.",
-  error: "The microphone stopped or could not be opened. Try again.",
-} as const;
+import { SessionStatusBadge } from "../../../components/session-status-badge";
 
 const TITLE_MAX_LENGTH = 120;
 
@@ -53,146 +41,124 @@ const createSession = async (title: string) => {
 };
 
 export const HostSetup = () => {
-  const { status, devices, deviceId, level, start } = useMicrophone();
-  const active = status === "active";
   const [title, setTitle] = useState("");
-  const [starting, setStarting] = useState(false);
-  const [startFailed, setStartFailed] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createFailed, setCreateFailed] = useState(false);
 
-  const startSession = async () => {
-    setStarting(true);
-    setStartFailed(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setCreating(true);
+    setCreateFailed(false);
     try {
       const { hostPath } = await createSession(title);
       // A full navigation keeps the #token fragment for the host page to read.
       window.location.assign(hostPath);
     } catch {
-      setStartFailed(true);
-      setStarting(false);
+      setCreateFailed(true);
+      setCreating(false);
     }
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-10">
-      <header>
-        <BrandMark />
+    <div className="flex min-h-screen flex-col">
+      <header className="border-b">
+        <div className="mx-auto flex w-full max-w-5xl items-center px-4 py-3 sm:px-6">
+          <Link href="/" className="rounded-md">
+            <BrandMark />
+          </Link>
+        </div>
       </header>
 
-      <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Set up your session
-        </h1>
-        <p className="text-muted-foreground">
-          Choose a microphone, then start. Attendees join by scanning a QR code.
-        </p>
-      </div>
+      <main className="mx-auto grid w-full max-w-5xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-3xl font-semibold tracking-tight">
+              New session
+            </h1>
+            <p className="text-muted-foreground">
+              Name the talk, then open the lobby. You&apos;ll test the
+              microphone there before going live.
+            </p>
+          </div>
 
-      <section aria-labelledby="audio-heading">
-        <Card>
-          <CardHeader>
-            <CardTitle id="audio-heading">Microphone</CardTitle>
-            <CardDescription>
-              Only this device captures audio. The test below stays in your
-              browser: nothing is recorded or sent.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {active ? (
-              <Field>
-                <FieldLabel htmlFor="mic-select">Input device</FieldLabel>
-                <Select
-                  value={deviceId}
-                  onValueChange={(id) => {
-                    if (id) void start(id);
-                  }}
-                  items={devices.map(({ id, label }) => ({ value: id, label }))}
-                >
-                  <SelectTrigger id="mic-select" className="w-full">
-                    <SelectValue placeholder="Choose a microphone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {devices.map(({ id, label }) => (
-                      <SelectItem key={id} value={id}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            ) : (
-              <div>
-                <Button
-                  variant="outline"
-                  disabled={status === "requesting"}
-                  onClick={() => void start()}
-                >
-                  {status === "denied" || status === "error"
-                    ? "Try again"
-                    : "Test microphone"}
-                </Button>
-              </div>
-            )}
-            <div className="flex items-center gap-3 text-sm">
-              <LevelMeter
-                level={level}
-                label={active ? `Input level ${level} of 5` : "No input"}
-              />
-              <span
-                role="status"
-                className={
-                  status === "denied" || status === "error"
-                    ? "text-destructive"
-                    : "text-muted-foreground"
-                }
-              >
-                {active
-                  ? "Microphone is on. Speak to see the level move."
-                  : STATUS_MESSAGE[status]}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section aria-labelledby="start-heading" className="flex flex-col gap-4">
-        <h2 id="start-heading" className="sr-only">
-          Start session
-        </h2>
-        <Field>
-          <FieldLabel htmlFor="session-title">
-            Session title (optional)
-          </FieldLabel>
-          <Input
-            id="session-title"
-            value={title}
-            maxLength={TITLE_MAX_LENGTH}
-            placeholder="e.g. Scaling caption pipelines"
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </Field>
-        <div>
-          <Button
-            size="lg"
-            disabled={!active || starting}
-            onClick={() => void startSession()}
+          <form
+            onSubmit={(event) => void submit(event)}
+            className="flex flex-col gap-6"
           >
-            {starting ? "Starting…" : "Start session"}
-          </Button>
+            <section aria-labelledby="details-heading">
+              <Card>
+                <CardHeader>
+                  <CardTitle id="details-heading">Details</CardTitle>
+                  <CardDescription>
+                    Guests see this when they join.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Field>
+                    <FieldLabel htmlFor="session-title">
+                      Session title (optional)
+                    </FieldLabel>
+                    <Input
+                      id="session-title"
+                      value={title}
+                      maxLength={TITLE_MAX_LENGTH}
+                      placeholder="e.g. Scaling caption pipelines"
+                      onChange={(event) => setTitle(event.target.value)}
+                    />
+                    <FieldDescription>
+                      Up to {TITLE_MAX_LENGTH} characters.
+                    </FieldDescription>
+                  </Field>
+                </CardContent>
+              </Card>
+            </section>
+
+            {createFailed ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Couldn&apos;t create the session. Check your connection and
+                  try again.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Link href="/" className={buttonVariants({ variant: "ghost" })}>
+                Cancel
+              </Link>
+              <Button type="submit" size="lg" disabled={creating}>
+                {creating ? "Opening lobby…" : "Open lobby"}
+              </Button>
+            </div>
+          </form>
         </div>
-        {startFailed ? (
-          <Alert variant="destructive">
-            <AlertDescription>
-              Couldn&apos;t start the session. Check your connection and try
-              again.
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {!active ? (
-          <p className="text-sm text-muted-foreground">
-            Test your microphone to enable Start.
-          </p>
-        ) : null}
-      </section>
-    </main>
+
+        <aside
+          aria-labelledby="preview-heading"
+          className="flex flex-col gap-3"
+        >
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 id="preview-heading" className="text-sm font-semibold">
+              What guests will see
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              Updates as you type
+            </span>
+          </div>
+          <div className="flex flex-col gap-3 rounded-xl border bg-muted/40 p-5">
+            <div className="flex items-center justify-between gap-2">
+              <BrandMark className="text-sm" />
+              <SessionStatusBadge status="setup" />
+            </div>
+            <p className="text-xl font-semibold tracking-tight break-words">
+              {title.trim() || "Your session"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Captions appear here once you go live.
+            </p>
+          </div>
+        </aside>
+      </main>
+    </div>
   );
 };
