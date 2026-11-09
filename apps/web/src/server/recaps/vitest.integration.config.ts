@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL) {
 
 export default defineConfig({
   test: {
-    include: ["apps/web/src/server/recaps/service.integration.ts"],
+    include: ["apps/web/src/server/recaps/*.integration.ts"],
     fileParallelism: false,
   },
 });
