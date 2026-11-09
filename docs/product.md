@@ -1,6 +1,6 @@
 # Product
 
-Status: planned. Name, shared-session capture, monorepo, Next.js on Vercel, and shadcn/ui are confirmed choices. Runtime behavior is unverified.
+Status: planned. Name, shared-session capture, monorepo, Next.js on Kubernetes operated through Radar, and shadcn/ui are confirmed choices. Runtime behavior is unverified.
 
 ## Experience
 
@@ -9,13 +9,14 @@ Status: planned. Name, shared-session capture, monorepo, Next.js on Vercel, and 
 3. Everyone reads the same captions. Scrolling into history pauses auto-follow; **Return to live** restores it.
 4. **Keep that** marks the previous 30 seconds of the live session. Selecting a transcript paragraph marks that paragraph's source interval instead.
 5. A private card appears immediately, then resolves final text and aligned screenshots. The attendee can edit, trim, extend within available history, delete, or add a note.
-6. A personal recap groups selected evidence into takeaways. Every takeaway links to its passage and relevant images. Export portable HTML with embedded images or text-only Markdown.
+6. Search available session passages by keyword or meaning, inspect the source, and explicitly save a result as a private selection. Show indexing delay or search failure without blocking live captions or saved cards.
+7. A personal recap groups selected evidence into takeaways. Every takeaway links to its passage and relevant images. Export portable HTML with embedded images or text-only Markdown.
 
 Distinguish a saved marker from resolved evidence. Show incomplete transcript, missing screen, disconnected, pending sync, and stale recap states explicitly.
 
 ## MVP
 
-One session, one desktop host, two or three attendee devices, English captions, live and paragraph marks, private notes, screenshots, and an illustrated recap. Support one tested host browser configuration first.
+One session, one desktop host, two or three attendee devices, English captions, live and paragraph marks, private notes, screenshots, passage search, and an illustrated recap. Support one tested host browser configuration first.
 
 Defer voice commands, multiple rooms, video playback, automatic speaker identity, translation, and background mobile capture. Attendee devices do not listen. Automatic repair transcription and screenshot interpretation are stretch work.
 
@@ -33,4 +34,4 @@ Defer voice commands, multiple rooms, video playback, automatic speaker identity
 
 A direct mic improves the source, but cannot guarantee every word is transcribed correctly. Questions outside the mic mix are absent unless repeated. Screenshots cannot recover unheard speech or every brief visual.
 
-Demo one presenter changing from a diagram to a command. Two attendees mark different moments and receive different illustrated recaps. Open each source, reconnect one attendee, and verify the other attendee's private note remains inaccessible. Label fixtures and injected failures.
+Demo one presenter changing from a diagram to a command. Two attendees mark different moments and receive different illustrated recaps. Open each source, reconnect one attendee, and verify the other attendee's private note remains inaccessible. Search for a previously spoken idea, inspect its passage, and save it before generating a recap. Show the four integrations using the [hackathon evidence checklist](hackathon.md). Label fixtures and injected failures.
