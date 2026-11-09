@@ -18,8 +18,10 @@ COPY . .
 RUN pnpm build
 # Explicit production dependency closure, including the compiled custom server.
 # Standalone tracing does not package custom servers. Prisma is generated above;
-# it is not a runtime dependency of the current app shell.
+# the access routes use its client.
+# The database closure (Prisma CLI and migrations) backs the Argo CD migration Job.
 RUN pnpm --filter @simon-says/web deploy --prod --legacy /runtime \
+    && pnpm --filter @simon-says/db deploy --prod --legacy /runtime/migrate \
     && rm -rf apps/web/.next/cache \
     && cp -R apps/web/.next /runtime/.next
 

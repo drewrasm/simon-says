@@ -3,15 +3,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx server/index.ts --dev",
-    "build": "next build && tsc -p tsconfig.server.json",
+    "dev": "node server/build.mjs && node dist/index.js --dev",
+    "build": "next build && node server/build.mjs",
     "start": "NODE_ENV=production node dist/index.js",
     "typecheck": "next typegen && tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/openai": "4.0.111",
     "@simon-says/contracts": "workspace:*",
     "@simon-says/db": "workspace:*",
+    "@simon-says/domain": "workspace:*",
     "@simon-says/ui": "workspace:*",
+    "ai": "7.0.165",
     "cn": "0.5.2",
     "lucide-react": "1.70.0",
     "next": "16.4.5",
@@ -26,6 +29,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.5",
     "@types/ws": "8.18.1",
+    "esbuild": "^0.28.2",
     "tailwindcss": "4.3.5"
   }
 }
