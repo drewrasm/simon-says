@@ -44,6 +44,9 @@ const membership = (overrides: object = {}) => ({
   ...overrides,
 });
 
+const uniqueConflict = () =>
+  Object.assign(new Error("Unique conflict"), { code: "P2002" });
+
 beforeEach(() => vi.resetAllMocks());
 
 describe("createSession", () => {
@@ -58,15 +61,48 @@ describe("createSession", () => {
     const token = response.hostPath.split("#token=")[1] ?? "";
     expect(response.hostPath).toBe(`/host/${sessionId}#token=${token}`);
     expect(response.joinPath).toBe(`/join/${response.inviteCode}`);
+    expect(response.joinCode).toMatch(/^[0-9A-HJKMNP-TV-Z]{6}$/);
     expect(sessionCreate).toHaveBeenCalledWith({
       data: {
         title: "Talk",
         hostPrincipalId: principalId,
         hostLinkTokenHash: hashToken(token),
         inviteCode: response.inviteCode,
+        joinCode: response.joinCode,
         memberships: { create: { principalId, role: "host" } },
       },
     });
+  });
+
+  it("retries a colliding join code with fresh credentials", async () => {
+    sessionCreate
+      .mockRejectedValueOnce(uniqueConflict())
+      .mockResolvedValueOnce({ id: sessionId });
+
+    const response = await createSession({ principalId, request: {} });
+
+    expect(sessionCreate).toHaveBeenCalledTimes(2);
+    const [first, second] = sessionCreate.mock.calls.map(([call]) => call.data);
+    expect(second.joinCode).toBe(response.joinCode);
+    expect(second.inviteCode).not.toBe(first.inviteCode);
+  });
+
+  it("gives up after repeated collisions", async () => {
+    sessionCreate.mockRejectedValue(uniqueConflict());
+
+    await expect(
+      createSession({ principalId, request: {} }),
+    ).rejects.toMatchObject({ code: "P2002" });
+    expect(sessionCreate).toHaveBeenCalledTimes(5);
+  });
+
+  it("does not retry other database errors", async () => {
+    sessionCreate.mockRejectedValue(new Error("connection lost"));
+
+    await expect(createSession({ principalId, request: {} })).rejects.toThrow(
+      "connection lost",
+    );
+    expect(sessionCreate).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -87,6 +123,32 @@ describe("joinSession", () => {
         update: {},
       }),
     );
+  });
+
+  it("resolves a typed join code to the session under the same rules", async () => {
+    sessionFindUnique.mockResolvedValue(liveSession);
+    const attendee = membership();
+    membershipUpsert.mockResolvedValue(attendee);
+
+    await expect(
+      joinSession({ principalId, joinCode: "7KM2QX" }),
+    ).resolves.toEqual({
+      sessionId,
+      membershipId: attendee.id,
+      role: "attendee",
+    });
+    expect(sessionFindUnique).toHaveBeenCalledWith({
+      where: { joinCode: "7KM2QX" },
+    });
+  });
+
+  it("denies an ended session reached by join code with 404", async () => {
+    sessionFindUnique.mockResolvedValue({ ...liveSession, status: "ended" });
+
+    await expect(
+      joinSession({ principalId, joinCode: "7KM2QX" }),
+    ).rejects.toMatchObject({ status: 404, code: "not_found" });
+    expect(membershipUpsert).not.toHaveBeenCalled();
   });
 
   it.each([

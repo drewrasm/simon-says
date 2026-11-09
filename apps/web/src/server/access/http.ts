@@ -89,10 +89,7 @@ export const handleJoinSession = (request: Request) =>
     const principal = await ensurePrincipal({
       secureCookie: requiresSecureCookie(request.url),
     });
-    return joinSession({
-      principalId: principal.id,
-      inviteCode: body.inviteCode,
-    });
+    return joinSession({ principalId: principal.id, ...body });
   });
 
 const hostClaimRequestSchema = z.object({ token: z.string().min(1).max(256) });

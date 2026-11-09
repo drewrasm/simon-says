@@ -5,6 +5,17 @@ const id = transcriptSegmentSchema.shape.sessionId;
 const path = z.string().regex(/^\/(?!\/)/);
 const inviteCode = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
 
+/** Crockford base32 without I, L, O, and U. */
+export const joinCodeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+export const joinCodeLength = 6;
+
+/** Short typed join code; surrounding spaces and lowercase are accepted. */
+export const joinCodeSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(new RegExp(`^[${joinCodeAlphabet}]{${joinCodeLength}}$`));
+
 export const membershipRoleSchema = z.enum(["host", "attendee"]);
 
 export const createSessionRequestSchema = z.object({
@@ -16,9 +27,15 @@ export const createSessionResponseSchema = z.object({
   hostPath: path,
   inviteCode,
   joinPath: path,
+  // Optional so a new client accepts a response from the previous image during a rollout.
+  joinCode: joinCodeSchema.optional(),
 });
 
-export const joinSessionRequestSchema = z.object({ inviteCode });
+/** Exactly one of an invite-link code or a typed join code. */
+export const joinSessionRequestSchema = z.union([
+  z.strictObject({ inviteCode }),
+  z.strictObject({ joinCode: joinCodeSchema }),
+]);
 
 export const joinSessionResponseSchema = z.object({
   sessionId: id,

@@ -154,10 +154,25 @@ describe("access HTTP boundaries", () => {
     });
   });
 
+  it("normalizes a typed join code before joining", async () => {
+    joinSession.mockResolvedValue({ sessionId });
+    const response = await handleJoinSession(request({ joinCode: " 7km2qx" }));
+    expect(response.status).toBe(200);
+    expect(joinSession).toHaveBeenCalledWith({
+      principalId,
+      joinCode: "7KM2QX",
+    });
+  });
+
   it("rejects malformed invite codes and non-UUID session IDs at the boundary", async () => {
-    expect(
-      (await handleJoinSession(request({ inviteCode: "bad" }))).status,
-    ).toBe(400);
+    for (const invalid of [
+      { inviteCode: "bad" },
+      { joinCode: "7KM2QI" },
+      { inviteCode: "a".repeat(32), joinCode: "7KM2QX" },
+    ]) {
+      expect((await handleJoinSession(request(invalid))).status).toBe(400);
+    }
+    expect(joinSession).not.toHaveBeenCalled();
     expect(
       (await handleClaimHost(request({ token: "anything" }), "bad-id")).status,
     ).toBe(404);

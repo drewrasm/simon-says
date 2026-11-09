@@ -4,8 +4,14 @@ import {
   createSessionResponseSchema,
   joinSessionResponseSchema,
   type CreateSessionRequest,
+  type JoinSessionRequest,
 } from "@simon-says/contracts/session";
-import { createToken, hashToken, verifyHostToken } from "./credentials";
+import {
+  createJoinCode,
+  createToken,
+  hashToken,
+  verifyHostToken,
+} from "./credentials";
 import { getDatabase } from "./database";
 import { AccessError } from "./errors";
 
@@ -14,46 +20,66 @@ export type CreateSessionOptions = {
   request: CreateSessionRequest;
 };
 
+const maxCreateAttempts = 5;
+
+const uniqueConflict = (error: unknown) =>
+  error instanceof Error && "code" in error && error.code === "P2002";
+
 export const createSession = async ({
   principalId,
   request,
 }: CreateSessionOptions) => {
-  const token = createToken();
-  const inviteCode = createToken();
-  const session = await getDatabase().$transaction(async (database) =>
-    database.session.create({
-      data: {
-        ...(request.title === undefined ? {} : { title: request.title }),
-        hostPrincipalId: principalId,
-        hostLinkTokenHash: hashToken(token),
-        inviteCode,
-        memberships: { create: { principalId, role: "host" } },
-      },
-    }),
-  );
+  for (let attempt = 1; ; attempt++) {
+    const token = createToken();
+    const inviteCode = createToken();
+    const joinCode = createJoinCode();
 
-  return createSessionResponseSchema.parse({
-    sessionId: session.id,
-    hostPath: `/host/${session.id}#token=${token}`,
-    inviteCode,
-    joinPath: `/join/${inviteCode}`,
-  });
+    try {
+      const session = await getDatabase().$transaction(async (database) =>
+        database.session.create({
+          data: {
+            ...(request.title === undefined ? {} : { title: request.title }),
+            hostPrincipalId: principalId,
+            hostLinkTokenHash: hashToken(token),
+            inviteCode,
+            joinCode,
+            memberships: { create: { principalId, role: "host" } },
+          },
+        }),
+      );
+
+      return createSessionResponseSchema.parse({
+        sessionId: session.id,
+        hostPath: `/host/${session.id}#token=${token}`,
+        inviteCode,
+        joinPath: `/join/${inviteCode}`,
+        joinCode,
+      });
+    } catch (error) {
+      // Join codes are short enough to collide; every credential is regenerated on retry.
+      if (!uniqueConflict(error) || attempt === maxCreateAttempts) throw error;
+    }
+  }
 };
 
 type AdmitMembershipOptions = {
   principalId: string;
 } & (
-  | { role: "attendee"; inviteCode: string }
+  | ({ role: "attendee" } & JoinSessionRequest)
   | { role: "host"; sessionId: string; token: string }
 );
+
+const findAdmissionTarget = (options: AdmitMembershipOptions) => {
+  if (options.role === "host") return { id: options.sessionId };
+  return "joinCode" in options
+    ? { joinCode: options.joinCode }
+    : { inviteCode: options.inviteCode };
+};
 
 const admitMembership = async (options: AdmitMembershipOptions) =>
   getDatabase().$transaction(async (database) => {
     const session = await database.session.findUnique({
-      where:
-        options.role === "attendee"
-          ? { inviteCode: options.inviteCode }
-          : { id: options.sessionId },
+      where: findAdmissionTarget(options),
     });
 
     if (
@@ -93,7 +119,7 @@ const admitMembership = async (options: AdmitMembershipOptions) =>
     return membership;
   });
 
-export type JoinSessionOptions = { principalId: string; inviteCode: string };
+export type JoinSessionOptions = { principalId: string } & JoinSessionRequest;
 
 export const joinSession = async (options: JoinSessionOptions) => {
   const membership = await admitMembership({ ...options, role: "attendee" });

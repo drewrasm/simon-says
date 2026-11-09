@@ -73,6 +73,10 @@ Logan confirmed these on November 9, 2026.
 - Shared-source expiry 24 hours after session end; selected-content expiry 30 days after selection. Confirm permission and cleanup behavior before claiming these guarantees.
 - **Slide glossary and caption correction (proposal, milestones 2–3):** use OpenAI through the AI SDK; choose the cheapest OpenAI model that passes the check at implementation. Extract glossary terms from changed screen frames and correct finalized captions asynchronously, preserving originals and writing new `corrected` revisions. Keep both passes off the live caption path. Treat screen and transcript text as untrusted data, never instructions.
 
+## Open questions
+
+- **Join-code guessing and expiry (sc-113):** six-character join codes give about one billion values (30 bits). `POST /api/join` has no attempt limit, and a code stays valid until its session ends or expires. Decide rate limiting, code expiry, and whether ended sessions release codes with the public-access policy.
+
 ## Selected hackathon integrations
 
 Use the [hackathon integrations doc](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzc1LTA2YmQtNDllNS04NjZhLTg0NmY2NTczYzk5NyI=) as the integration scope and account checklist. Radar owns deployment operations, Dash0 application observability, and Sonar/Gitar development review. Elasticsearch is the core shared-content store and passage retrieval layer. Captions come first; Elasticsearch stores segments from milestone 1, with search and private highlights in milestone 2.
