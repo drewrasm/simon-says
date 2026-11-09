@@ -15,7 +15,7 @@ pnpm db:check
 pnpm --filter @simon-says/db exec prisma migrate status
 ```
 
-To create a migration after editing the schema, run `pnpm --filter @simon-says/db migrate:dev --name <name>`. Track 3 owns migration contents. Track 2's serialized cluster migration Job runs `pnpm --filter @simon-says/db migrate:deploy`.
+To create a migration after editing the schema, run `pnpm --filter @simon-says/db migrate:dev --name <name>`. Track 3 owns migration contents. In the cluster, Argo CD Job `db-migrate` runs `prisma migrate deploy` from this package's production closure in the app image. `prisma` and `dotenv` are production dependencies for that reason. CI applies migrations and runs `pnpm db:check` against a Postgres service before tests.
 
 Import `createDatabaseClient` from `@simon-says/db/client` in server code. The module is guarded by `server-only`; close clients when their owner shuts down. The check command runs with the `react-server` condition so Node can use that guard outside Next.js.
 

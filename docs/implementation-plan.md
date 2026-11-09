@@ -129,7 +129,7 @@ PR #10 was merged with `origin/main` (`7ea1c01`) locally on November 9, 2026, pr
 Owner: Logan. Milestones 1–4 stay open until their deployed gates pass.
 
 - Merged: Track 3 contracts for session, bookmark, search, and recap schemas (PR #11); Prisma models for principals, sessions, memberships, and bookmarks with the first migration (PR #12). The migration was applied to local Postgres; the cluster migration is pending.
-- In progress: device identity, session creation, invitation join, and the membership check (PR #18, open). A migration Job and CI Postgres change is being drafted for Track 2 review.
+- In progress: device identity, session creation, invitation join, and the membership check (PR #18, open). The migration Job and CI Postgres service merged with PR #24.
 
 ## Acceptance fixtures
 
@@ -162,3 +162,9 @@ If the core slice fails, cut voice, OCR, repair transcription, advanced search f
 - Before public access: identity mechanism, host access, invitation expiry, limits, revocation, redaction, and storage policy.
 - Before recap: OpenAI model through the AI SDK, structured output, data handling, budget, and durable job execution.
 - Before deployment: database and private object store, migrations, connection recovery, cleanup scheduling, rollback, and operator ownership. GitOps enablement, publication, and deployment require authorization; routine future pushes may deploy after GitOps is enabled.
+
+## Track 2 automatic deploy-tag merge verification
+
+Local verification on November 9, 2026: frozen-lockfile install and `pnpm check` passed (lint, formatting, strict typechecks, nine Vitest files / 68 tests). `actionlint`, `bash -n scripts/propose-deploy.sh`, and `shellcheck scripts/propose-deploy.sh` passed. The guard's scratch-repository fixtures accepted the tag-only diff and rejected another key, another file, an incorrect SHA, and a file-mode change. CI runs these guard fixtures too. A separate scratch-repository run with a mock GitHub CLI passed existing-PR merge, already-merged retry, closed-PR retry, pause, unsafe-diff skip, and superseded-source closure; this is local simulation, not live GitHub verification.
+
+The release flow now merges only guarded machine-generated tag PRs, with freshness checks, pinned-head merging, retry handling, and the default-enabled `AUTO_DEPLOY` pause variable. See [deployment](deployment.md#release-flow-c1a) and [decisions](decisions.md#c1a-release-tags). Live workflow merging and cluster rollout remain unverified; this work performs no cluster operations, repository setting changes, or PR comments.

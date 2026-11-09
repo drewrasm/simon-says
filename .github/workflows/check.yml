@@ -11,15 +11,28 @@ on:
 permissions:
   contents: read
 
-# Serialize releases, including the mutable main tag. PR checks can be cancelled.
+# Keep the newest main run; superseded releases stop before their deploy merge.
 concurrency:
   group: check-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: simon_says
+          POSTGRES_USER: simon_says
+          POSTGRES_PASSWORD: local-simon-says
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U simon_says -d simon_says"
+          --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      DATABASE_URL: postgresql://simon_says:local-simon-says@127.0.0.1:5432/simon_says
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
@@ -28,12 +41,30 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @simon-says/db migrate:deploy
+      - run: pnpm db:generate
+      - run: pnpm db:check
       - run: pnpm check
+      - name: Test deploy-tag diff guard offline
+        run: python3 scripts/test-deploy-diff.py
       - run: pnpm build
 
   container:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: simon_says
+          POSTGRES_USER: simon_says
+          POSTGRES_PASSWORD: local-simon-says
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U simon_says -d simon_says"
+          --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      DATABASE_URL: postgresql://simon_says:local-simon-says@127.0.0.1:5432/simon_says
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -41,6 +72,10 @@ jobs:
           node-version-file: .node-version
       - name: Build image without publishing
         run: docker build --platform linux/amd64 -t simon-says:ci .
+      - name: Run the migration Job command in the image
+        run: |
+          docker run --rm --network host -w /app/migrate -e DATABASE_URL simon-says:ci \
+            node node_modules/prisma/build/index.js migrate deploy
       - name: Check container transport locally
         env:
           PROBE_TOKEN: local-checkpoint-0a-probe-token-12345
@@ -48,7 +83,7 @@ jobs:
           trap 'docker logs simon-says-ci; docker rm -f simon-says-ci' EXIT
           docker run -d --name simon-says-ci -p 127.0.0.1:8080:8080 \
             -e PROBE_TOKEN -e DATABASE_URL=postgresql://dummy:dummy@127.0.0.1:5432/dummy simon-says:ci
-          for attempt in $(seq 1 30); do
+          for _attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/readyz; then break; fi
             sleep 1
           done
@@ -66,15 +101,19 @@ jobs:
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    concurrency:
+      group: publish-deploy-main
+      cancel-in-progress: true
     permissions:
       contents: write
       packages: write
       pull-requests: write
-      actions: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Skip superseded releases
         id: current
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
@@ -85,6 +124,10 @@ jobs:
             # Capture the diff separately so a Git failure cannot look like no changes.
             source_changes=$(git diff --name-only "$GITHUB_SHA" "$head" -- . ':!infra/k8s/kustomization.yaml')
             if [ -n "$source_changes" ]; then
+              stale=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "deploy/$GITHUB_SHA" --base main --state open --json number --jq '.[].number')
+              if [ -n "$stale" ]; then
+                gh pr close "$stale" --repo "$GITHUB_REPOSITORY"
+              fi
               message="Main advanced with source changes; skipping the deploy PR for $GITHUB_SHA."
               echo "::warning::$message"
               echo "$message" >> "$GITHUB_STEP_SUMMARY"
@@ -111,8 +154,9 @@ jobs:
             -t "$image:$GITHUB_SHA" -t "$image:main" .
           docker push "$image:$GITHUB_SHA"
           docker push "$image:main"
-      - name: Propose immutable deploy tag through a PR
+      - name: Propose and merge immutable deploy tag through a guarded PR
         if: steps.current.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AUTO_DEPLOY: ${{ vars.AUTO_DEPLOY }}
         run: bash scripts/propose-deploy.sh
