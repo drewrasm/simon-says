@@ -1,7 +1,13 @@
 import type { BookmarkResponse } from "@simon-says/contracts/bookmark";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { isClip, momentHref, newestFirst, NotesList } from "./notes-list";
+import {
+  canAddNote,
+  isClip,
+  momentHref,
+  newestFirst,
+  NotesList,
+} from "./notes-list";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: () => {}, push: () => {} }),
@@ -198,6 +204,34 @@ describe("isClip", () => {
         }),
       ),
     ).toBe(false);
+  });
+});
+
+describe("canAddNote", () => {
+  it("waits for a pending Keep that mark's captions before offering a note", () => {
+    const pending = note({
+      note: null,
+      anchor: { kind: "live", markedAtMs: 60_000 },
+      requestedRange: { startMs: 30_000, endMs: 60_000 },
+    });
+    expect(isClip(pending)).toBe(true);
+    expect(canAddNote(pending)).toBe(false);
+  });
+
+  it("offers a note on a paragraph clip without one", () => {
+    expect(
+      canAddNote(
+        note({
+          note: null,
+          anchor: {
+            kind: "paragraph",
+            segmentId: "seg-1",
+            segmentRevision: 1,
+            range: { startMs: 5_000, endMs: 10_000 },
+          },
+        }),
+      ),
+    ).toBe(true);
   });
 });
 

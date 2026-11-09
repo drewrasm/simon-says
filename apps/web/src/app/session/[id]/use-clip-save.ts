@@ -28,6 +28,38 @@ const keyFor = (lines: readonly ClipLine[], note: string) =>
     lines.map(({ segmentId, revision }) => [segmentId, revision]),
   ]);
 
+const lineSet = (lines: readonly ClipLine[]) =>
+  lines
+    .map(({ segmentId, revision }) => `${segmentId}@${revision}`)
+    .sort()
+    .join(",");
+
+/**
+ * Whether a save should continue the existing draft. A retry with the same
+ * lines and note always does. A partly saved draft is finished unless the
+ * caller allows a new selection (`finishLocked: false`) and the lines differ.
+ */
+export const reuseDraft = ({
+  draft,
+  sentKey,
+  key,
+  lines,
+  finishLocked,
+}: {
+  draft: ClipDraft;
+  sentKey: string | null;
+  key: string;
+  lines: readonly ClipLine[];
+  finishLocked: boolean;
+}) => {
+  if (sentKey === key) return true;
+  if (savedCount(draft) === 0) return false;
+  return (
+    finishLocked ||
+    lineSet(draft.parts.map(({ line }) => line)) === lineSet(lines)
+  );
+};
+
 /**
  * Saves a clip of selected lines. A retry of the same lines and note reuses
  * their IDs; once some lines are saved, the clip is locked to finish them.
@@ -46,12 +78,21 @@ export const useClipSave = ({ sessionId }: { sessionId: string }) => {
     setFailure(null);
   };
 
-  /** Saves the clip; resolves to the number of lines saved, or null. */
-  const save = async (lines: readonly ClipLine[], note: string) => {
+  /**
+   * Saves the clip; resolves to the number of lines saved, or null. With
+   * `finishLocked: false` (desktop, where the selection can change after a
+   * failure), a different selection starts a new clip instead of silently
+   * finishing the locked one.
+   */
+  const save = async (
+    lines: readonly ClipLine[],
+    note: string,
+    { finishLocked = true }: { finishLocked?: boolean } = {},
+  ) => {
     if (saving || lines.length === 0) return null;
     const key = keyFor(lines, note);
     const attempt =
-      draft && (partlySaved || sentKey === key)
+      draft && reuseDraft({ draft, sentKey, key, lines, finishLocked })
         ? draft
         : startClip(sessionId, lines, newId);
     setDraft(attempt);

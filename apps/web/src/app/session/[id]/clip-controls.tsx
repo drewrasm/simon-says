@@ -198,7 +198,7 @@ export const ClipControls = ({ sessionId }: { sessionId: string }) => {
   };
 
   const clipNow = async () => {
-    const count = await save(selection, "");
+    const count = await save(selection, "", { finishLocked: false });
     if (count === null) return;
     clearSelection();
     toast.success(clippedMessage(count));

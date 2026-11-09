@@ -36,6 +36,16 @@ export const isClip = (bookmark: BookmarkResponse) =>
   bookmark.evidence.segments.length > 0 ||
   (bookmark.note === null && !isUnpinned(bookmark));
 
+/**
+ * A note can be added once a clip's captions have resolved. A pending Keep that
+ * mark with a note would look exactly like a pinned note (same live anchor and
+ * range), so it would jump to the Notes tab and lose its pending state.
+ */
+export const canAddNote = (bookmark: BookmarkResponse) =>
+  bookmark.note === null &&
+  (bookmark.anchor.kind === "paragraph" ||
+    bookmark.evidence.segments.length > 0);
+
 /** Where to jump back to in the transcript, read by the caption reader. */
 export const momentHref = (bookmark: BookmarkResponse) =>
   `/session/${bookmark.sessionId}#t=${Math.floor(bookmark.requestedRange.startMs)}`;
@@ -112,7 +122,7 @@ const NoteCard = ({ bookmark, showJump }: NoteCardProps) => {
         >
           {bookmark.note}
         </p>
-      ) : clip ? (
+      ) : canAddNote(bookmark) ? (
         <AddNoteInline bookmark={bookmark} />
       ) : null}
       {showJump && !unpinned ? (
