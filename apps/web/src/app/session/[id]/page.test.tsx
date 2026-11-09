@@ -22,6 +22,25 @@ describe("attendee caption reader", () => {
     expect(html).toContain("Waiting for the host");
   });
 
+  it("reads in the dark theme with text size controls and a live indicator", () => {
+    const html = renderToStaticMarkup(
+      <CaptionReader
+        sessionId="s1"
+        title="Keynote"
+        status="live"
+        noteCount={0}
+      />,
+    );
+    expect(html).toMatch(/^<div class="dark /);
+    expect(html).toContain('aria-label="Smaller text"');
+    expect(html).toContain('aria-label="Larger text"');
+    expect(html).toContain("Following live");
+    // Return to live appears only after the reader scrolls away.
+    expect(html).not.toContain("Return to live");
+    // Interim text is never inside the announced log.
+    expect(html).not.toContain("Now</span>");
+  });
+
   it("says when the session has ended", () => {
     const html = renderToStaticMarkup(
       <CaptionReader
