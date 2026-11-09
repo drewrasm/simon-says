@@ -82,7 +82,7 @@ PYTHON
     git config user.name 'github-actions[bot]'
     git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
     git add infra/k8s/kustomization.yaml
-    git commit -m "deploy: $GITHUB_SHA" -m 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>'
+    git commit -m "deploy: $GITHUB_SHA"
     git push origin "HEAD:refs/heads/$branch"
   fi
   body="$work/body"
@@ -93,8 +93,6 @@ Only the app newTag changes. Actions verifies the exact diff and source freshnes
 before merging immediately. Machine-generated single-value tag bumps are exempt
 from Gitar review. AUTO_DEPLOY=false leaves the PR open for manual review.
 Merging this manifest-only PR does not publish again; Argo CD syncs main.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
   existing=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
     --title "deploy: $GITHUB_SHA" --body-file "$body")

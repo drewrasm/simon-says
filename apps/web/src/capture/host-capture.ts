@@ -18,12 +18,6 @@ export type HostCaptureOptions = {
   deviceId?: string;
 };
 
-/** Listing never requests permission. Labels may be empty until the host grants it. */
-export async function listMicrophones(): Promise<MediaDeviceInfo[]> {
-  return (await navigator.mediaDevices.enumerateDevices()).filter(
-    (device) => device.kind === "audioinput",
-  );
-}
 export function microphoneConstraints(
   deviceId?: string,
 ): MediaStreamConstraints {
@@ -54,6 +48,7 @@ export class HostCapture {
   private source: MediaStreamAudioSourceNode | undefined;
   private client: IngestClient;
   private sequencer: FrameSequencer;
+  private clockStartTime: number | undefined;
   private started = false;
   private stopped = false;
   private closing: Promise<void> = Promise.resolve();
@@ -68,6 +63,22 @@ export class HostCapture {
       },
     );
   }
+  /** Same origin as the worklet's first PCM sample; unavailable when audio stops. */
+  getCaptureSampleOffset = (): number | undefined => {
+    if (
+      !this.context ||
+      this.context.state !== "running" ||
+      this.clockStartTime === undefined ||
+      this.stopped
+    )
+      return undefined;
+    return Math.max(
+      0,
+      Math.floor(
+        (this.context.currentTime - this.clockStartTime) * CAPTION_SAMPLE_RATE,
+      ),
+    );
+  };
   getSnapshot = (): CaptureHealth => this.health;
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -90,17 +101,19 @@ export class HostCapture {
     this.update({ mic: "requesting" });
     try {
       // Resume in the gesture's synchronous turn, before the permission prompt.
+      let context: AudioContext;
       try {
-        this.context = new AudioContext({ sampleRate: CAPTION_SAMPLE_RATE });
+        context = new AudioContext({ sampleRate: CAPTION_SAMPLE_RATE });
       } catch (error) {
         if (
           !(error instanceof DOMException) ||
           error.name !== "NotSupportedError"
         )
           throw error;
-        this.context = new AudioContext();
+        context = new AudioContext();
       }
-      const resumed = this.context.resume();
+      this.context = context;
+      const resumed = context.resume();
       // Handle resume rejection even when getUserMedia rejects first.
       void resumed.catch(() => {});
       const stream = await navigator.mediaDevices.getUserMedia(
@@ -116,9 +129,9 @@ export class HostCapture {
           void this.fail();
         };
       await resumed;
-      await this.context.audioWorklet.addModule("/capture/processor.js");
+      await context.audioWorklet.addModule("/capture/processor.js");
       if (this.stopped) return;
-      this.node = new AudioWorkletNode(this.context, "host-pcm", {
+      this.node = new AudioWorkletNode(context, "host-pcm", {
         processorOptions: {
           outputRate: CAPTION_SAMPLE_RATE,
           frameSamples: FRAME_SAMPLES,
@@ -131,6 +144,16 @@ export class HostCapture {
       this.node.port.onmessage = (event: MessageEvent<unknown>) => {
         if (this.stopped) return;
         const data = event.data;
+        if (
+          typeof data === "object" &&
+          data !== null &&
+          "clockStartTime" in data &&
+          typeof data.clockStartTime === "number" &&
+          Number.isFinite(data.clockStartTime)
+        ) {
+          this.clockStartTime = data.clockStartTime;
+          return;
+        }
         if (
           typeof data !== "object" ||
           data === null ||
@@ -152,10 +175,10 @@ export class HostCapture {
         }
       };
       this.client.start();
-      this.source = this.context.createMediaStreamSource(stream);
+      this.source = context.createMediaStreamSource(stream);
       this.source.connect(this.node);
       // Worklet emits silence; connecting keeps it scheduled without mic playback.
-      this.node.connect(this.context.destination);
+      this.node.connect(context.destination);
       this.update({ mic: "live" });
     } catch (error) {
       if (this.stopped) return;

@@ -58,12 +58,14 @@ Private data never enters Elasticsearch. Every source read checks current member
 
 Logan confirmed these on November 9, 2026. Neither decision proves a live integration.
 
-- **Embedding endpoint:** `.jina-embeddings-v5-text-small`, configured through `ELASTICSEARCH_INFERENCE_ID`. Confirm cost and processing settings in the Elastic project before real content is indexed; operator setup is in progress.
+- **Embedding endpoint:** `.jina-embeddings-v5-text-small`, configured through `ELASTICSEARCH_INFERENCE_ID`. Availability and processing settings (zero data retention, AWS `us-west-2`) were confirmed in the Elastic project and operator setup completed on November 9 ([evidence](implementation-plan.md#elastic-cloud-setup-evidence)); the per-token rate is not shown by the inference API.
 - **Recap model:** OpenAI through the AI SDK, reusing `OPENAI_API_KEY` from Secret `app-credentials`. The model id is configurable through server-only `RECAP_MODEL`. Recaps send only the owner's selected passages.
 
 ## Proposed implementation defaults
 
-- **LLM workflows:** recaps use OpenAI through the Vercel AI SDK (`ai`), as [decided](#confirmed-by-the-track-3-owner). Proposal: Agent/tool-loop APIs and durable job execution remain implementation choices; vendoring guidance does not install or validate an integration.
+- **Approximate note clock (Track 1, November 9):** notes pin `markedAtMs` to time since session creation until Track 2 supplies a capture-aligned session clock; see [contracts](contracts.md#track-3-payloads). Notes use Track 3's bookmark API.
+
+- **LLM workflows:** recaps use OpenAI through the Vercel AI SDK (`ai` structured output, no tools), as [decided](#confirmed-by-the-track-3-owner). C4 defaults `RECAP_MODEL` to `gpt-5.4-mini` and runs generation request-scoped through Next.js `after()`; see the [recap contract](contracts.md#track-3-payloads). Proposal: a durable job queue with restart recovery remains an implementation choice.
 
 - Next.js Route Handlers with a custom Node WebSocket entry point, reconnectable SSE, and the confirmed server-only caption adapter. Prove packaging in checkpoint 0A and cross-pod recovery in milestone 1. Propose a durable Postgres event log with bounded polling; leases and replay cannot depend on pod memory.
 - Use CloudNativePG for PostgreSQL; propose private S3-compatible storage, a Postgres-backed job worker, and Kubernetes CronJobs for cleanup. Storage location, job library, capacity, and post-hackathon hosting remain open. Isolate provider adapters from domain rules.
@@ -104,11 +106,15 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 - [Hackathon resources](https://www.wemakedevs.org/hackathons/cnh/resources), [rules](https://www.wemakedevs.org/hackathons/cnh/rules), [schedule](https://www.wemakedevs.org/hackathons/cnh/schedule).
 - [Plaud highlights](https://support.plaud.ai/hc/en-us/articles/63429919023385-Highlight-a-moment-while-recording-for-v4-0-x-or-later): marking recorded moments already exists. Simon Says emphasizes shared session capture with private, illustrated selections; uniqueness is not established.
 
+## Data model audit (November 9, 2026)
+
+The `host` membership is the only source of truth for who hosts a session. The `sessions.hostPrincipalId` column is deprecated and removed over three releases, so every image stays compatible with the one before it: this release makes it nullable and still writes it, and nothing reads it; the next release stops writing it; a later release drops it. Writing it now matters because the previous image's Prisma client declares it non-null and fails to read a session row where it is NULL. A host link legitimately grants host membership to a second device, so there is no one-host unique index. Bookmark anchor and range rules from the bookmark contract are enforced by Postgres CHECK constraints in migration SQL (anchor columns per kind, non-negative and ordered ranges, all-or-nothing actual range, non-negative clock uncertainty), because Prisma cannot express them in the schema; adding them fails if any existing row violates them. Session states are listed once in `sessionStatusSchema`; `capture.state` excludes `expired`, because expired sessions deny stream access.
+
 ## S3 Plan B caption implementation
 
 November 9, 2026: S3 implements the Plan B direction above as a development pipeline. Use AI SDK `experimental_streamTranscribe` with `@ai-sdk/openai`, default `gpt-realtime-whisper`, in consecutive 24 kHz windows. Input close commits each window; prewarm the next call before rotation. SDK versions are pinned in the lockfile; real OpenAI behavior remains unverified. The SDK supplies `MockTranscriptionModelV4`; tests adapt its optional method typing to this repository's `exactOptionalPropertyTypes` setting by exposing only defined methods.
 
-Final publication waits for the segment sink. Sink failure emits degraded state and an exact-range gap, then permits later windows; no final is emitted for failed persistence. The in-memory sink and receipt/replay state are explicitly development-only. Production access is disabled until Track 3/M3 supply authority and durability; the dev flag cannot override this. No provider key or service call is needed for tests. This preserves the shared-content ownership decision above and leaves milestone 1 acceptance open.
+Final publication waits for the segment sink. Sink failure emits degraded state and an exact-range gap, then permits later windows; no final is emitted for failed persistence. The in-memory sink and receipt/replay state are explicitly development-only. The C2 runtime selects Elasticsearch when configured and otherwise visibly degrades the development fallback; see [sink wiring](architecture.md#c2-elasticsearch-segment-sink). Production access is disabled until real authority and deployed durability are verified; the dev flag cannot override this. No provider key or service call is needed for tests. This preserves the shared-content ownership decision above and leaves milestone 1 acceptance open.
 
 ## C1a release tags
 
@@ -128,14 +134,10 @@ Use optional `DEPLOY_TOKEN` for a fine-grained PAT or dedicated installed GitHub
 
 Track 2 supplies strict `segments-v1` and `observations-v1` mappings behind write aliases, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).
 
-The `.jina-embeddings-v5-text-small` default is [decided by Track 3](#confirmed-by-the-track-3-owner), configurable through `ELASTICSEARCH_INFERENCE_ID`. Cost, processing settings, and cloud app-key behavior remain unverified. Local smoke uses `.multilingual-e5-small-elasticsearch`; automatic inference and semantic search passed with zero cluster privileges. The v9 client is pinned to available 9.5.1; cloud 9.7.0 remains an authorized operator verification gate.
+The `.jina-embeddings-v5-text-small` default is [decided by Track 3](#confirmed-by-the-track-3-owner), configurable through `ELASTICSEARCH_INFERENCE_ID`. Processing settings are confirmed in the cloud project ([evidence](implementation-plan.md#elastic-cloud-setup-evidence)); per-token cost and cloud app-key behavior remain unverified. Local smoke uses `.multilingual-e5-small-elasticsearch`; automatic inference and semantic search passed with zero cluster privileges. The v9 client is pinned to available 9.5.1; cloud 9.7.0 remains an authorized operator verification gate.
 
 ## PR #13 caption review decisions (November 9, 2026)
 
 Host WebSocket close code 1000 is end of input until an explicit stop message exists. Other disconnects retain the window for a configurable ten-second grace; an ended epoch requires a higher epoch to restart. Replacement epochs finish previously accepted tails rather than cancelling them. Finishing is bounded at five seconds, including provider and segment-sink completion, then publishes exact-range gaps and suppresses late finals. Shutdown performs that finish while SSE is open within the process drain budget.
 
 SSE snapshots reuse original event cursors and merge retained finals, state, and log in cursor order. Per-subscriber queues pause on drain and cap buffered bytes at 8 MiB, enough for the 500-large-final regression scenario. Overflow preflights whole batches and disconnects only that reader. Replay remains process-local and bounded, not durable history. Deployment caption settings are wired, but development authority is never enabled by the checked-in cluster manifests.
-
-## C2 application telemetry
-
-Use manual OpenTelemetry Node SDK tracing and a private meter provider exporting OTLP HTTP/protobuf directly from the custom server. The cluster cannot support the Dash0 operator's hostPath collector. Enable only with `OTEL_EXPORTER_OTLP_ENDPOINT`; disable resource detection, propagation, auto-instrumentation and log export. A final processor accepts only the caption scope and fixed span names, filters attributes, and discards events, links and exception/status descriptions. Metric labels omit opaque IDs. See the [allowlist](hackathon.md#data-and-failure-boundaries) and [operator setup](deployment.md#dash0-application-otlp-c2). Local verification does not establish live Dash0 connectivity or complete C2/C4 evidence.

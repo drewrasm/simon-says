@@ -7,6 +7,7 @@ const { dependencies } = JSON.parse(
 const bundled = new Set([
   "@simon-says/contracts",
   "@simon-says/domain",
+  "@simon-says/db",
   "server-only",
 ]);
 await build({
@@ -16,6 +17,9 @@ await build({
   platform: "node",
   target: "node22",
   format: "esm",
+  banner: {
+    js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);',
+  },
   // Node cannot load workspace .ts exports. Bundle them AND their transitive
   // dependencies (Zod); external imports must be direct web dependencies.
   external: Object.keys(dependencies).filter((name) => !bundled.has(name)),

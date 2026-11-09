@@ -42,7 +42,6 @@ beforeAll(async () => {
   await database.session.create({
     data: {
       id: sessionId,
-      hostPrincipalId: host,
       hostLinkTokenHash: randomUUID(),
       inviteCode: randomUUID(),
       memberships: {
@@ -258,6 +257,22 @@ describe("bookmarks with real local Postgres and synthetic ES HTTP", () => {
       segmentRevision: 3,
       range: { startMs: 12_000, endMs: 18_000 },
     } as const;
+    fetchMock.mockImplementation(async (url) =>
+      Response.json(
+        syntheticSearchResponse(
+          String(url).includes("simon-says-segments")
+            ? [
+                syntheticSegment({
+                  sessionId,
+                  segmentId: anchor.segmentId,
+                  revision: anchor.segmentRevision,
+                  ...anchor.range,
+                }),
+              ]
+            : [],
+        ),
+      ),
+    );
     const created = await putBookmark({
       ...options,
       request: { ...options.request, anchor },

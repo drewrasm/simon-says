@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import { putBookmarkRequestSchema } from "@simon-says/contracts/bookmark";
+import { SourceUnavailable } from "../evidence/resolve";
 import { AccessError } from "../access/errors";
 import { parseBody, respond } from "../access/http";
 import { readPrincipal } from "../access/principal";
@@ -18,6 +19,8 @@ const handleBookmark = async (operation: () => Promise<Response>) => {
   } catch (error) {
     if (error instanceof AccessError)
       return respond({ error: error.code }, error.status);
+    if (error instanceof SourceUnavailable)
+      return respond({ error: "source_unavailable" }, 503);
     if (error instanceof RevisionConflict) return respond(error.body, 409);
     return respond({ error: "internal_error" }, 500);
   }

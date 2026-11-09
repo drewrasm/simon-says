@@ -437,3 +437,28 @@ it("sends HTTP/protobuf traces and metrics only to a local OTLP receiver", async
     await new Promise<void>((resolve) => receiver.close(() => resolve()));
   }
 });
+
+it("exports Elasticsearch retry and failure counters without identity labels", async () => {
+  const telemetry = memoryTelemetry();
+  try {
+    telemetry.record("es_write_retries", 2, { session_id: "dev" });
+    telemetry.record("es_write_failures", 1, { session_id: "dev" });
+    await telemetry.meters.forceFlush();
+    const metrics = telemetry.metrics
+      .getMetrics()
+      .flatMap((resource) =>
+        resource.scopeMetrics.flatMap((scope) => scope.metrics),
+      );
+    for (const [name, value] of [
+      ["caption.es.write_retries", 2],
+      ["caption.es.write_failures", 1],
+    ]) {
+      expect(
+        metrics.find((metric) => metric.descriptor.name === name)?.dataPoints,
+      ).toMatchObject([{ value, attributes: {} }]);
+    }
+  } finally {
+    await telemetry.traces.shutdown();
+    await telemetry.meters.shutdown();
+  }
+});

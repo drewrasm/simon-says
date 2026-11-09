@@ -2,29 +2,50 @@ import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
-import next from "next";
+import next, { type NextConfig } from "next";
 import { WebSocketServer } from "ws";
+import { z } from "zod";
 import { createOpenAI } from "@ai-sdk/openai";
 import { CaptionTransport } from "../src/server/captions/transport";
-import { DevIngestAuthority } from "../src/server/captions/ingest-authority";
 import { startTelemetry } from "../src/server/telemetry/runtime";
+import { FrameTransport } from "../src/server/frames/transport";
+import { createIngestAuthority } from "../src/server/captions/access-authority";
+import { elasticsearchClient } from "../src/server/search/es-client";
+import { ElasticsearchSegmentSink } from "../src/server/search/elasticsearch-segment-sink";
+import { ElasticsearchObservationSink } from "../src/server/search/elasticsearch-observation-sink";
+import {
+  createFrameUpload,
+  InMemoryObservationSink,
+} from "../src/server/frames/upload";
+import { createFrameAccess } from "../src/server/frames/access-authority";
+import { s3FrameStore } from "../src/server/frames/s3";
 import { readRuntimeEnv } from "./env.js";
 
 const runtime = readRuntimeEnv(process.env);
 const { version } = JSON.parse(await readFile("package.json", "utf8"));
 const telemetry = startTelemetry(process.env, version);
 const { port, probeToken } = runtime;
+const elasticsearch = runtime.elasticsearch;
+const authority = createIngestAuthority(process.env);
 const captions = new CaptionTransport({
   ...(telemetry ? { telemetry: telemetry.record } : {}),
-  authority: new DevIngestAuthority(
-    runtime.captionsDevSession,
-    process.env.NODE_ENV === "production",
-  ),
+  authority,
+  ...(elasticsearch
+    ? {
+        sink: {
+          writeSegments: (segments) =>
+            new ElasticsearchSegmentSink(
+              elasticsearchClient(elasticsearch),
+              telemetry?.record,
+            ).writeSegments(segments),
+        },
+      }
+    : { sinkDegradedReason: "missing_elasticsearch_config" }),
   delay: runtime.captionDelay,
   reconnectGraceMs: runtime.captionReconnectGraceMs,
   ...(runtime.openaiApiKey &&
-  runtime.captionsDevSession &&
-  process.env.NODE_ENV !== "production"
+  (process.env.DATABASE_URL ||
+    (runtime.captionsDevSession && process.env.NODE_ENV !== "production"))
     ? {
         model: createOpenAI({ apiKey: runtime.openaiApiKey }).transcription(
           runtime.captionModel,
@@ -35,12 +56,44 @@ const captions = new CaptionTransport({
 const dev = process.argv.includes("--dev");
 // Read Next's built configuration: runtime needs neither TS config compilation
 // nor standalone's unrelated server.js. This Node entry point is bundled separately.
+const requiredServerFiles = z.object({
+  config: z.custom<NextConfig>(
+    (value) =>
+      typeof value === "object" && value !== null && !Array.isArray(value),
+  ),
+});
 const conf = dev
   ? undefined
-  : JSON.parse(await readFile(".next/required-server-files.json", "utf8"))
-      .config;
-const app = next({ dev, ...(conf ? { conf } : {}) });
+  : requiredServerFiles.parse(
+      JSON.parse(await readFile(".next/required-server-files.json", "utf8")),
+    ).config;
+const app = next({ dev, port, ...(conf ? { conf } : {}) });
 const handle = app.getRequestHandler();
+const frames = new FrameTransport(
+  runtime.frameEnv,
+  new URL(`http://localhost:${port}`).origin,
+  () =>
+    createFrameUpload({
+      access: createFrameAccess(
+        runtime.frameEnv,
+        new URL(`http://localhost:${port}`).origin,
+        authority,
+      ),
+      store: s3FrameStore(runtime.frameEnv),
+      sink: elasticsearch
+        ? {
+            put: (observation) =>
+              new ElasticsearchObservationSink(
+                elasticsearchClient(elasticsearch),
+              ).put(observation),
+          }
+        : new InMemoryObservationSink(),
+      ...(!elasticsearch
+        ? { sinkDegradedReason: "missing_elasticsearch_config" }
+        : {}),
+    }),
+  authority,
+);
 const maxConnections = 16;
 const durationMs = 30_000;
 const drainMs = 10_000;
@@ -64,7 +117,7 @@ function authorized(candidate: string | undefined) {
   );
 }
 
-const server = createServer((req, res) => {
+const server = createServer(async (req, res) => {
   const path = (req.url ?? "/").split("?", 1)[0] ?? "/";
   res.setHeader("Cache-Control", "no-store");
   if (path === "/healthz" || path === "/readyz") {
@@ -82,7 +135,7 @@ const server = createServer((req, res) => {
     res.writeHead(503).end();
     return;
   }
-  if (captions.handleHttp(req, res)) return;
+  if (await captions.handleHttp(req, res)) return;
   if (path === "/api/probe/sse") {
     if (!probeToken) {
       res.writeHead(404).end();
@@ -128,6 +181,7 @@ const server = createServer((req, res) => {
     res.writeHead(426).end();
     return;
   }
+  if (frames.handleHttp(req, res, req.socket.remoteAddress)) return;
   void handle(req, res).catch(() => {
     console.error("HTTP request failed");
     if (!res.headersSent) res.writeHead(500);
@@ -139,13 +193,14 @@ server.on("connection", (socket) => {
   sockets.add(socket);
   socket.once("close", () => sockets.delete(socket));
 });
-server.on("upgrade", (req, socket, head) => {
+server.on("upgrade", async (req, socket, head) => {
   const path = (req.url ?? "/").split("?", 1)[0] ?? "/";
   if (dev && ready && !stopping && path.startsWith("/_next/")) {
     void app.getUpgradeHandler()(req, socket, head);
     return;
   }
-  if (ready && !stopping && captions.handleUpgrade(req, socket, head)) return;
+  if (ready && !stopping && (await captions.handleUpgrade(req, socket, head)))
+    return;
   const protocols =
     req.headers["sec-websocket-protocol"]?.split(",").map((p) => p.trim()) ??
     [];
@@ -221,7 +276,9 @@ async function shutdown(exitCode: number) {
 }
 process.on("SIGTERM", () => void shutdown(0));
 process.on("SIGINT", () => void shutdown(0));
-server.listen(port, "0.0.0.0", () => console.log(`HTTP listening on ${port}`));
+server.listen(port, dev ? "127.0.0.1" : "0.0.0.0", () =>
+  console.log(`HTTP listening on ${port}`),
+);
 try {
   await app.prepare();
   if (!stopping) ready = true;

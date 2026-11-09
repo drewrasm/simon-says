@@ -31,12 +31,21 @@ enum BookmarkCompleteness {
   incomplete
 }
 
+enum RecapStatus {
+  pending
+  running
+  ready
+  failed
+  stale
+}
+
 model Principal {
   id             String       @id @default(uuid()) @db.Uuid
   createdAt      DateTime     @default(now())
   hostedSessions Session[]
   memberships    Membership[]
   bookmarks      Bookmark[]
+  recaps         Recap[]
 
   @@map("principals")
 }
@@ -45,14 +54,16 @@ model Session {
   id                String        @id @default(uuid()) @db.Uuid
   title             String?
   status            SessionStatus @default(setup)
-  hostPrincipalId   String        @db.Uuid
-  hostPrincipal     Principal     @relation(fields: [hostPrincipalId], references: [id])
+  /// Deprecated: the host membership is the source of truth. Still written so older images can read new rows; never read.
+  hostPrincipalId   String?       @db.Uuid
+  hostPrincipal     Principal?    @relation(fields: [hostPrincipalId], references: [id], onDelete: Restrict)
   hostLinkTokenHash String        @unique
   inviteCode        String        @unique
   createdAt         DateTime      @default(now())
   endedAt           DateTime?
   memberships       Membership[]
   bookmarks         Bookmark[]
+  recaps            Recap[]
 
   @@map("sessions")
 }
@@ -97,4 +108,23 @@ model Bookmark {
   @@unique([ownerPrincipalId, operationId])
   @@index([ownerPrincipalId, sessionId])
   @@map("bookmarks")
+}
+
+model Recap {
+  id               String      @id @default(uuid()) @db.Uuid
+  ownerPrincipalId String      @db.Uuid
+  ownerPrincipal   Principal   @relation(fields: [ownerPrincipalId], references: [id])
+  sessionId        String      @db.Uuid
+  session          Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  operationId      String      @db.Uuid
+  bookmarkSnapshot Json
+  status           RecapStatus @default(pending)
+  takeaways        Json        @default("[]")
+  failureReason    String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@unique([ownerPrincipalId, operationId])
+  @@index([ownerPrincipalId, sessionId])
+  @@map("recaps")
 }

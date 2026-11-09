@@ -89,6 +89,8 @@ export function createCaptionTelemetry(
     }),
   };
   const counters = {
+    es_write_retries: meter.createCounter("caption.es.write_retries"),
+    es_write_failures: meter.createCounter("caption.es.write_failures"),
     retries: meter.createCounter("caption.retries"),
     errors: meter.createCounter("caption.errors"),
     gaps: meter.createCounter("caption.gaps"),
@@ -111,6 +113,8 @@ export function createCaptionTelemetry(
     ) {
       histograms[metric].record(value, labels);
     } else if (
+      metric === "es_write_retries" ||
+      metric === "es_write_failures" ||
       metric === "retries" ||
       metric === "errors" ||
       metric === "gaps"

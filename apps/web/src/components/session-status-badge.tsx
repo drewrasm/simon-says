@@ -1,4 +1,4 @@
-import type { SessionStatus } from "@simon-says/contracts/session";
+import type { SessionStatus } from "@simon-says/contracts/session-status";
 import { Badge } from "@simon-says/ui/components/badge";
 import { LiveBadge } from "./live-badge";
 

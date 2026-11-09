@@ -64,7 +64,7 @@ function assertU32(name: string, value: number): void {
   }
 }
 
-export function encodeAudioFrame(frame: AudioFrame): Uint8Array {
+export function encodeAudioFrame(frame: AudioFrame): Uint8Array<ArrayBuffer> {
   assertU32("epoch", frame.epoch);
   assertU32("seq", frame.seq);
   assertU32("sampleOffset", frame.sampleOffset);

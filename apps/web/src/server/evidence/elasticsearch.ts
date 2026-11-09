@@ -23,14 +23,19 @@ type SearchOptions<T> = {
   latestOnly?: boolean;
 };
 
-export const searchSources = async <T>({
-  index,
-  query,
-  sort,
-  schema,
+type RequestOptions = {
+  path: string;
+  body: string;
+  contentType: "application/json" | "application/x-ndjson";
+  signal: AbortSignal;
+};
+
+export const requestElasticsearch = async ({
+  path,
+  body,
+  contentType,
   signal,
-  latestOnly = false,
-}: SearchOptions<T>) => {
+}: RequestOptions): Promise<unknown> => {
   const origin = process.env.ELASTICSEARCH_URL;
   const apiKey = process.env.ELASTICSEARCH_API_KEY;
   if (!origin || !apiKey) throw new Error("Evidence unavailable");
@@ -46,51 +51,59 @@ export const searchSources = async <T>({
   )
     throw new Error("Evidence unavailable");
 
-  const response = await fetch(
-    `${url.origin}/${index}/_search?allow_partial_search_results=false`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `ApiKey ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        size: latestOnly ? 1 : 1000,
-        _source:
-          index === "simon-says-segments"
-            ? [
-                "sessionId",
-                "epoch",
-                "windowId",
-                "segmentId",
-                "revision",
-                "startMs",
-                "endMs",
-                "timing",
-                "text",
-                "provenance",
-                "expiresAt",
-              ]
-            : [
-                "sessionId",
-                "frameId",
-                "captureMs",
-                "captureState",
-                "expiresAt",
-              ],
-        track_total_hits: true,
-        timeout: "1s",
-        query,
-        sort,
-      }),
-      cache: "no-store",
-      redirect: "error",
-      signal,
+  const response = await fetch(`${url.origin}/${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `ApiKey ${apiKey}`,
+      "Content-Type": contentType,
     },
-  );
+    body,
+    cache: "no-store",
+    redirect: "error",
+    signal,
+  });
   if (!response.ok) throw new Error("Evidence unavailable");
+  const result: unknown = await response.json();
+  return result;
+};
 
-  const result = searchResponseSchema.parse(await response.json());
+export const searchSources = async <T>({
+  index,
+  query,
+  sort,
+  schema,
+  signal,
+  latestOnly = false,
+}: SearchOptions<T>) => {
+  const response = await requestElasticsearch({
+    path: `${index}/_search?allow_partial_search_results=false`,
+    contentType: "application/json",
+    signal,
+    body: JSON.stringify({
+      size: latestOnly ? 1 : 1000,
+      _source:
+        index === "simon-says-segments"
+          ? [
+              "sessionId",
+              "epoch",
+              "windowId",
+              "segmentId",
+              "revision",
+              "startMs",
+              "endMs",
+              "timing",
+              "text",
+              "provenance",
+              "expiresAt",
+            ]
+          : ["sessionId", "frameId", "captureMs", "captureState", "expiresAt"],
+      track_total_hits: true,
+      timeout: "1s",
+      query,
+      sort,
+    }),
+  });
+  const result = searchResponseSchema.parse(response);
   if (
     result.timed_out ||
     result._shards.failed ||
