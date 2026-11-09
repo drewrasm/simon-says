@@ -1,16 +1,16 @@
 # Implementation plan
 
-Status: not started. These checkboxes describe outcomes, not permission to implement. Complete one vertical slice before expanding scope.
+Status: milestone 0 is complete with local verification. Milestone 1 is next. These checkboxes describe outcomes, not permission to implement. Complete one vertical slice before expanding scope.
 
 ## Three builder tracks
 
 The [building tracks](building-tracks.md) detail ownership, ordered deliverables, dependencies, and integration checkpoints within the same Next.js app.
 
-| Track | Owns | First working slice |
-| --- | --- | --- |
-| UI | Next.js pages and components, shadcn/ui, host controls, QR join, captions, selection cards, recap views | Two attendees join and read shared captions |
-| Capture and transcription | Browser capture module, Vercel ingest function, source clock, Deepgram adapter, transcript and frame persistence, shared caption feed | One mic produces captions and aligned frames; stop fences ingest |
-| Private highlights and recaps | Identity and membership, owner checks, bookmarks, evidence alignment, notes, recap jobs, exports, data lifecycle | Each attendee saves and reads only their own aligned evidence |
+| Track                         | Owns                                                                                                                                  | First working slice                                              |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| UI                            | Next.js pages and components, shadcn/ui, host controls, QR join, captions, selection cards, recap views                               | Two attendees join and read shared captions                      |
+| Capture and transcription     | Browser capture module, Vercel ingest function, source clock, Deepgram adapter, transcript and frame persistence, shared caption feed | One mic produces captions and aligned frames; stop fences ingest |
+| Private highlights and recaps | Identity and membership, owner checks, bookmarks, evidence alignment, notes, recap jobs, exports, data lifecycle                      | Each attendee saves and reads only their own aligned evidence    |
 
 One builder drives milestone 0 with input from the others. Agree on the first shared contracts before splitting. The capture builder supplies a browser module to the UI builder. The highlights builder supplies membership checks to both tracks. Coordinate changes to contracts and migrations; keep feature modules separate within `apps/web/src/server`.
 
@@ -20,7 +20,7 @@ Integrate shared captions first, private evidence second, and recaps third. Trac
 
 When documenting local setup in milestone 0, distinguish ordinary Next.js development from the proposed WebSocket route's `vercel dev` requirement. Verify local ingest support in milestone 1.
 
-- [ ] **0. Minimal runnable monorepo.** Create needed [workspaces](architecture.md), pin compatible Node/pnpm versions, and generate one lockfile. Configure one Next.js App Router app, strict TypeScript, shadcn/ui, lint/format checks, and Vitest. Add root scripts, `.env.example`, and local Postgres/object-storage configuration. Prove install, typecheck, relevant tests, and build; document real commands in README. Document `apps/web` as the Vercel project root. Keep credentials server-only and verify server/client import boundaries. Do not provision or deploy yet. Complete CI and end-to-end tooling in milestone 5.
+- [x] **0. Minimal runnable monorepo.** Create needed [workspaces](architecture.md), pin compatible Node/pnpm versions, and generate one lockfile. Configure one Next.js App Router app, strict TypeScript, shadcn/ui, lint/format checks, and Vitest. Add root scripts, `.env.example`, and local Postgres/object-storage configuration. Prove install, typecheck, relevant tests, and build; document real commands in README. Document `apps/web` as the Vercel project root. Keep credentials server-only and verify server/client import boundaries. Do not provision or deploy yet. Complete CI and end-to-end tooling in milestone 5.
 - [ ] **1. One host, multiple readers.** Implement host identity, attendee membership, pre-capture/join disclosures, mic/screen checks, capture epochs, the transcription adapter, durable audio and transcript progress, replay events, shared captions, and host stop with persisted end time. Gate: real audio produces captions on two attendee devices through one transcription stream; a real frame carries a matching timestamp; stop ends capture. Verify Vercel WebSocket routing, function-duration reconnects, shared caption delivery across instances, and durable leases before accepting this milestone. Acceptance requires an authorized preview deployment with a database, private storage, and shared event source; local checks alone leave this gate open. Defer menus and dashboards until this works.
 - [ ] **2. Private, aligned highlights.** Extend the session timeline schema with owner-scoped bookmarks and retained selection evidence. Implement live and paragraph anchors, owner status reads, pending states, notes, trimming, deletion, and reconnect replay. Gate: two attendees mark different moments; each gets the correct text/images and cannot read the other's notes.
 - [ ] **3. Illustrated recaps.** Generate only from resolved selected evidence. Select and verify a durable Vercel-compatible job mechanism. Implement owner-only recap reads and status updates, including retry and timeout recovery. Validate references, bind source revisions, and support portable HTML and Markdown export. Gate: distinct selections yield distinct recaps with inspectable passages/images; failures preserve saved evidence.
@@ -28,6 +28,18 @@ When documenting local setup in milestone 0, distinguish ordinary Next.js develo
 - [ ] **5. Demo and delivery.** Add CI and Playwright coverage of the core flow and ownership. Prove documented setup and checks from a clean checkout. Run the actual host/attendee flow on target devices; inspect transcript errors and code-image legibility. Document limitations and AI assistance. Verify Next.js production builds and Vercel deployment configuration before any separately authorized deployment.
 
 After each milestone, record a short evidence note here: verified behavior, checks run, and remaining gaps. Never check a milestone off from source inspection alone.
+
+## Milestone 0 evidence
+
+Verified locally on November 9, 2026 with Node 22.22.0 and pnpm 11.24.0:
+
+- Frozen-lockfile install, peer dependency check, lint, formatting, strict typecheck, Vitest app-shell smoke test, and Next.js production build passed.
+- Development and production servers returned HTTP 200 with the app heading and disabled session action. Production CSS includes app and shared shadcn component classes.
+- Prisma schema validation and client generation passed. Prisma executed `SELECT 1` against local PostgreSQL.
+- Local SeaweedFS accepted signed upload/download and rejected anonymous object reads with HTTP 403. Bucket initialization is repeatable.
+- Independent Terra review completed; setup documentation findings were addressed.
+
+Product capture, provider integrations, Vercel deployment and WebSocket support, visual browser QA, and setup on the other builders' machines remain unverified. No product database models or migrations exist yet. Contracts and domain packages reserve their documented ownership without placeholder business logic.
 
 ## Acceptance fixtures
 

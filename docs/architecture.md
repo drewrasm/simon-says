@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Next.js on Vercel is confirmed. The runtime design below is proposed and unverified. See [decisions](decisions.md) for choices requiring validation.
+Status: the milestone 0 workspace foundation is complete with local verification. Next.js on Vercel and Prisma for PostgreSQL are confirmed. The product runtime design below remains proposed and unverified. See [decisions](decisions.md) for choices requiring validation.
 
 ## Data flow
 
@@ -21,21 +21,21 @@ flowchart TD
 
 ## Monorepo ownership
 
-These paths are planned, not scaffolded. Use pnpm workspaces, one lockfile, and `workspace:` dependencies.
+The workspace uses pnpm, one lockfile, and `workspace:` dependencies. The web, UI, and database foundations are scaffolded. `packages/contracts` and `packages/domain` are reserved packages with README files; their APIs remain unimplemented. Other paths and responsibilities in the table describe planned work.
 
 The [building tracks](building-tracks.md) divide feature ownership, including the UI/capture boundary and shared migration coordination.
 
-| Path | Owns |
-| --- | --- |
-| `apps/web` | Next.js App Router, host and attendee UI, browser capture, server routes, and Vercel deployment |
-| `apps/web/src/server` | Authentication, ingest, caption delivery, provider adapters, and recap jobs |
-| `packages/ui` | shadcn/ui components, theme, shared presentation primitives |
-| `packages/contracts` | Runtime request/event schemas and derived TypeScript types |
-| `packages/domain` | Pure timeline, selection, alignment, and revision rules |
-| `packages/db` | Postgres schema, migrations, repositories, synthetic seeds |
-| `infra` | Local services, deployment definitions, telemetry configuration |
-| `tests/fixtures` | Authorized audio, screen frames, expected words and timestamps |
-| `tests/e2e` | Host/attendee flows and cross-user isolation checks |
+| Path                  | Owns                                                                                            |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| `apps/web`            | Next.js App Router, host and attendee UI, browser capture, server routes, and Vercel deployment |
+| `apps/web/src/server` | Authentication, ingest, caption delivery, provider adapters, and recap jobs                     |
+| `packages/ui`         | shadcn/ui components, theme, shared presentation primitives                                     |
+| `packages/contracts`  | Runtime request/event schemas and derived TypeScript types                                      |
+| `packages/domain`     | Pure timeline, selection, alignment, and revision rules                                         |
+| `packages/db`         | Prisma schema and client; planned migrations, repositories, and synthetic seeds                 |
+| `infra`               | Local services, deployment definitions, telemetry configuration                                 |
+| `tests/fixtures`      | Authorized audio, screen frames, expected words and timestamps                                  |
+| `tests/e2e`           | Host/attendee flows and cross-user isolation checks                                             |
 
 One Next.js application owns the UI and backend. HTTP endpoints use App Router Route Handlers; capture and interactive captions use Client Components. `domain` and `contracts` have no UI, database, or provider dependencies. Only server code imports `db` or server provider SDKs. Mark server modules with `server-only`. Keep application-specific components in web.
 

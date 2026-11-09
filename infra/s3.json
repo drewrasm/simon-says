@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "local",
+      "credentials": [
+        {
+          "accessKey": "simon-says-local",
+          "secretKey": "local-simon-says-storage"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

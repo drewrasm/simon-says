@@ -1,0 +1,26 @@
+{
+  "name": "@simon-says/db",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "validate": "prisma validate",
+    "typecheck": "tsc --noEmit",
+    "check": "node --conditions=react-server --import tsx scripts/check.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "server-only": "0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.11",
+    "dotenv": "17.2.3",
+    "prisma": "7.10.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}

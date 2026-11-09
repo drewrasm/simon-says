@@ -4,16 +4,16 @@ Status: proposed. Implement runtime schemas in `packages/contracts`; derive type
 
 ## Records
 
-| Record | Required concepts |
-| --- | --- |
-| Session | Host, status, ingest epoch/lease, clock mapping, endedAt, retention deadlines |
-| Membership | Session, principal, host/attendee role, permissions, revocation |
-| AudioChunk | Epoch, sequence, start/end, checksum, private object key, durable acknowledgment |
-| TranscriptSegment | Stable ID, epoch, time range, words, revision, live/repaired/corrected provenance |
-| ScreenObservation | Epoch, capture time, frame ID, checksum, dimensions, capture state |
-| ScreenFrame | Private image object and retention references |
-| Bookmark | Owner, session, operation ID, live/paragraph anchor, clock uncertainty, requested/actual ranges, segment revisions, frame IDs, note, revision, completeness |
-| Recap | Owner, bookmark revisions, takeaways, evidence spans, frame references, status |
+| Record            | Required concepts                                                                                                                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Session           | Host, status, ingest epoch/lease, clock mapping, endedAt, retention deadlines                                                                               |
+| Membership        | Session, principal, host/attendee role, permissions, revocation                                                                                             |
+| AudioChunk        | Epoch, sequence, start/end, checksum, private object key, durable acknowledgment                                                                            |
+| TranscriptSegment | Stable ID, epoch, time range, words, revision, live/repaired/corrected provenance                                                                           |
+| ScreenObservation | Epoch, capture time, frame ID, checksum, dimensions, capture state                                                                                          |
+| ScreenFrame       | Private image object and retention references                                                                                                               |
+| Bookmark          | Owner, session, operation ID, live/paragraph anchor, clock uncertainty, requested/actual ranges, segment revisions, frame IDs, note, revision, completeness |
+| Recap             | Owner, bookmark revisions, takeaways, evidence spans, frame references, status                                                                              |
 
 Session states: setup, live, degraded, ended, expired. Keep transport health, transcript finality, bookmark persistence, and evidence completeness separate.
 
@@ -21,22 +21,22 @@ Session states: setup, live, degraded, ended, expired. Keep transport health, tr
 
 HTTP endpoints run as Next.js Route Handlers in `apps/web`. The proposed audio WebSocket uses a Vercel function in the same project; verify its routing in milestone 1. Endpoint paths below are logical contracts, not scaffolded routes.
 
-| Operation | Contract |
-| --- | --- |
-| `POST /api/sessions` | Authorized host creates a session |
-| `POST /api/sessions/:id/join` | Exchange invitation for attendee membership |
-| `POST /api/sessions/:id/end` | Host-only, idempotent stop; fence ingest and persist end/expiry times |
-| `WS /api/sessions/:id/ingest` | Host audio/clock messages; require current lease and epoch |
-| `POST /api/sessions/:id/frames` | Timestamped images; require host role, current lease and epoch |
-| `GET /api/sessions/:id/events` | Member-only, reconnectable SSE with replay cursor and snapshot fallback |
-| `PUT /api/bookmarks/:id` | Owner-only idempotent create/update with expected revision |
-| `GET /api/me/bookmarks?sessionId=...` | Return the current attendee's selections |
-| `DELETE /api/bookmarks/:id` | Owner deletion plus recap invalidation |
-| `POST /api/sessions/:id/recaps` | Generate for current owner from expected bookmark revisions |
-| `GET /api/me/recaps/:id` | Owner-only takeaways, evidence, generation status, and staleness |
-| `GET /api/me/recaps/:id/export` | Authorized portable HTML or Markdown |
-| `DELETE /api/sessions/:id/memberships/:membershipId` | Host-only revocation; terminate member access |
-| `POST /api/sessions/:id/redactions` | Host-only source-range redaction and dependent-result invalidation |
+| Operation                                            | Contract                                                                |
+| ---------------------------------------------------- | ----------------------------------------------------------------------- |
+| `POST /api/sessions`                                 | Authorized host creates a session                                       |
+| `POST /api/sessions/:id/join`                        | Exchange invitation for attendee membership                             |
+| `POST /api/sessions/:id/end`                         | Host-only, idempotent stop; fence ingest and persist end/expiry times   |
+| `WS /api/sessions/:id/ingest`                        | Host audio/clock messages; require current lease and epoch              |
+| `POST /api/sessions/:id/frames`                      | Timestamped images; require host role, current lease and epoch          |
+| `GET /api/sessions/:id/events`                       | Member-only, reconnectable SSE with replay cursor and snapshot fallback |
+| `PUT /api/bookmarks/:id`                             | Owner-only idempotent create/update with expected revision              |
+| `GET /api/me/bookmarks?sessionId=...`                | Return the current attendee's selections                                |
+| `DELETE /api/bookmarks/:id`                          | Owner deletion plus recap invalidation                                  |
+| `POST /api/sessions/:id/recaps`                      | Generate for current owner from expected bookmark revisions             |
+| `GET /api/me/recaps/:id`                             | Owner-only takeaways, evidence, generation status, and staleness        |
+| `GET /api/me/recaps/:id/export`                      | Authorized portable HTML or Markdown                                    |
+| `DELETE /api/sessions/:id/memberships/:membershipId` | Host-only revocation; terminate member access                           |
+| `POST /api/sessions/:id/redactions`                  | Host-only source-range redaction and dependent-result invalidation      |
 
 Specify lifecycle payload schemas alongside their implementation. Ended sessions reject new audio and frames; ending does not prematurely revoke permitted recap access. Complete revocation and redaction before a public pilot.
 

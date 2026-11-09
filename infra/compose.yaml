@@ -1,0 +1,63 @@
+name: simon-says
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_DB: simon_says
+      POSTGRES_USER: simon_says
+      POSTGRES_PASSWORD: local-simon-says
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U simon_says -d simon_says"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  storage:
+    image: chrislusf/seaweedfs:3.80
+    command: server -dir=/data -ip=storage -ip.bind=0.0.0.0 -s3 -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - "127.0.0.1:19000:8333"
+    volumes:
+      - storage-data:/data
+      - ./s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://localhost:9333/cluster/status",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  storage-init:
+    image: amazon/aws-cli:2.27.41
+    depends_on:
+      storage:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: simon-says-local
+      AWS_SECRET_ACCESS_KEY: local-simon-says-storage
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: /bin/sh
+    command:
+      - -ec
+      - |
+        attempts=0
+        until aws --endpoint-url http://storage:8333 s3api list-buckets >/dev/null; do
+          attempts=$$((attempts + 1))
+          [ "$$attempts" -lt 30 ] || exit 1
+          sleep 2
+        done
+        aws --endpoint-url http://storage:8333 s3api head-bucket --bucket simon-says || \
+          aws --endpoint-url http://storage:8333 s3api create-bucket --bucket simon-says
+    restart: "no"
+
+volumes:
+  postgres-data:
+  storage-data:

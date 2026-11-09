@@ -9,14 +9,16 @@ Keep durable choices here. Mark proposals explicitly; add rationale and conseque
 - **Output:** personal summaries include source passages and screenshots.
 - **Repository:** one monorepo contains everything needed to develop, test, and deploy the app.
 - **Application and hosting:** one full-stack Next.js app on Vercel, with shadcn/ui. This replaces Vite and the separate Node API.
+- **Database tooling:** Prisma for PostgreSQL. Local development uses PostgreSQL and a private SeaweedFS S3 bucket; hosted database and storage vendors remain undecided.
+- **Toolchain:** Node.js 22.22.0, pnpm 11.24.0, Next.js 16.4.5, React 19.3.1, TypeScript 5.9.3, Vitest 5.1, and Prisma 7.10.1.
+- **Workspace:** strict TypeScript, pnpm workspaces, and shared shadcn components. The foundation includes a shadcn Button from the official registry with manual setup.
 - **Agent entry point:** `AGENTS.md` only; no `agent.md` alias.
 - **Team:** three builders, with UI and transcription interests. Proposed ownership is in the [implementation plan](implementation-plan.md#three-builder-tracks).
 
 ## Proposed implementation defaults
 
-- React, strict TypeScript, pnpm workspaces, and shared shadcn components. Use the official Next.js App Router setup and only necessary tooling. Pin the generated toolchain when scaffolding.
 - Next.js Route Handlers and Vercel Node.js functions, managed Postgres, private object storage, and a server-side Deepgram adapter. Propose reconnectable SSE for attendees and a Vercel WebSocket function for host ingest. Verify routing, duration limits, shared event delivery, and durable lease fencing in milestone 1.
-- Choose database and storage vendors, a recap job mechanism, and cleanup scheduling before their milestones. Vercel hosting does not select these services or authorize provisioning. Isolate provider adapters from domain rules.
+- Choose hosted database and storage vendors, a recap job mechanism, and cleanup scheduling before their milestones. Vercel hosting does not select these services or authorize provisioning. Isolate provider adapters from domain rules.
 - Thirty-second marks, one-second screen observations, and a two-minute resend cap. Validate actual timing and readability.
 - Shared-source expiry 24 hours after session end; selected-content expiry 30 days after selection. Confirm permission and cleanup behavior before claiming these guarantees.
 - Deepgram remains a proposed transcription provider. The recap model is undecided.

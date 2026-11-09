@@ -6,7 +6,7 @@
 2. Pick the next unchecked milestone in the [implementation plan](docs/implementation-plan.md) within the user's requested scope.
 3. Read [contracts](docs/contracts.md) before changing a data boundary. Check [decisions](docs/decisions.md) for unresolved assumptions.
 
-This repository currently contains plans only. Do not claim setup, integrations, or tests work before running them. Planning does not authorize implementation or publication.
+The milestone 0 foundation is implemented. Do not claim setup, integrations, or tests work before running them. Planning does not authorize implementation or publication.
 
 ## Work rules
 

@@ -1,20 +1,20 @@
 # Building tracks
 
-Status: planned work for three builders in one Next.js app. Start with milestone 0 in the [implementation plan](implementation-plan.md). No track is implemented yet.
+Status: milestone 0 foundation is complete with local verification for the three-builder app in one Next.js app. See the [implementation plan](implementation-plan.md) for verification and remaining work. Feature tracks are not implemented yet.
 
 ## Divide ownership
 
-| Track | Owns | Main locations, once scaffolded |
-| --- | --- | --- |
-| 1. UI and attendee experience | Host controls, QR join, captions, private cards, recap display | Pages and components in `apps/web`; `packages/ui` |
-| 2. Capture and transcription | Browser capture, source clock, ingest, transcription, shared feed, host stop | Capture module in `apps/web`; ingest and event modules in `apps/web/src/server`; timeline rules in `packages/domain` |
-| 3. Private highlights and recaps | Identity, membership, private selections, evidence alignment, generation, exports, data lifecycle | Access, bookmark, and recap modules in `apps/web/src/server`; selection rules in `packages/domain`; `packages/db` |
+| Track                            | Owns                                                                                              | Main locations                                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 1. UI and attendee experience    | Host controls, QR join, captions, private cards, recap display                                    | Pages and components in `apps/web`; `packages/ui`                                                                    |
+| 2. Capture and transcription     | Browser capture, source clock, ingest, transcription, shared feed, host stop                      | Capture module in `apps/web`; ingest and event modules in `apps/web/src/server`; timeline rules in `packages/domain` |
+| 3. Private highlights and recaps | Identity, membership, private selections, evidence alignment, generation, exports, data lifecycle | Access, bookmark, and recap modules in `apps/web/src/server`; selection rules in `packages/domain`; `packages/db`    |
 
 [Architecture](architecture.md) defines package boundaries. [Contracts](contracts.md) defines shared records and operations. Keep provider SDKs, database access, and credentials in server code.
 
 ## Establish the shared foundation
 
-1. Choose one builder to drive milestone 0: root tooling, the lockfile, local services, and setup documentation. The other builders review and verify setup.
+1. Complete milestone 0: root tooling, the lockfile, local services, and setup documentation. The other builders review and verify setup.
 2. Agree on the first runtime schemas together: session and membership identity, source clock and ingest epoch, transcript revisions, screen observations, and event cursors. Define bookmark and recap schemas before their milestones.
 3. Agree on the capture module's start, stop, permission, preview, and health interface. Track 2 implements the module; track 1 connects the host controls.
 4. Name one migration writer, initially track 3. Track 2 supplies transcript and media requirements. Sequence shared schema edits and migrations rather than editing the same definitions independently.
@@ -65,14 +65,14 @@ First working slice: two attendees save different source intervals and retrieve 
 
 ## Integrate at shared checkpoints
 
-| Checkpoint | Handoff | Proof |
-| --- | --- | --- |
-| Foundation, milestone 0 | Setup driver provides tooling, local services, and documented commands | All three builders can install, check, and build |
-| Shared captions, milestone 1 | Track 3 provides access; track 2 provides capture and feed; track 1 connects screens | Real host, two readers, timestamped frame, working stop, and verified function recovery |
-| Private highlights, milestone 2 | Track 2 provides durable sources; track 3 resolves bookmarks; track 1 displays evidence | Different marks produce correctly aligned evidence with cross-user access denied |
-| Recaps, milestone 3 | Track 3 provides generation, private status reads, and export; track 1 connects them | Distinct recaps cite selected passages and images; failure preserves cards |
-| Lifecycle, milestone 4 | Track 3 invalidates access and evidence; track 2 enforces stream changes; track 1 reflects status | Faults, revocation, redaction, and expiry pass the plan's acceptance checks |
-| Delivery, milestone 5 | Setup driver wires CI; each track contributes tests and runs the integrated flow | Clean-checkout setup and a real target-device demo, with limitations recorded |
+| Checkpoint                      | Handoff                                                                                           | Proof                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Foundation, milestone 0         | Setup driver provides tooling, local services, and documented commands                            | All three builders can install, check, and build                                        |
+| Shared captions, milestone 1    | Track 3 provides access; track 2 provides capture and feed; track 1 connects screens              | Real host, two readers, timestamped frame, working stop, and verified function recovery |
+| Private highlights, milestone 2 | Track 2 provides durable sources; track 3 resolves bookmarks; track 1 displays evidence           | Different marks produce correctly aligned evidence with cross-user access denied        |
+| Recaps, milestone 3             | Track 3 provides generation, private status reads, and export; track 1 connects them              | Distinct recaps cite selected passages and images; failure preserves cards              |
+| Lifecycle, milestone 4          | Track 3 invalidates access and evidence; track 2 enforces stream changes; track 1 reflects status | Faults, revocation, redaction, and expiry pass the plan's acceptance checks             |
+| Delivery, milestone 5           | Setup driver wires CI; each track contributes tests and runs the integrated flow                  | Clean-checkout setup and a real target-device demo, with limitations recorded           |
 
 The implementation plan remains the single milestone checklist and verification record. The setup driver prepares the milestone 1 preview configuration, including its database, private storage, and shared event source. After separate provisioning and deployment authorization, track 2 runs the transport checks in that preview. Local checks alone leave milestone 1 open. The setup driver also owns delivery configuration, with track 2 reviewing connection limits and track 3 reviewing storage and jobs.
 

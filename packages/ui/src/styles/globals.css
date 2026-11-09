@@ -1,0 +1,40 @@
+@import "tailwindcss";
+@source "../components";
+@source "../../../../apps/web/src";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-accent: var(--secondary);
+  --color-accent-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--primary);
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --radius-md: 0.5rem;
+  --font-sans: Arial, Helvetica, sans-serif;
+}
+
+:root {
+  --background: oklch(0.985 0.002 247);
+  --foreground: oklch(0.21 0.034 265);
+  --primary: oklch(0.488 0.243 264);
+  --primary-foreground: oklch(0.985 0 0);
+  --muted-foreground: oklch(0.446 0.03 257);
+  --secondary: oklch(0.928 0.006 265);
+  --border: oklch(0.872 0.01 258);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
