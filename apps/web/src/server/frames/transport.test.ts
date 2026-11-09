@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { expect, it, vi } from "vitest";
+import { readRuntimeEnv } from "../../../server/env";
 import { FrameTransport } from "./transport";
 import {
   createFrameUpload,
@@ -114,3 +115,45 @@ it("routes real HTTP uploads on a random port before the Next fallback", async (
     );
   }
 });
+
+for (const credentials of [
+  {},
+  { S3_ACCESS_KEY_ID: "test-access" },
+  { S3_SECRET_ACCESS_KEY: "test-secret" },
+]) {
+  it(`keeps HTTP alive with partial S3 config (${Object.keys(credentials).join(",") || "no credentials"})`, async () => {
+    const runtime = readRuntimeEnv({
+      CAPTIONS_DEV_SESSION: "partial-s3",
+      S3_ENDPOINT: "http://frame-storage:8333",
+      S3_REGION: "us-east-1",
+      S3_BUCKET: "simon-says",
+      S3_FORCE_PATH_STYLE: "true",
+      ...credentials,
+    });
+    const transport = new FrameTransport(runtime.frameEnv, "http://localhost");
+    const server = createServer((req, res) => {
+      if (transport.handleHttp(req, res, req.socket.remoteAddress)) return;
+      res.writeHead(200).end("alive");
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const base = `http://127.0.0.1:${address.port}`;
+    try {
+      const response = await fetch(`${base}/api/sessions/partial-s3/frames`, {
+        method: "POST",
+      });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: "frame_service_unavailable",
+      });
+      expect((await fetch(`${base}/healthz`)).status).toBe(200);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+}
