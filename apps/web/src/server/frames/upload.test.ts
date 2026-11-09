@@ -231,3 +231,21 @@ describe("dev frame security boundary", () => {
     },
   );
 });
+
+it("makes the in-memory fallback degradation visible on successful uploads", async () => {
+  const upload = createFrameUpload({
+    access: devFrameAccess(
+      { CAPTIONS_DEV_SESSION: "demo" },
+      "http://localhost",
+    ),
+    store: { put: async () => {} },
+    sink: new InMemoryObservationSink(),
+    sinkDegradedReason: "missing_elasticsearch_config",
+  });
+  const response = await upload(request(), "demo", "127.0.0.1");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    observationId: "frame-0",
+    degradedReason: "missing_elasticsearch_config",
+  });
+});

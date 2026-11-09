@@ -20,7 +20,7 @@ export interface FrameStore {
   put(key: string, bytes: Uint8Array, mimeType: string): Promise<void>;
 }
 export interface ObservationSink {
-  /** Upsert by observationDocumentId; await persistence before acknowledging. */
+  /** Persist by observationDocumentId; await persistence before acknowledging. */
   put(observation: ScreenObservation): Promise<void>;
 }
 export class InMemoryObservationSink implements ObservationSink {
@@ -59,6 +59,7 @@ export function createFrameUpload(deps: {
   access: HostFrameAccess;
   store: FrameStore;
   sink: ObservationSink;
+  sinkDegradedReason?: "missing_elasticsearch_config";
 }) {
   const records = new Map<
     string,
@@ -162,7 +163,12 @@ export function createFrameUpload(deps: {
         return reply(503, "frame_persistence_unavailable");
       }
       return Response.json(
-        { observationId: observation.observationId },
+        {
+          observationId: observation.observationId,
+          ...(deps.sinkDegradedReason
+            ? { degradedReason: deps.sinkDegradedReason }
+            : {}),
+        },
         { headers: { "Cache-Control": "no-store" } },
       );
     } catch {
