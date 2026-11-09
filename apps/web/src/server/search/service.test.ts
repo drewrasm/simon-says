@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { searchResponseSchema } from "@simon-says/contracts/search";
 import { searchSession } from "./service";
+import { recordAcknowledgedSegments } from "./indexing-lag";
 import { searchBatch, searchHit, searchPage } from "./fixtures";
 import { syntheticSegment } from "../evidence/fixtures";
 
@@ -29,6 +30,7 @@ const bodies = () => {
 };
 
 beforeEach(() => {
+  globalThis.simonSaysUnsearchedSegments = undefined;
   vi.resetAllMocks();
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("ELASTICSEARCH_URL", "https://synthetic-elastic.example");
@@ -108,6 +110,59 @@ describe("session search with synthetic ES HTTP fixtures", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     },
   );
+
+  it("reports catching_up with results until an acknowledged segment is searchable", async () => {
+    const pending = syntheticSegment({ sessionId, segmentId: "segment-2" });
+    recordAcknowledgedSegments([pending]);
+
+    const lagging = await searchSession(options);
+    expect(lagging.indexingState).toBe("catching_up");
+    expect(lagging.results.map((result) => result.segmentId)).toEqual([
+      "segment-1",
+    ]);
+
+    fetchMock.mockResolvedValue(
+      Response.json(
+        searchBatch(
+          [searchHit(source)],
+          [searchHit(source), searchHit(pending)],
+        ),
+      ),
+    );
+    expect((await searchSession(options)).indexingState).toBe("current");
+
+    fetchMock.mockResolvedValue(
+      Response.json(searchBatch([searchHit(source)])),
+    );
+    expect((await searchSession(options)).indexingState).toBe("current");
+  });
+
+  it("reports catching_up while only an older revision is searchable", async () => {
+    recordAcknowledgedSegments([syntheticSegment({ sessionId, revision: 2 })]);
+
+    expect((await searchSession(options)).indexingState).toBe("catching_up");
+  });
+
+  it("ignores acknowledged segments from other sessions", async () => {
+    recordAcknowledgedSegments([
+      syntheticSegment({ sessionId: randomUUID(), segmentId: "segment-2" }),
+    ]);
+
+    expect((await searchSession(options)).indexingState).toBe("current");
+  });
+
+  it("keeps failures unavailable while segments are pending", async () => {
+    recordAcknowledgedSegments([
+      syntheticSegment({ sessionId, segmentId: "segment-2" }),
+    ]);
+    fetchMock.mockRejectedValue(new Error("synthetic outage"));
+
+    expect(await searchSession(options)).toEqual({
+      results: [],
+      nextCursor: null,
+      indexingState: "unavailable",
+    });
+  });
 
   it("revalidates membership after search, including unavailable results", async () => {
     membership.findUnique
