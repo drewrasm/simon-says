@@ -1,5 +1,16 @@
 import type { FrameUploadMetadata } from "@simon-says/contracts/screen";
 
+export class FrameUploadError extends Error {
+  constructor(readonly status: number) {
+    super("Frame upload rejected");
+    this.name = "FrameUploadError";
+  }
+
+  get retryable(): boolean {
+    return this.status === 429 || this.status >= 500;
+  }
+}
+
 type Upload = { metadata: FrameUploadMetadata; blob: Blob };
 export type ScreenHealth = Readonly<{
   screen: "idle" | "requesting" | "live" | "stopped" | "denied" | "error";
@@ -90,9 +101,10 @@ export class FrameUploadQueue {
             await this.send(item, this.controller.signal);
             if (!this.closed) this.success();
             break;
-          } catch {
+          } catch (error) {
             if (this.closed) break;
             this.failure();
+            if (error instanceof FrameUploadError && !error.retryable) break;
             if (attempt < 2) await this.wait(250 * 2 ** attempt);
           }
         }
@@ -141,7 +153,7 @@ export class ScreenCapture {
           body: blob,
           signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
         });
-        if (!response.ok) throw new Error("Frame upload rejected");
+        if (!response.ok) throw new FrameUploadError(response.status);
       },
       () => this.update({ lastUploadMs: Date.now() }),
       () => {

@@ -71,6 +71,9 @@ describe("frame endpoint", () => {
   it("rejects schema, size, checksum, signature, auth and stale epoch before writes", async () => {
     const { upload, put } = setup();
     expect((await upload(request({ width: 0 }), "demo")).status).toBe(400);
+    expect((await upload(request({ epoch: 0x8000_0000 }), "demo")).status).toBe(
+      400,
+    );
     expect(
       (
         await upload(
@@ -230,4 +233,22 @@ describe("dev frame security boundary", () => {
       expect(sink.observations.size).toBe(1);
     },
   );
+});
+
+it("makes the in-memory fallback degradation visible on successful uploads", async () => {
+  const upload = createFrameUpload({
+    access: devFrameAccess(
+      { CAPTIONS_DEV_SESSION: "demo" },
+      "http://localhost",
+    ),
+    store: { put: async () => {} },
+    sink: new InMemoryObservationSink(),
+    sinkDegradedReason: "missing_elasticsearch_config",
+  });
+  const response = await upload(request(), "demo", "127.0.0.1");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    observationId: "frame-0",
+    degradedReason: "missing_elasticsearch_config",
+  });
 });

@@ -4,6 +4,7 @@ import {
   FrameChanges,
   frameDimensions,
   FrameUploadQueue,
+  FrameUploadError,
 } from "./screen-capture";
 const item = {
   metadata: {
@@ -84,3 +85,37 @@ it.each([null, new Blob(["png"], { type: "image/png" })])(
     ]);
   },
 );
+
+it.each([400, 403, 409, 413])(
+  "does not retry terminal HTTP %s and continues the queue",
+  async (status) => {
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(new FrameUploadError(status))
+      .mockResolvedValue(undefined);
+    const success = vi.fn();
+    const failure = vi.fn();
+    const wait = vi.fn().mockResolvedValue(undefined);
+    const queue = new FrameUploadQueue(send, success, failure, wait);
+    queue.enqueue(item);
+    queue.enqueue(item);
+    await vi.waitFor(() => expect(success).toHaveBeenCalledTimes(1));
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(failure).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+  },
+);
+
+it.each([429, 503])("retries transient HTTP %s", async (status) => {
+  const send = vi
+    .fn()
+    .mockRejectedValueOnce(new FrameUploadError(status))
+    .mockResolvedValue(undefined);
+  const success = vi.fn();
+  const wait = vi.fn().mockResolvedValue(undefined);
+  const queue = new FrameUploadQueue(send, success, vi.fn(), wait);
+  queue.enqueue(item);
+  await vi.waitFor(() => expect(success).toHaveBeenCalledTimes(1));
+  expect(send).toHaveBeenCalledTimes(2);
+  expect(wait).toHaveBeenCalledWith(250);
+});
