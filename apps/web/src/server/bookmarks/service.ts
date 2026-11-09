@@ -11,7 +11,11 @@ import {
 import { getDatabase } from "../access/database";
 import { AccessError } from "../access/errors";
 import { requireMembership } from "../access/membership";
-import { requestedRange, resolveEvidence } from "../evidence/resolve";
+import {
+  requestedRange,
+  requireParagraphSource,
+  resolveEvidence,
+} from "../evidence/resolve";
 
 export type BookmarkRecord = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getDatabase>["bookmark"]["findUnique"]>>
@@ -132,6 +136,13 @@ export const putBookmark = async ({ principalId, id, request }: PutOptions) => {
     sessionId: request.sessionId,
     range,
   });
+  if (!existing && request.anchor.kind === "paragraph") {
+    await requireParagraphSource({
+      sessionId: request.sessionId,
+      anchor: request.anchor,
+    });
+  }
+  await requireMembership({ principalId, sessionId: request.sessionId });
   const materialized =
     resolution.completeness === "pending"
       ? { completeness: "pending" as const }
