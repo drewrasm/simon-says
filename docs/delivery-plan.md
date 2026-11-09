@@ -182,9 +182,9 @@ When a gate item passes, update your row on the status board in the same PR, wit
 
 Update your own row when a gate item passes or a blocker appears.
 
-| Track | Owner                            | Done                                                             | Next                                     | Blocked on                                           |
-| ----- | -------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------- |
-| 1     | Unconfirmed; likely Drew (PR #5) | Design system (PR #5); Gitar review instructions and CI (PR #6)  | C0: confirm Gitar reviews; C1: screens   | Track 3 contracts for session and join               |
-| 2     | Dylan                            | 0A local foundation in PR #4 (CI passing, conflicts with `main`) | C0: rebase PR #4; C1: deploy             | Transcription provider decision; deployment go-ahead |
-| 3     | Logan                            | Elastic project, CLI, and MCP; project MCP configuration         | C0: contracts PR; C1: sessions and join  | —                                                    |
-| Setup | All                              | Radar cluster and MCP; Dash0 and Elastic MCP; repository public  | Dash0 org invites; Radar "before" Checks | Teammates' Radar invite acceptance unverified        |
+| Track | Owner                            | Done                                                                                                            | Next                                     | Blocked on                                           |
+| ----- | -------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------- |
+| 1     | Unconfirmed; likely Drew (PR #5) | Design system (PR #5); Gitar review instructions and CI (PR #6)                                                 | C0: confirm Gitar reviews; C1: screens   | Track 3 contracts for session and join               |
+| 2     | Dylan                            | 0A local foundation in PR #4 (CI passing, conflicts with `main`)                                                | C0: rebase PR #4; C1: deploy             | Transcription provider decision; deployment go-ahead |
+| 3     | Logan                            | Elastic MCP setup; C0 contracts in PR #11 (stacked on #9); C1 Prisma models and first migration applied locally | C1: sessions, join, and membership check | PR #9 merge for #11; cluster migration Job (Track 2) |
+| Setup | All                              | Radar cluster and MCP; Dash0 and Elastic MCP; repository public                                                 | Dash0 org invites; Radar "before" Checks | Teammates' Radar invite acceptance unverified        |
