@@ -63,6 +63,8 @@ Logan confirmed these on November 9, 2026. Neither decision proves a live integr
 
 ## Proposed implementation defaults
 
+- **Approximate note clock (Track 1, November 9):** notes pin `markedAtMs` to time since session creation until Track 2 supplies a capture-aligned session clock; see [contracts](contracts.md#track-3-payloads). Notes use Track 3's bookmark API.
+
 - **LLM workflows:** recaps use OpenAI through the Vercel AI SDK (`ai` structured output, no tools), as [decided](#confirmed-by-the-track-3-owner). C4 defaults `RECAP_MODEL` to `gpt-5.4-mini` and runs generation request-scoped through Next.js `after()`; see the [recap contract](contracts.md#track-3-payloads). Proposal: a durable job queue with restart recovery remains an implementation choice.
 
 - Next.js Route Handlers with a custom Node WebSocket entry point, reconnectable SSE, and the confirmed server-only caption adapter. Prove packaging in checkpoint 0A and cross-pod recovery in milestone 1. Propose a durable Postgres event log with bounded polling; leases and replay cannot depend on pod memory.
@@ -108,7 +110,7 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 
 November 9, 2026: S3 implements the Plan B direction above as a development pipeline. Use AI SDK `experimental_streamTranscribe` with `@ai-sdk/openai`, default `gpt-realtime-whisper`, in consecutive 24 kHz windows. Input close commits each window; prewarm the next call before rotation. SDK versions are pinned in the lockfile; real OpenAI behavior remains unverified. The SDK supplies `MockTranscriptionModelV4`; tests adapt its optional method typing to this repository's `exactOptionalPropertyTypes` setting by exposing only defined methods.
 
-Final publication waits for the segment sink. Sink failure emits degraded state and an exact-range gap, then permits later windows; no final is emitted for failed persistence. The in-memory sink and receipt/replay state are explicitly development-only. Production access is disabled until Track 3/M3 supply authority and durability; the dev flag cannot override this. No provider key or service call is needed for tests. This preserves the shared-content ownership decision above and leaves milestone 1 acceptance open.
+Final publication waits for the segment sink. Sink failure emits degraded state and an exact-range gap, then permits later windows; no final is emitted for failed persistence. The in-memory sink and receipt/replay state are explicitly development-only. The C2 runtime selects Elasticsearch when configured and otherwise visibly degrades the development fallback; see [sink wiring](architecture.md#c2-elasticsearch-segment-sink). Production access is disabled until real authority and deployed durability are verified; the dev flag cannot override this. No provider key or service call is needed for tests. This preserves the shared-content ownership decision above and leaves milestone 1 acceptance open.
 
 ## C1a release tags
 
