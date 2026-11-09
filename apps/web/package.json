@@ -39,6 +39,7 @@
     "@tailwindcss/postcss": "4.3.5",
     "@types/ws": "8.18.2",
     "esbuild": "^0.28.2",
+    "happy-dom": "^21.0.4",
     "tailwindcss": "4.3.5"
   },
   "version": "0.0.0"

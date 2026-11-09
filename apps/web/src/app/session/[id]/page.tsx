@@ -3,9 +3,9 @@ import { AccessError } from "@/server/access/errors";
 import { requireMembership } from "@/server/access/membership";
 import { readPrincipal } from "@/server/access/principal";
 import { listBookmarks } from "@/server/bookmarks/service";
-import { CaptionReader } from "./caption-reader";
 import { ClipProvider } from "./clip-context";
 import { ClipControls } from "./clip-controls";
+import { ClipReader } from "./clip-reader";
 import { KeepThatButton } from "./keep-that-button";
 import { NoteComposer } from "./note-composer";
 import { NoteForm } from "./note-form";
@@ -43,7 +43,7 @@ const SessionPage = async ({ params }: SessionPageProps) => {
   // clip and note controls; until the reader reports them they wait honestly.
   return (
     <ClipProvider>
-      <CaptionReader
+      <ClipReader
         sessionId={id}
         title={session.title}
         status={session.status}
