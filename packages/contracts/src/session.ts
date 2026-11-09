@@ -6,13 +6,6 @@ const path = z.string().regex(/^\/(?!\/)/);
 const inviteCode = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
 
 export const membershipRoleSchema = z.enum(["host", "attendee"]);
-export const sessionStatusSchema = z.enum([
-  "setup",
-  "live",
-  "degraded",
-  "ended",
-  "expired",
-]);
 
 export const createSessionRequestSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
@@ -40,7 +33,6 @@ export const membershipSchema = z.object({
 });
 
 export type MembershipRole = z.infer<typeof membershipRoleSchema>;
-export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>;
 export type CreateSessionResponse = z.infer<typeof createSessionResponseSchema>;
 export type JoinSessionRequest = z.infer<typeof joinSessionRequestSchema>;

@@ -54,8 +54,9 @@ model Session {
   id                String        @id @default(uuid()) @db.Uuid
   title             String?
   status            SessionStatus @default(setup)
-  hostPrincipalId   String        @db.Uuid
-  hostPrincipal     Principal     @relation(fields: [hostPrincipalId], references: [id])
+  /// Deprecated: the host membership is the source of truth. Still written so older images can read new rows; never read.
+  hostPrincipalId   String?       @db.Uuid
+  hostPrincipal     Principal?    @relation(fields: [hostPrincipalId], references: [id], onDelete: Restrict)
   hostLinkTokenHash String        @unique
   inviteCode        String        @unique
   createdAt         DateTime      @default(now())

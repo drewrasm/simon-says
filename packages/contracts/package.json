@@ -7,6 +7,7 @@
     "./ingest": "./src/ingest.ts",
     "./caption": "./src/caption.ts",
     "./session": "./src/session.ts",
+    "./session-status": "./src/session-status.ts",
     "./bookmark": "./src/bookmark.ts",
     "./search": "./src/search.ts",
     "./recap": "./src/recap.ts"

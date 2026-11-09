@@ -22,8 +22,8 @@ import {
   joinSessionRequestSchema,
   joinSessionResponseSchema,
   membershipSchema,
-  sessionStatusSchema,
 } from "@simon-says/contracts/session";
+import { sessionStatusSchema } from "@simon-says/contracts/session-status";
 
 const operationId = "a85f1e8d-78dd-4b7a-8095-4ac712a91813";
 const bookmarkId = "0b5d3c3e-55a4-4c55-9d0c-0d0f1f4f8a01";

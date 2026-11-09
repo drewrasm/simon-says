@@ -42,7 +42,6 @@ beforeAll(async () => {
   await database.session.create({
     data: {
       id: sessionId,
-      hostPrincipalId: host,
       hostLinkTokenHash: randomUUID(),
       inviteCode: randomUUID(),
       memberships: {
