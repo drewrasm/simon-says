@@ -153,7 +153,7 @@ Edit inside your track's paths. Changing another track's paths needs that owner'
 - One branch per checkpoint slice, named `<type>/t<track>-<description>`, for example `feat/t3-session-join`. Keep PRs small and merge them as soon as CI passes and Gitar has reviewed.
 - Rebase on `main` before pushing. Do not force-push a branch another builder is using.
 - Every change, including docs, lands through a PR that passes CI and Gitar review; never commit to `main` ([decisions](decisions.md)). The Gitar track judges whether "features land through PRs it reviewed".
-- Once Argo CD is applied, every merge to `main` deploys. Check Radar after each merge that changes runtime code.
+- Once Argo CD is applied, source merges publish an image and open a deploy-tag PR; merging that PR deploys the pinned SHA. See the [release flow](deployment.md#release-flow-c1a). Check Radar after each deploy merge.
 
 ### Agents
 
@@ -182,9 +182,9 @@ When a gate item passes, update your row on the status board in the same PR, wit
 
 Update your own row when a gate item passes or a blocker appears.
 
-| Track | Owner                            | Done                                                             | Next                                     | Blocked on                                           |
-| ----- | -------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------- |
-| 1     | Unconfirmed; likely Drew (PR #5) | Design system (PR #5); Gitar review instructions and CI (PR #6)  | C0: confirm Gitar reviews; C1: screens   | Track 3 contracts for session and join               |
-| 2     | Dylan                            | 0A local foundation in PR #4 (CI passing, conflicts with `main`) | C0: rebase PR #4; C1: deploy             | Transcription provider decision; deployment go-ahead |
-| 3     | Logan                            | Elastic project, CLI, and MCP; project MCP configuration         | C0: contracts PR; C1: sessions and join  | —                                                    |
-| Setup | All                              | Radar cluster and MCP; Dash0 and Elastic MCP; repository public  | Dash0 org invites; Radar "before" Checks | Teammates' Radar invite acceptance unverified        |
+| Track | Owner                            | Done                                                                       | Next                                     | Blocked on                                    |
+| ----- | -------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------- |
+| 1     | Unconfirmed; likely Drew (PR #5) | Design system (PR #5); Gitar review instructions and CI (PR #6)            | C0: confirm Gitar reviews; C1: screens   | Track 3 contracts for session and join        |
+| 2     | Dylan                            | 0A merged (PR #4); transcription provider decided: OpenAI realtime (PR #8) | C1 apply Argo CD, ES indices             | operator approval for cluster apply           |
+| 3     | Logan                            | Elastic project, CLI, and MCP; project MCP configuration                   | C0: contracts PR; C1: sessions and join  | —                                             |
+| Setup | All                              | Radar cluster and MCP; Dash0 and Elastic MCP; repository public            | Dash0 org invites; Radar "before" Checks | Teammates' Radar invite acceptance unverified |

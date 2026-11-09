@@ -96,3 +96,7 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 - [AI SDK `experimental_streamTranscribe`](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-transcribe): streaming API and OpenAI example. Plan B uses successive windows for the SDK lifecycle described above.
 - [Hackathon resources](https://www.wemakedevs.org/hackathons/cnh/resources), [rules](https://www.wemakedevs.org/hackathons/cnh/rules), [schedule](https://www.wemakedevs.org/hackathons/cnh/schedule).
 - [Plaud highlights](https://support.plaud.ai/hc/en-us/articles/63429919023385-Highlight-a-moment-while-recording-for-v4-0-x-or-later): marking recorded moments already exists. Simon Says emphasizes shared session capture with private, illustrated selections; uniqueness is not established.
+
+## C1a release tags
+
+GHCR publication runs in GitHub Actions after main checks, using full commit SHA tags and a mutable `main` alias. Deploy tags land through `deploy/<sha>` PRs, preserving CI/Gitar review and the prohibition on direct main commits. Auto-merge is currently disabled in the repository; an administrator can enable it, while operators may merge manually after review. The Application file enables automated sync, pruning, and self-healing; applying it still requires explicit operator approval through Radar. See the [release flow](deployment.md#release-flow-c1a) for bootstrap and recovery. Publication and cluster deployment are pending live verification.
