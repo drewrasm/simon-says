@@ -11,7 +11,8 @@
     "./screen": "./src/screen.ts",
     "./search": "./src/search.ts",
     "./session": "./src/session.ts",
-    "./session-status": "./src/session-status.ts"
+    "./session-status": "./src/session-status.ts",
+    "./ask": "./src/ask.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

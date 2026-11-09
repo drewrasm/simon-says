@@ -57,6 +57,7 @@ type CaptionReaderProps = {
    * notes panel.
    */
   actions?: ReactNode;
+  toolbarActions?: ReactNode;
   /** Let attendees select finalized lines (toggle buttons) for clipping. */
   selectable?: boolean;
   /** Selected lines, in source-clock order, whenever the selection changes. */
@@ -172,6 +173,7 @@ export const CaptionReader = ({
   noteCount,
   notesPanel,
   actions,
+  toolbarActions,
   selectable = false,
   onSelectionChange,
   onLinesChange,
@@ -328,6 +330,7 @@ export const CaptionReader = ({
               </h1>
             </div>
             <div className="flex items-center gap-2">
+              {toolbarActions}
               <div className="hidden lg:block">
                 <TextSizeControl compact />
               </div>

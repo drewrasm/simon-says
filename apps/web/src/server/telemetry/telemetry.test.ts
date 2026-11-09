@@ -462,3 +462,49 @@ it("exports Elasticsearch retry and failure counters without identity labels", a
     await telemetry.meters.shutdown();
   }
 });
+
+it("bounds passage_count and strips question, prompt, passage and answer attributes", async () => {
+  const { safeAttributes } = await import("./captions");
+  expect(
+    safeAttributes({
+      passage_count: 8,
+      question: "PRIVATE_QUESTION",
+      answer: "PRIVATE_ANSWER",
+      prompt: "PRIVATE_PROMPT",
+      passages: "PRIVATE_PASSAGES",
+    }),
+  ).toEqual({ passage_count: 8 });
+  for (const invalid of [-1, 9, 1.5, NaN, Infinity, "PRIVATE_COUNT"])
+    expect(safeAttributes({ passage_count: invalid })).toEqual({});
+  const telemetry = memoryTelemetry();
+  try {
+    const span = telemetry.tracer.startSpan("ask", {
+      attributes: {
+        session_id: "s1",
+        passage_count: 2,
+        outcome: "success",
+        duration_ms: 12,
+        question: "PRIVATE_QUESTION",
+        answer: "PRIVATE_ANSWER",
+        prompt: "PRIVATE_PROMPT",
+        passages: "PRIVATE_PASSAGES",
+      },
+    });
+    span.addEvent("PRIVATE_EVENT");
+    span.setStatus({ code: SpanStatusCode.ERROR, message: "PRIVATE_STATUS" });
+    span.end();
+    await telemetry.traces.forceFlush();
+    expect(telemetry.spans.getFinishedSpans()[0]?.attributes).toEqual({
+      session_id: "s1",
+      passage_count: 2,
+      outcome: "success",
+      duration_ms: 12,
+    });
+    expect(
+      inspect(telemetry.spans.getFinishedSpans(), { depth: 20 }),
+    ).not.toContain("PRIVATE_");
+  } finally {
+    await telemetry.traces.shutdown();
+    await telemetry.meters.shutdown();
+  }
+});
