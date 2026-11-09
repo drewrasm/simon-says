@@ -23,7 +23,7 @@ Verified November 9, 2026 (MT), organization Cloud Native Hackathon (`org_NCJbss
 - Operation: with explicit Track 2 owner approval, Radar MCP applied only the unmodified `infra/argocd/application.yaml`. After: Argo CD Synced / Healthy, operation Succeeded at 20:11:17 UTC (13:11 MT), revision `dd101113…`; starter replaced by app image `c97978f…` (1/1 Ready, 0 restarts), Postgres `db-1` 1/1 Ready with one primary and one PVC. Public health, readiness, and home returned 200.
 - Checks: single-primary PodDisruptionBudget restriction, empty `db-ro` Service, and one historical readiness warning from the retired starter pod. Postgres admission webhook connection refusal recovered through Argo retry; transient Radar dry-run Unauthorized and OpenAPI timeouts also recovered.
 
-No Radar investigation has been run yet. Checks and deployment operations do not complete that requirement. Authenticated gateway transport remains unverified while `PROBE_TOKEN` is unset. See [deployment evidence and limitations](implementation-plan.md#c1--checkpoint-0a-deployment-evidence).
+No Radar investigation has been run yet. Checks and deployment operations do not complete that requirement. Authenticated gateway transport remains unverified after the operator created `app-credentials` on November 9, 2026 with keys `OPENAI_API_KEY` and `PROBE_TOKEN`; verify after rollout. See [deployment evidence and limitations](implementation-plan.md#c1--checkpoint-0a-deployment-evidence).
 
 ## Accounts and access
 
