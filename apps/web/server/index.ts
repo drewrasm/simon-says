@@ -4,12 +4,33 @@ import { createServer, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 import next from "next";
 import { WebSocketServer } from "ws";
+import { createOpenAI } from "@ai-sdk/openai";
+import { CaptionTransport } from "../src/server/captions/transport";
+import { DevIngestAuthority } from "../src/server/captions/ingest-authority";
 import { readRuntimeEnv } from "./env.js";
 
-const { port, probeToken } = readRuntimeEnv(process.env);
+const runtime = readRuntimeEnv(process.env);
+const { port, probeToken } = runtime;
+const captions = new CaptionTransport({
+  authority: new DevIngestAuthority(
+    runtime.captionsDevSession,
+    process.env.NODE_ENV === "production",
+  ),
+  delay: runtime.captionDelay,
+  reconnectGraceMs: runtime.captionReconnectGraceMs,
+  ...(runtime.openaiApiKey &&
+  runtime.captionsDevSession &&
+  process.env.NODE_ENV !== "production"
+    ? {
+        model: createOpenAI({ apiKey: runtime.openaiApiKey }).transcription(
+          runtime.captionModel,
+        ),
+      }
+    : {}),
+});
 const dev = process.argv.includes("--dev");
 // Read Next's built configuration: runtime needs neither TS config compilation
-// nor standalone's unrelated server.js. This entry point is compiled separately.
+// nor standalone's unrelated server.js. This Node entry point is bundled separately.
 const conf = dev
   ? undefined
   : JSON.parse(await readFile(".next/required-server-files.json", "utf8"))
@@ -57,6 +78,7 @@ const server = createServer((req, res) => {
     res.writeHead(503).end();
     return;
   }
+  if (captions.handleHttp(req, res)) return;
   if (path === "/api/probe/sse") {
     if (!probeToken) {
       res.writeHead(404).end();
@@ -119,6 +141,7 @@ server.on("upgrade", (req, socket, head) => {
     void app.getUpgradeHandler()(req, socket, head);
     return;
   }
+  if (ready && !stopping && captions.handleUpgrade(req, socket, head)) return;
   const protocols =
     req.headers["sec-websocket-protocol"]?.split(",").map((p) => p.trim()) ??
     [];
@@ -137,7 +160,7 @@ server.on("upgrade", (req, socket, head) => {
     socket.end(`HTTP/1.1 ${status} Rejected\r\nConnection: close\r\n\r\n`);
     return;
   }
-  // Product ingest must add membership/lease authorization here before upgrade.
+  // Caption upgrades pass through the separately gated authority above.
   wss.handleUpgrade(req, socket, head, (ws) => {
     const timeout = setTimeout(
       () => ws.close(1000, "probe complete"),
@@ -161,7 +184,7 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 /** Fail readiness first, release streams, and bound even stalled HTTP clients. */
-function shutdown(exitCode: number) {
+async function shutdown(exitCode: number) {
   if (stopping) return;
   stopping = true;
   ready = false;
@@ -174,6 +197,7 @@ function shutdown(exitCode: number) {
   }, drainMs);
   for (const res of streams) res.end();
   for (const ws of wss.clients) ws.close(1012, "service restart");
+  await captions.close(5000);
   server.close(() => {
     wss.close(() => {
       void app
@@ -190,8 +214,8 @@ function shutdown(exitCode: number) {
     });
   });
 }
-process.on("SIGTERM", () => shutdown(0));
-process.on("SIGINT", () => shutdown(0));
+process.on("SIGTERM", () => void shutdown(0));
+process.on("SIGINT", () => void shutdown(0));
 server.listen(port, "0.0.0.0", () => console.log(`HTTP listening on ${port}`));
 try {
   await app.prepare();
@@ -199,5 +223,5 @@ try {
   console.log("Next prepared");
 } catch {
   console.error("Next preparation failed");
-  shutdown(1);
+  void shutdown(1);
 }
