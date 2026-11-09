@@ -119,6 +119,21 @@ describe("host screen sharing with the real capture client", () => {
     },
   );
 
+  it.each([403, 409, 503, 500])(
+    "clears the upload HTTP %s alert after sharing stops",
+    async (status) => {
+      fetchFrame.mockResolvedValue(new Response(null, { status }));
+      await share.start(source);
+      await vi.waitFor(() =>
+        expect(share.getSnapshot().lastErrorStatus).toBe(status),
+      );
+      expect(screenShareError(share.getSnapshot())).not.toBeNull();
+      share.stop();
+      expect(share.getSnapshot().screen).toBe("stopped");
+      expect(screenShareError(share.getSnapshot())).toBeNull();
+    },
+  );
+
   it("releases a pending chooser's stream after audio stops", async () => {
     let resolveStream: (value: typeof stream) => void = () => {};
     getDisplayMedia.mockReturnValueOnce(

@@ -79,6 +79,7 @@ export function screenShareError(health: ScreenHealth): string | null {
     return "Screen access was blocked. Choose Share screen to try again and allow access in your browser.";
   if (health.screen === "error")
     return "Screen sharing couldn't start. Check your browser's screen capture permissions and try again.";
+  if (health.screen !== "live") return null;
   if (health.lastErrorStatus === 403)
     return "Screen uploads were refused (403). Reload the host page and check your access.";
   if (health.lastErrorStatus === 409)
