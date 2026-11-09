@@ -37,7 +37,7 @@ pnpm build
 pnpm dev
 ```
 
-Open the local URL printed by Next.js. Run `pnpm services:down` to stop the local services. The Compose configuration uses PostgreSQL and a private SeaweedFS S3 bucket with local credentials. The root `.env` configures the database scripts; Next.js loads app-specific settings from `apps/web/.env.local` when needed. Do not use local credentials for deployed services.
+Open `http://localhost:8080` (the custom server's default `PORT`). The session and join API routes also need `DATABASE_URL` and `SESSION_SECRET` in the app environment and an up-to-date schema: export both from `.env.example` (or copy them into `apps/web/.env.local`) and run `pnpm --filter @simon-says/db migrate:deploy` before `pnpm dev`. Run `pnpm services:down` to stop the local services. The Compose configuration uses PostgreSQL and a private SeaweedFS S3 bucket with local credentials. The root `.env` configures the database scripts; Next.js loads app-specific settings from `apps/web/.env.local` when needed. Do not use local credentials for deployed services.
 
 `pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection. The workspace uses Next.js and shadcn/ui for the application, with Prisma for PostgreSQL. See the implementation plan for completed verification and remaining work.
 

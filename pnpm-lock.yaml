@@ -59,6 +59,9 @@ importers:
       '@simon-says/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@simon-says/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@simon-says/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -92,6 +95,9 @@ importers:
       ws:
         specifier: 8.18.3
         version: 8.18.3
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@tailwindcss/postcss':
         specifier: 4.3.5
