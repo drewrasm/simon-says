@@ -16,6 +16,8 @@ export type ScreenHealth = Readonly<{
   screen: "idle" | "requesting" | "live" | "stopped" | "denied" | "error";
   lastUploadMs: number | null;
   failures: number;
+  lastErrorStatus: number | null;
+  uploadFailed: boolean;
   /** Bounded local heartbeat; updates even when identical bytes skip upload. */
   lastObservation: FrameUploadMetadata | null;
 }>;
@@ -72,7 +74,7 @@ export class FrameUploadQueue {
   constructor(
     private readonly send: (item: Upload, signal: AbortSignal) => Promise<void>,
     private readonly success: () => void,
-    private readonly failure: () => void,
+    private readonly failure: (error?: unknown) => void,
     private readonly wait: (ms: number) => Promise<void> = (ms) =>
       new Promise((resolve) => setTimeout(resolve, ms)),
   ) {}
@@ -103,7 +105,7 @@ export class FrameUploadQueue {
             break;
           } catch (error) {
             if (this.closed) break;
-            this.failure();
+            this.failure(error);
             if (error instanceof FrameUploadError && !error.retryable) break;
             if (attempt < 2) await this.wait(250 * 2 ** attempt);
           }
@@ -122,6 +124,8 @@ export class ScreenCapture {
     screen: "idle",
     lastUploadMs: null,
     failures: 0,
+    lastErrorStatus: null,
+    uploadFailed: false,
     lastObservation: null,
   };
   private listeners = new Set<() => void>();
@@ -137,10 +141,12 @@ export class ScreenCapture {
   constructor(
     private readonly options: {
       epoch: number;
+      initialSequence?: number;
       uploadUrl: string;
       getCaptureSampleOffset: () => number | undefined;
     },
   ) {
+    this.seq = options.initialSequence ?? 0;
     this.queue = new FrameUploadQueue(
       async ({ metadata, blob }, signal) => {
         const response = await fetch(options.uploadUrl, {
@@ -155,10 +161,20 @@ export class ScreenCapture {
         });
         if (!response.ok) throw new FrameUploadError(response.status);
       },
-      () => this.update({ lastUploadMs: Date.now() }),
-      () => {
+      () =>
+        this.update({
+          lastUploadMs: Date.now(),
+          lastErrorStatus: null,
+          uploadFailed: false,
+        }),
+      (error) => {
         this.changes.reset();
-        this.update({ failures: this.health.failures + 1 });
+        this.update({
+          failures: this.health.failures + 1,
+          lastErrorStatus:
+            error instanceof FrameUploadError ? error.status : null,
+          uploadFailed: true,
+        });
       },
     );
   }
@@ -256,11 +272,14 @@ export class ScreenCapture {
       if (this.changes.changed(checksum)) {
         if (encoded.size > 1_500_000) {
           this.changes.reset();
-          this.update({ failures: this.health.failures + 1 });
+          this.update({
+            failures: this.health.failures + 1,
+            uploadFailed: true,
+          });
         } else this.queue.enqueue({ metadata, blob: encoded });
       }
     } catch {
-      this.update({ failures: this.health.failures + 1 });
+      this.update({ failures: this.health.failures + 1, uploadFailed: true });
     } finally {
       this.busy = false;
     }

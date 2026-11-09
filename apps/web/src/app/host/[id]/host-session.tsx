@@ -26,6 +26,8 @@ import { MicrophonePicker } from "./microphone-picker";
 import { ShareCard } from "./share-card";
 import { useCaptionFeed } from "./use-caption-feed";
 import { useLiveCapture } from "./use-live-capture";
+import { useScreenShare } from "./use-screen-share";
+import { ScreenShareControl } from "./screen-share-control";
 
 const subscribeNever = () => () => {};
 const readOrigin = () => window.location.origin;
@@ -94,6 +96,18 @@ export const HostSession = ({
 
   const live = capture.startedAt !== null;
   const closed = status === "ended" || status === "expired";
+  const screenEnabled =
+    live &&
+    !closed &&
+    capture.health.mic === "live" &&
+    feed.capture?.session !== "ended";
+  const screenShare = useScreenShare(sessionId, screenEnabled);
+
+  const stopAudio = capture.stop;
+  useEffect(() => {
+    if (closed) void stopAudio();
+  }, [closed, stopAudio]);
+
   const heading = title ?? "Your session";
   const deviceLabel =
     mic.devices.find((device) => device.id === mic.deviceId)?.label ??
@@ -113,6 +127,7 @@ export const HostSession = ({
   };
 
   const endCapture = async () => {
+    screenShare.stop();
     await capture.stop();
     setStopped(true);
   };
@@ -125,6 +140,12 @@ export const HostSession = ({
           <span className="min-w-0 flex-1 truncate font-semibold">
             {heading}
           </span>
+          <ScreenShareControl
+            health={screenShare.health}
+            enabled={screenEnabled}
+            onStart={() => void screenShare.start(capture.getScreenSource())}
+            onStop={screenShare.stop}
+          />
           {live ? (
             <>
               {elapsed ? <LiveBadge elapsed={elapsed} /> : <LiveBadge />}

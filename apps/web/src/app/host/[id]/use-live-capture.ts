@@ -85,5 +85,14 @@ export const useLiveCapture = (sessionId: string) => {
     [],
   );
 
-  return { health, startedAt, start, stop };
+  const getScreenSource = useCallback(() => {
+    const instance = capture.current;
+    if (!instance || instance.getSnapshot().mic !== "live") return null;
+    return {
+      epoch: epoch.current,
+      getCaptureSampleOffset: instance.getCaptureSampleOffset,
+    };
+  }, []);
+
+  return { health, startedAt, start, stop, getScreenSource };
 };
