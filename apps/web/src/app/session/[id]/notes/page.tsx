@@ -37,67 +37,70 @@ const NotesPage = async ({ params }: NotesPageProps) => {
   });
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-4 px-4 pt-8 sm:px-6">
-      <header className="flex items-center gap-1">
-        <Link
-          href={`/session/${id}`}
-          aria-label="Back to captions"
-          className={buttonVariants({
-            variant: "ghost",
-            size: "icon-lg",
-            className: "size-11",
-          })}
-        >
-          <ChevronLeftIcon aria-hidden="true" />
-        </Link>
-        <div className="flex min-w-0 grow flex-col">
-          <h1 className="text-lg font-bold">My notes</h1>
-          <span className="truncate text-xs text-muted-foreground">
-            {session.title ?? "Live session"}
-          </span>
-        </div>
-      </header>
+    // Full-width dark wrapper so the body color never shows beside the column.
+    <div className="dark min-h-screen bg-background text-foreground">
+      <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-4 px-4 pt-8 sm:px-6">
+        <header className="flex items-center gap-1">
+          <Link
+            href={`/session/${id}`}
+            aria-label="Back to captions"
+            className={buttonVariants({
+              variant: "ghost",
+              size: "icon-lg",
+              className: "size-11",
+            })}
+          >
+            <ChevronLeftIcon aria-hidden="true" />
+          </Link>
+          <div className="flex min-w-0 grow flex-col">
+            <h1 className="text-lg font-bold">My notes</h1>
+            <span className="truncate text-xs text-muted-foreground">
+              {session.title ?? "Live session"}
+            </span>
+          </div>
+        </header>
 
-      <NotesExportActions
-        title={session.title ?? "Live session"}
-        bookmarks={bookmarks}
-      />
-
-      {session.status === "live" ? (
-        <Link
-          href={`/session/${id}`}
-          className="flex min-h-11 items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm"
-        >
-          <span
-            aria-hidden="true"
-            className="size-2 shrink-0 animate-pulse rounded-full bg-destructive"
-          />
-          <span className="grow font-semibold">Session is still live</span>
-          <span className="flex items-center gap-0.5 text-muted-foreground">
-            Return
-            <ChevronRightIcon aria-hidden="true" className="size-4" />
-          </span>
-        </Link>
-      ) : null}
-
-      <div className="flex-1">
-        <NotesList bookmarks={bookmarks} showJump />
-      </div>
-
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <LockIcon aria-hidden="true" className="size-3.5" />
-        Private to you on this device.
-      </p>
-
-      <div className="sticky bottom-0 -mx-4 border-t bg-background px-4 py-3 sm:-mx-6 sm:px-6">
-        <NoteComposer
-          sessionId={id}
-          triggerLabel="New note"
-          triggerClassName="h-11 w-full"
-          afterSave="refresh"
+        <NotesExportActions
+          title={session.title ?? "Live session"}
+          bookmarks={bookmarks}
         />
-      </div>
-    </main>
+
+        {session.status === "live" ? (
+          <Link
+            href={`/session/${id}`}
+            className="flex min-h-11 items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm"
+          >
+            <span
+              aria-hidden="true"
+              className="size-2 shrink-0 animate-pulse rounded-full bg-destructive"
+            />
+            <span className="grow font-semibold">Session is still live</span>
+            <span className="flex items-center gap-0.5 text-muted-foreground">
+              Return
+              <ChevronRightIcon aria-hidden="true" className="size-4" />
+            </span>
+          </Link>
+        ) : null}
+
+        <div className="flex-1">
+          <NotesList bookmarks={bookmarks} showJump />
+        </div>
+
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <LockIcon aria-hidden="true" className="size-3.5" />
+          Private to you on this device.
+        </p>
+
+        <div className="sticky bottom-0 -mx-4 border-t bg-background px-4 py-3 sm:-mx-6 sm:px-6">
+          <NoteComposer
+            sessionId={id}
+            triggerLabel="New note"
+            triggerClassName="h-11 w-full"
+            afterSave="refresh"
+          />
+        </div>
+      </main>
+    </div>
   );
 };
 
