@@ -59,7 +59,7 @@ Raw-audio object persistence is deferred today; the two-minute host resend and p
 
 ## Local foundation
 
-`apps/web/server/index.ts` owns HTTP and upgrades. Next builds normally (no standalone output); TypeScript explicitly compiles the server, and `pnpm deploy --prod --legacy` packages its production dependency closure. The runtime image contains the build and production dependencies, runs as UID/GID 1000, and excludes environment files. Node 22.22.0 and pnpm 11.24.0 are pinned. Prisma generation is a build step. The image also carries the `@simon-says/db` production closure at `/app/migrate`: the Prisma CLI, its config, the schema, and committed migrations. Only the migration Job uses it; app pods never migrate. The access routes import the database client; `apps/web/next.config.ts` bundles `@prisma/client` and `pg` because Turbopack otherwise emits hashed external symlinks under `.next/node_modules` that break once `.next` is copied into the runtime image. Those routes need `DATABASE_URL` and `SESSION_SECRET`, which the Deployment injects from Secrets `db-app` and `simon-says-session`.
+`apps/web/server/index.ts` owns HTTP and upgrades. Next builds normally (no standalone output); esbuild bundles the Node entry point, workspace TypeScript exports, and their Zod dependency (leaving direct npm dependencies external), and `pnpm deploy --prod --legacy` packages its production dependency closure. The runtime image contains the build and production dependencies, runs as UID/GID 1000, and excludes environment files. Node 22.22.0 and pnpm 11.24.0 are pinned. Prisma generation is a build step. The image also carries the `@simon-says/db` production closure at `/app/migrate`: the Prisma CLI, its config, the schema, and committed migrations. Only the migration Job uses it; app pods never migrate. The access routes import the database client; `apps/web/next.config.ts` bundles `@prisma/client` and `pg` because Turbopack otherwise emits hashed external symlinks under `.next/node_modules` that break once `.next` is copied into the runtime image. Those routes need `DATABASE_URL` and `SESSION_SECRET`, which the Deployment injects from Secrets `db-app` and `simon-says-session`.
 
 Readiness currently means Next is prepared and shutdown has not started. Liveness means the HTTP process is alive, including during preparation. External providers and persistence are deliberately excluded until core routes require them. Optional Secret references do not verify provider configuration or connectivity. `PORT` and the opt-in probe credential are validated at startup without logging values. Provider validation belongs at each provider's future initialization boundary.
 
@@ -162,3 +162,28 @@ Milestone 1 separately proves real audio, two caption readers, timestamps, durab
 ## Pending operator decisions
 
 Confirm cluster identifiers and access, available quota/storage class, image registry permissions, object storage, backup destination, provider accounts, and the post-event data plan. Keep operator commands and environment-specific manifests pending until these values are verified. Record actual commands in README only after running them successfully.
+
+## S3 caption configuration (server only)
+
+The S3 pipeline has only been exercised with an injected fake transcription model. No provider call or cluster change is established by its local tests. Production caption routes reject access until Track 3 supplies real authority and M3 supplies durable content persistence. `CAPTIONS_DEV_SESSION` never enables access with `NODE_ENV=production`.
+
+| Variable               | Runtime source                                                                          | Behavior                                                                                                                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`       | Optional Deployment Secret reference `app-credentials` / `OPENAI_API_KEY`; runtime only | Optional at boot; missing key reports degraded state (`missing_provider_key`). Never use build args or `NEXT_PUBLIC_`. No secret is created by S3.                                 |
+| `CAPTION_MODEL`        | Deployment plain environment value, not a Secret                                        | Defaults to `gpt-realtime-whisper`; server-side model ID.                                                                                                                          |
+| `CAPTION_DELAY`        | Deployment plain environment value                                                      | Defaults to `low`; accepts `minimal`, `low`, `medium`, `high`, `xhigh`.                                                                                                            |
+| `CAPTIONS_DEV_SESSION` | Explicit local environment; absent from checked-in cluster manifests                    | Enables one dev session outside production; 1–200 letters, digits, `.`, `_`, `-`; invalid IDs fail boot; not authentication. Unset rejects all without an injected real authority. |
+
+The Deployment now wires the optional provider Secret reference and non-secret model/delay defaults. `optional: true` lets the pod start without the Secret/key; captions report missing-provider degradation when an authorized development session uses them. Production still fails closed pending Track 3 authority, regardless of a supplied key. The cluster manifests do **not** set `CAPTIONS_DEV_SESSION`.
+
+For an explicitly approved team demo, an operator must review a separate, temporary overlay setting `CAPTIONS_DEV_SESSION` to a valid session ID **and** `NODE_ENV=development` (the packaged server can run the built Next app in this mode). This bypasses real membership for that single session and must be an explicit access decision, with isolated demo exposure and removal afterward. Setting the session flag alone in production does not enable access. No such overlay is applied or included here. A provider key would need separate operator provisioning; transport-only demos work without one and show degraded captions.
+
+`CAPTION_RECONNECT_GRACE_MS` is optional server-only configuration: default 10,000 ms, integer 0–60,000. A normal host close (1000) means end of input; abnormal disconnects wait for same-epoch reconnect before finishing. Finishing has a five-second provider/sink budget, then emits a gap and fences late finals. SIGTERM keeps caption SSE open through that finish budget within the existing ten-second process drain and twenty-second pod grace (including the five-second preStop).
+
+Validate manifests without reading a cluster configuration:
+
+```sh
+KUBECONFIG=/dev/null kubectl kustomize infra/k8s
+```
+
+This only renders local files; no cluster action is authorized by rendering. Do not configure provider access merely to run tests: `pnpm test` uses `ai/test` only. Keys, audio, transcripts, prompts, and raw provider errors must never enter logs. Sink failure is visible degradation plus a gap, not final publication. The process-local sink, replay log, audio receipt positions, and lease stub cannot provide restart/cross-pod durability. Dash0 integration, gateway transport, and provider network/retention verification remain follow-ups.

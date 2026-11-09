@@ -6,7 +6,12 @@ export default defineConfig([
   ...nextVitals,
   ...nextTypescript,
   { settings: { next: { rootDir: "apps/web/" } } },
-  globalIgnores(["**/.next/**", "**/next-env.d.ts", "**/generated/**"]),
+  globalIgnores([
+    "**/.next/**",
+    "**/dist/**",
+    "**/next-env.d.ts",
+    "**/generated/**",
+  ]),
   {
     files: ["packages/{ui,domain,contracts}/**/*.{ts,tsx}"],
     rules: {
