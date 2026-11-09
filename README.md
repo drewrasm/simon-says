@@ -42,3 +42,9 @@ Open the local URL printed by Next.js. Run `pnpm services:down` to stop the loca
 The Vercel project root is `apps/web`. Install from the workspace lockfile and generate Prisma before the Next.js build. Hosted credentials and provisioning remain separate setup work.
 
 `pnpm dev` runs ordinary Next.js development. The proposed WebSocket upgrade route requires `vercel dev`; that route and local CLI compatibility are milestone 1 work and are not verified by this foundation. No deployment has been created.
+
+## Agent skills
+
+Official `ai-sdk` and `vercel-react-best-practices` skills are vendored in `.agents/skills/` for Codex, with relative `.claude/skills/` symlinks for Claude Code. They are available from a fresh clone without installing app dependencies. Start a new agent session after changing skills.
+
+See [agent skill provenance and updates](docs/agent-skills.md) for pinned sources, installation commands, and the retired Next.js best-practices skill. The AI SDK remains a [proposed implementation default](docs/decisions.md#proposed-implementation-defaults).
