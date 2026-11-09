@@ -37,7 +37,7 @@ const NotesPage = async ({ params }: NotesPageProps) => {
   });
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-4 px-4 pt-8 sm:px-6">
+    <main className="dark mx-auto flex min-h-screen max-w-3xl flex-col gap-4 bg-background px-4 pt-8 text-foreground sm:px-6">
       <header className="flex items-center gap-1">
         <Link
           href={`/session/${id}`}
