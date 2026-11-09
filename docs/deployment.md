@@ -59,7 +59,7 @@ Raw-audio object persistence is deferred today; the two-minute host resend and p
 
 ## Local foundation
 
-`apps/web/server/index.ts` owns HTTP and upgrades. Next builds normally (no standalone output); TypeScript explicitly compiles the server, and `pnpm deploy --prod --legacy` packages its production dependency closure. The runtime image contains the build and production dependencies, runs as UID/GID 1000, and excludes environment files. Node 22.22.0 and pnpm 11.24.0 are pinned. Prisma generation is a build step; the current shell does not import the database client, and the runtime is not a migration image.
+`apps/web/server/index.ts` owns HTTP and upgrades. Next builds normally (no standalone output); esbuild bundles the Node entry point, workspace TypeScript exports, and their Zod dependency (leaving direct npm dependencies external), and `pnpm deploy --prod --legacy` packages its production dependency closure. The runtime image contains the build and production dependencies, runs as UID/GID 1000, and excludes environment files. Node 22.22.0 and pnpm 11.24.0 are pinned. Prisma generation is a build step; the current shell does not import the database client, and the runtime is not a migration image.
 
 Readiness currently means Next is prepared and shutdown has not started. Liveness means the HTTP process is alive, including during preparation. External providers and persistence are deliberately excluded until core routes require them. Optional Secret references do not verify provider configuration or connectivity. `PORT` and the opt-in probe credential are validated at startup without logging values. Provider validation belongs at each provider's future initialization boundary.
 
@@ -100,3 +100,16 @@ Milestone 1 separately proves real audio, two caption readers, timestamps, durab
 ## Pending operator decisions
 
 Confirm cluster identifiers and access, available quota/storage class, image registry permissions, object storage, backup destination, provider accounts, and the post-event data plan. Keep operator commands and environment-specific manifests pending until these values are verified. Record actual commands in README only after running them successfully.
+
+## S3 caption configuration (server only)
+
+The S3 pipeline has only been exercised with an injected fake transcription model. No provider call or cluster change is established by its local tests. Production caption routes reject access until Track 3 supplies real authority and M3 supplies durable content persistence. `CAPTIONS_DEV_SESSION` never enables access with `NODE_ENV=production`.
+
+| Variable               | Runtime source                                                                          | Behavior                                                                                                                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`       | Operator-managed Secret `app-credentials`, key of the same name; inject at runtime only | Optional at boot; missing key reports degraded state (`missing_provider_key`). Never use build args or `NEXT_PUBLIC_`. No secret is created by S3.                                 |
+| `CAPTION_MODEL`        | Operator-managed ConfigMap/environment, not a Secret                                    | Defaults to `gpt-realtime-whisper`; server-side model ID.                                                                                                                          |
+| `CAPTION_DELAY`        | Operator-managed ConfigMap/environment                                                  | Defaults to `low`; accepts `minimal`, `low`, `medium`, `high`, `xhigh`.                                                                                                            |
+| `CAPTIONS_DEV_SESSION` | Explicit local environment only; omit from production manifests                         | Enables one dev session outside production; 1–200 letters, digits, `.`, `_`, `-`; invalid IDs fail boot; not authentication. Unset rejects all without an injected real authority. |
+
+These are configuration source contracts, not applied manifests. Existing cluster manifests are unchanged. Do not configure provider access merely to run tests: `pnpm test` uses `ai/test` only. Keys, audio, transcripts, prompts, and raw provider errors must never enter logs. Sink failure is visible degradation plus a gap, not final publication. The process-local sink, replay log, audio receipt positions, and lease stub cannot provide restart/cross-pod durability. Dash0 integration, gateway transport, and provider network/retention verification remain follow-ups.

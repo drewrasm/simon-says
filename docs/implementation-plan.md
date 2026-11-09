@@ -129,3 +129,19 @@ If the core slice fails, cut voice, OCR, repair transcription, advanced search f
 - Before public access: identity mechanism, host access, invitation expiry, limits, revocation, redaction, and storage policy.
 - Before recap: OpenAI model through the AI SDK, structured output, data handling, budget, and durable job execution.
 - Before deployment: database and private object store, migrations, connection recovery, cleanup scheduling, rollback, and operator ownership. GitOps enablement, publication, and deployment require authorization; routine future pushes may deploy after GitOps is enabled.
+
+## Milestone 1 S3 evidence (development pipeline)
+
+S3 implements `apps/web/src/server/captions` and mounts product ingest/SSE on the checkpoint 0A server. Verification uses only AI SDK `MockTranscriptionModelV4`, including an in-process random-port HTTP server with real WebSocket and SSE clients and synthetic PCM WAV frames. It covers prewarm/commit handoff, sample partitioning, final order, retry replay, three-attempt gaps, duplicate conflicts, sink-before-final ordering, sink failure visibility, epoch fencing, bounded event replay/snapshots, and missing-provider degradation. No API keys are accessed by these tests and no OpenAI call is made.
+
+Verified locally November 9, 2026 with Node 22.22.0 and pnpm 11.24.0, after rebuilding on PR #9's `14b577f` (including the `eb1eec7` review fixes and `main` at `707313e`):
+
+- `pnpm install` regenerated the lockfile; `pnpm install --frozen-lockfile` passed.
+- `pnpm check` passed lint, formatting, strict workspace/server typechecks, and **7 test files / 55 tests**. The caption suite contributes 15 fake-model and local-transport tests, including short-pause rotation telemetry, compliant dotted IDs, schema-valid events, and finals scoped to their own window. Boot validation rejects malformed dev session IDs.
+- `pnpm build` passed the Next.js production build and custom Node bundle (including workspace contracts/domain and their Zod dependency).
+- `docker build -t simon-says:caption-pr13-final .` passed locally; no image was published. Image ID: `sha256:2fb69242c56273a3de149d13668a136b53e3fe255d61ae1af0456302e1bdff35`.
+- The packaged runtime, with `NODE_ENV=development` and `CAPTIONS_DEV_SESSION=dev.session_1-test`, served `/`, `/healthz`, and `/readyz` with 200, upgraded caption ingest with 101, replied to `hello` with `ready` (epoch 1, acknowledgment -1), and streamed caption SSE with `missing_provider_key`. No audio or provider request was sent. Production served the same health routes and rejected caption SSE with 403 despite the dev flag. Runtime UID was 1000; both containers exited 0 after stop and were removed.
+
+No API keys, OpenAI calls, kubectl, helm, cluster operations, or telemetry/search-backend writes were used. This verifies offline models and packaged transport only.
+
+Milestone 1 remains unchecked: Elasticsearch sink (M3), Postgres auth/leases/audio receipt and finalized offsets (Track 3), shared durable event delivery, real host/attendee capture, real provider latency/accuracy/retention, Dash0 export, gateway and cluster behavior are unverified. Development ack/sink/replay state is process-local and does not survive restart. Production caption access fails closed.

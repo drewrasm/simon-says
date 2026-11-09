@@ -69,7 +69,7 @@ Dash0 receives content-free OpenTelemetry from the Node runtime and worker. Allo
 
 ## Transcription and text passes
 
-**Plan B, confirmed by Dylan on November 9, 2026:** OpenAI only, using hackathon credits. Live captions use `gpt-realtime-whisper` through server-only `ai` 7.0.x `experimental_streamTranscribe` and `@ai-sdk/openai` 4.0.x `openai.transcription(model)`. `gpt-live-transcribe` is a same-price config swap. See [pricing and SDK evidence](decisions.md#confirmed-by-the-track-2-owner). This pipeline is planned, not implemented or runtime-verified.
+**Plan B, confirmed by Dylan on November 9, 2026:** OpenAI only, using hackathon credits. Live captions use `gpt-realtime-whisper` through server-only `ai` 7.0.x `experimental_streamTranscribe` and `@ai-sdk/openai` 4.0.x `openai.transcription(model)`. `gpt-live-transcribe` is a same-price config swap. See [pricing and SDK evidence](decisions.md#confirmed-by-the-track-2-owner). The S3 development implementation below is verified with fake models only; real-provider and durable production integration remain unverified.
 
 ```mermaid
 flowchart LR
@@ -110,7 +110,7 @@ flowchart LR
 
 **Ingest:** the custom Node server owns WebSocket ingest, Postgres lease/epoch checks, a two-minute ring buffer, and batched acknowledgments. A duplicate `seq` in the same epoch with the same checksum is acked idempotently; changed content conflicts. Raw-audio persistence to object storage is deferred today. Acknowledgments confirm receipt into the ring buffer, not durable storage; the [contracts](contracts.md#live-caption-ingest-and-events) define this and mark the AudioChunk record deferred.
 
-**WindowManager:** the SDK commits once when input closes and ends at its first final, so run successive windows. Rotate at the first pause of at least 300 ms after 15 s, or force at 25 s at the quietest 20 ms in the last second. Pre-open N+1 about 1 s early. Frames from the cut go to N+1; closing N's input commits it. Keep pause detection, rotation planning, and timing estimation pure in `packages/domain`; the SDK call lives in `apps/web/src/server/captions/`.
+**WindowManager:** the SDK commits once when input closes and ends at its first final, so run successive windows. Rotate at the first pause of at least 300 ms after 15 s, or 150 ms after 20 s; after 25 s cut at the first quiet unit or speech low point, with a hard cut at 27 s. Pre-open N+1 about 1 s early. Frames from the cut go to N+1; closing N's input commits it. Keep pause detection, rotation planning, and timing estimation pure in `packages/domain`; the SDK call lives in `apps/web/src/server/captions/`.
 
 **CaptionAssembler:** deltas become interim text over SSE only, with estimated audio time per delta (offset sent minus measured lag). The final replaces interim text. Split it into sentences with estimated ranges (about ±1–2 s, `timing: { kind: "estimated", uncertaintyMs }`), writing revision 1 to Elasticsearch with provenance `live` and idempotent ID `sessionId:epoch:segmentId:revision`. Publish captions in window order. Persist final content before advancing the Postgres finalized offset or publishing durable final events; settle cross-store ordering and crash recovery in milestone 1.
 
@@ -121,6 +121,18 @@ flowchart LR
 **Dash0:** one span per window; content-free interim and final caption lag, rotation gap, window duration, retries, errors, ingest backlog, reconnects, and Elasticsearch write latency. Never audio, text, or prompts.
 
 **Proposed glossary and correction, milestones 2–3:** OpenAI through the AI SDK, using the cheapest OpenAI model that passes the check, chosen at implementation. Extract terms from changed frames; correct finalized captions asynchronously with new `corrected` revisions and preserved originals. Both passes stay off the live caption path. Screen and transcript text are untrusted data, never instructions.
+
+### S3 development implementation
+
+S3 implements Plan B in `apps/web/src/server/captions/`: OpenAI `gpt-realtime-whisper` through AI SDK `experimental_streamTranscribe`, at 24 kHz PCM16 mono. `openai-window.ts` accepts an injected transcription model. One call owns one window: the SDK commits when input closes and ends at its first final. `window-manager.ts` preopens the successor, partitions samples at domain-planned cuts, and retries a failed window twice from `ring-buffer.ts`. The ring retains up to 120 seconds and 6,000 frames. Lag is an EMA seeded at 800 ms using delta arrival minus latest audio pull as a proxy, not a measured word alignment.
+
+`assembler.ts` estimates interim/sentence times using domain rules and serializes final publication by window index. `segment-sink.ts` defines the persistence boundary; finals publish only after `writeSegments` resolves. The supplied bounded in-memory sink is development-only. A failed sink emits degraded `capture.state` (`segment_sink_failed`) and an exact-range `caption.gap`, without a final; subsequent windows may continue. M3 must supply Elasticsearch durability and reconcile Postgres progress before production acceptance.
+
+`transport.ts` mounts host WebSocket `/api/sessions/:id/ingest` and SSE `/api/sessions/:id/events` in the custom Node server. `ingest-authority.ts` holds the Track 3 seam for Postgres authorization, membership, leases, and epochs. Its dev authority accepts only `CAPTIONS_DEV_SESSION`, rejects all when unset, and is always disabled in production. A higher epoch fences the old host and suppresses late finals. Same-epoch reconnect retains uncommitted windows and receipt progress. Development acknowledgments mean process-local receipt only; they do not establish durable audio storage.
+
+`event-hub.ts` provides single-replica fan-out with 500 replay events and up to 500 latest finals for snapshot fallback. SSE uses monotonically ordered cursors, `Last-Event-ID`, 15-second source-clock heartbeats, no compression/buffering, and disconnects slow clients. Product connections are capped at 32, retained sessions at 16, and active/completed waiting windows at eight. Each connection lasts at most 30 minutes; provider attempts time out after 45 seconds. Replace process-local leases, acknowledgments, replay, and snapshots with the shared durable event source above before production or multiple replicas. Shutdown cancels provider calls and closes product transports. `telemetry.ts` exposes numeric content-free callbacks, including a counter for each cut tier (`pause`, `short_pause`, `soft_limit`, `hard_limit`); Dash0 binding is pending.
+
+Missing provider configuration keeps boot working and reports degraded state with `missing_provider_key`. No provider error messages or captured content are logged. Only fake-model tests have exercised this pipeline; real-provider accuracy, latency, retention settings, network behavior, browser capture, and cluster operation are unverified.
 
 ## Timeline invariants
 

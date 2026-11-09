@@ -97,6 +97,12 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 - [Hackathon resources](https://www.wemakedevs.org/hackathons/cnh/resources), [rules](https://www.wemakedevs.org/hackathons/cnh/rules), [schedule](https://www.wemakedevs.org/hackathons/cnh/schedule).
 - [Plaud highlights](https://support.plaud.ai/hc/en-us/articles/63429919023385-Highlight-a-moment-while-recording-for-v4-0-x-or-later): marking recorded moments already exists. Simon Says emphasizes shared session capture with private, illustrated selections; uniqueness is not established.
 
+## S3 Plan B caption implementation
+
+November 9, 2026: S3 implements the Plan B direction above as a development pipeline. Use AI SDK `experimental_streamTranscribe` with `@ai-sdk/openai`, default `gpt-realtime-whisper`, in consecutive 24 kHz windows. Input close commits each window; prewarm the next call before rotation. SDK versions are pinned in the lockfile; real OpenAI behavior remains unverified. The SDK supplies `MockTranscriptionModelV4`; tests adapt its optional method typing to this repository's `exactOptionalPropertyTypes` setting by exposing only defined methods.
+
+Final publication waits for the segment sink. Sink failure emits degraded state and an exact-range gap, then permits later windows; no final is emitted for failed persistence. The in-memory sink and receipt/replay state are explicitly development-only. Production access is disabled until Track 3/M3 supply authority and durability; the dev flag cannot override this. No provider key or service call is needed for tests. This preserves the shared-content ownership decision above and leaves milestone 1 acceptance open.
+
 ## C1b Elasticsearch storage setup
 
 Track 2 supplies strict `segments-v1` and `observations-v1` mappings behind write aliases, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).
