@@ -3,13 +3,14 @@
 import type { BookmarkResponse } from "@simon-says/contracts/bookmark";
 import { Button } from "@simon-says/ui/components/button";
 import { Input } from "@simon-says/ui/components/input";
-import { DownloadIcon, XIcon } from "lucide-react";
+import { CopyIcon, DownloadIcon, Share2Icon, XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
+import { useId, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { deleteBookmark, updateBookmarkNote } from "../bookmark-client";
 import { NOTE_MAX_LENGTH } from "../use-note-draft";
 import { notesMarkdown } from "./notes-markdown";
+import { notesPlainText } from "./notes-plain-text";
 
 /** Removes one of the attendee's own cards. */
 export const RemoveCardButton = ({
@@ -118,19 +119,52 @@ export const AddNoteInline = ({ bookmark }: AddNoteInlineProps) => {
   );
 };
 
-type ExportNotesButtonProps = {
+const subscribeNothing = () => () => {};
+const canShareOnDevice = () => typeof navigator.share === "function";
+const noShareOnServer = () => false;
+
+type NotesExportActionsProps = {
   title: string;
   bookmarks: BookmarkResponse[];
-  iconOnly?: boolean;
 };
 
-/** Downloads the attendee's own notes as Markdown, built in the browser. */
-export const ExportNotesButton = ({
+/**
+ * Copy, share (only where the device offers the share sheet), and download the
+ * attendee's own notes. Everything is built in the browser; nothing is sent.
+ */
+export const NotesExportActions = ({
   title,
   bookmarks,
-  iconOnly = false,
-}: ExportNotesButtonProps) => {
-  const exportNotes = () => {
+}: NotesExportActionsProps) => {
+  const canShare = useSyncExternalStore(
+    subscribeNothing,
+    canShareOnDevice,
+    noShareOnServer,
+  );
+  const empty = bookmarks.length === 0;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(notesPlainText(title, bookmarks));
+      toast.success("Copied as text");
+    } catch {
+      toast.error("Couldn't copy. Try Download instead.");
+    }
+  };
+
+  const share = async () => {
+    try {
+      // No `title`: share targets such as Notes put it above the text, and the
+      // text already opens with the "My notes: …" heading.
+      await navigator.share({ text: notesPlainText(title, bookmarks) });
+    } catch (error) {
+      // Cancelling the share sheet is not a failure.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      toast.error("Couldn't open sharing. Try Copy instead.");
+    }
+  };
+
+  const download = () => {
     const blob = new Blob([notesMarkdown(title, bookmarks)], {
       type: "text/markdown;charset=utf-8",
     });
@@ -141,28 +175,49 @@ export const ExportNotesButton = ({
     link.click();
     URL.revokeObjectURL(url);
   };
-  return iconOnly ? (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-lg"
-      className="size-11"
-      aria-label="Export notes as Markdown"
-      disabled={bookmarks.length === 0}
-      onClick={exportNotes}
-    >
-      <DownloadIcon aria-hidden="true" />
-    </Button>
-  ) : (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      disabled={bookmarks.length === 0}
-      onClick={exportNotes}
-    >
-      <DownloadIcon data-icon="inline-start" />
-      Export
-    </Button>
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-11 lg:h-9"
+          disabled={empty}
+          onClick={() => void copy()}
+        >
+          <CopyIcon data-icon="inline-start" />
+          Copy as text
+        </Button>
+        {canShare ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-11 lg:h-9"
+            disabled={empty}
+            onClick={() => void share()}
+          >
+            <Share2Icon data-icon="inline-start" />
+            Share
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-11 lg:h-9"
+          disabled={empty}
+          onClick={download}
+        >
+          <DownloadIcon data-icon="inline-start" />
+          Download .md
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Copied, shared, or downloaded notes leave this device.
+      </p>
+    </div>
   );
 };

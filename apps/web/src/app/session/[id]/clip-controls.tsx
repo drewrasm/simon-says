@@ -75,7 +75,7 @@ const ClipSheet = ({ sessionId, open, onOpenChange }: ClipSheetProps) => {
       modal="trap-focus"
       disablePointerDismissal
     >
-      <DrawerContent className="shadow-[0_-8px_24px_rgb(0_0_0/0.12)]">
+      <DrawerContent className="dark shadow-[0_-8px_24px_rgb(0_0_0/0.12)]">
         <form
           className="mx-auto flex w-full max-w-lg flex-col gap-4 p-4"
           onSubmit={(event) => {
@@ -216,7 +216,7 @@ export const ClipControls = ({ sessionId }: { sessionId: string }) => {
         <div
           role="toolbar"
           aria-label="Selected lines"
-          className="fixed inset-x-4 bottom-24 z-40 mx-auto flex max-w-xl flex-col gap-2 lg:bottom-6"
+          className="dark fixed inset-x-4 bottom-24 z-40 mx-auto flex max-w-xl flex-col gap-2 lg:bottom-6"
         >
           {failureMessage ? (
             <Alert variant="destructive" className="hidden lg:grid">

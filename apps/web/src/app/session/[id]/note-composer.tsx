@@ -97,7 +97,7 @@ export const NoteComposer = ({
         <SquarePenIcon data-icon="inline-start" />
         {triggerLabel}
       </DrawerTrigger>
-      <DrawerContent className="shadow-[0_-8px_24px_rgb(0_0_0/0.12)]">
+      <DrawerContent className="dark shadow-[0_-8px_24px_rgb(0_0_0/0.12)]">
         <form
           className="mx-auto flex w-full max-w-lg flex-col gap-4 p-4"
           onSubmit={(event) => {

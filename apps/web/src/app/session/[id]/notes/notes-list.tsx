@@ -16,7 +16,7 @@ import { ClockIcon, ScissorsIcon, SquarePenIcon } from "lucide-react";
 import Link from "next/link";
 import { isUnpinned } from "../talk-time";
 import { AddNoteInline, RemoveCardButton } from "./note-card-actions";
-import { momentLabel, quoteText } from "./notes-markdown";
+import { momentLabel, quoteText } from "./notes-entries";
 import { SavedTime } from "./saved-time";
 
 /** Newest first, by creation time then ID, so the list order is stable. */

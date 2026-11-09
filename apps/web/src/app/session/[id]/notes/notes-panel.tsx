@@ -1,6 +1,6 @@
 import type { BookmarkResponse } from "@simon-says/contracts/bookmark";
 import type { ReactNode } from "react";
-import { ExportNotesButton } from "./note-card-actions";
+import { NotesExportActions } from "./note-card-actions";
 import { NotesList } from "./notes-list";
 
 type NotesPanelProps = {
@@ -28,8 +28,8 @@ export const NotesPanel = ({
           from {title}
         </p>
       </div>
-      <ExportNotesButton title={title} bookmarks={bookmarks} />
     </div>
+    <NotesExportActions title={title} bookmarks={bookmarks} />
     {actions}
     {form}
     <NotesList bookmarks={bookmarks} />
