@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { AccessError } from "@/server/access/errors";
 import { requireMembership } from "@/server/access/membership";
 import { readPrincipal } from "@/server/access/principal";
+import { listNotes, sessionElapsedMs } from "@/server/bookmarks/notes";
 import { CaptionReader } from "./caption-reader";
+import { NoteComposer } from "./note-composer";
+import { NoteForm } from "./note-form";
+import { NotesPanel } from "./notes/notes-panel";
 import { NotJoined } from "./not-joined";
 
 export const dynamic = "force-dynamic";
@@ -25,10 +29,32 @@ const SessionPage = async ({ params }: SessionPageProps) => {
     throw error;
   }
 
+  const { session } = membership;
+  const notes = await listNotes({ principalId: principal?.id, sessionId: id });
+  const elapsedAtRenderMs = sessionElapsedMs(session.createdAt);
+
   return (
     <CaptionReader
-      title={membership.session.title}
-      status={membership.session.status}
+      sessionId={id}
+      title={session.title}
+      status={session.status}
+      noteCount={notes.length}
+      notesPanel={
+        <NotesPanel
+          bookmarks={notes}
+          form={
+            <NoteForm sessionId={id} elapsedAtRenderMs={elapsedAtRenderMs} />
+          }
+        />
+      }
+      actions={
+        <NoteComposer
+          sessionId={id}
+          elapsedAtRenderMs={elapsedAtRenderMs}
+          triggerLabel="Note"
+          afterSave="open-notes"
+        />
+      }
     />
   );
 };
