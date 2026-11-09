@@ -45,7 +45,7 @@ One Next.js application owns the UI and backend. HTTP endpoints use App Router R
 
 ## Kubernetes runtime
 
-Deploy the existing Next.js app as a Node.js container. Radar supplies cluster visibility, investigations, and deployment operations; Kubernetes runs the app. Keep HTTP APIs in Route Handlers. A proposed custom Node entry point owns WebSocket upgrades and delegates HTTP to Next.js. Prove its packaging, development command, and graceful shutdown in checkpoint 0A; do not assume a Route Handler supports upgrades outside Vercel. A custom server must be packaged explicitly rather than assuming Next.js standalone output includes it.
+Deploy the existing Next.js app as a Node.js container. Radar supplies cluster visibility, investigations, and deployment operations; Kubernetes runs the app. Keep product HTTP APIs in Route Handlers. Checkpoint 0A adds a custom Node entry point for health/transport probes, WebSocket upgrades, and Next.js HTTP, explicitly compiled and packaged without standalone output. See [0A local evidence](implementation-plan.md#checkpoint-0a-local-evidence) for packaging, development HMR, and shutdown verification; cluster behavior remains unverified. Do not assume a Route Handler supports upgrades outside Vercel.
 
 Start with one application replica, but keep all leases, replay cursors, audio acknowledgments, and transcript progress durable. Rolling deployments can overlap pods. Reconnect with backoff, replay frames the host still holds, deduplicate overlap, and preserve the source clock. Pod termination must not end a session; audio beyond host resend capacity becomes a visible gap while raw-audio persistence is deferred. Keep missing audio distinct from missing transcript.
 
