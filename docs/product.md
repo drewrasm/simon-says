@@ -1,6 +1,6 @@
 # Product
 
-Status: planned. Name, shared-session capture, monorepo, Vite, and shadcn/ui are confirmed choices. Runtime behavior is unverified.
+Status: planned. Name, shared-session capture, monorepo, Next.js on Vercel, and shadcn/ui are confirmed choices. Runtime behavior is unverified.
 
 ## Experience
 

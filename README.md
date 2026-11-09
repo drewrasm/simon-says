@@ -12,7 +12,8 @@ The host captures the speaker's microphone and screen once. Attendees join by QR
 - [Architecture](docs/architecture.md): monorepo ownership, data flow, and invariants.
 - [Contracts](docs/contracts.md): records, APIs, and event semantics.
 - [Implementation plan](docs/implementation-plan.md): ordered milestones and acceptance checks.
+- [Building tracks](docs/building-tracks.md): three-builder ownership, handoffs, and first working slices.
 - [Decisions](docs/decisions.md): confirmed choices, proposals, and open questions.
 - [Agent instructions](AGENTS.md): how to work in this repository.
 
-The UI uses **Vite and shadcn/ui**. This monorepo will contain the frontend, backend, shared packages, database migrations, infrastructure, and tests. The first implementation milestone establishes reproducible setup and documents the actual commands here.
+The planned stack is **Next.js and shadcn/ui on Vercel**. This monorepo will contain one full-stack application, shared packages, database migrations, infrastructure configuration, and tests. The first implementation milestone establishes reproducible setup and documents the actual commands here.

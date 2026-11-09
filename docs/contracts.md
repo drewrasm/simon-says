@@ -19,6 +19,8 @@ Session states: setup, live, degraded, ended, expired. Keep transport health, tr
 
 ## API
 
+HTTP endpoints run as Next.js Route Handlers in `apps/web`. The proposed audio WebSocket uses a Vercel function in the same project; verify its routing in milestone 1. Endpoint paths below are logical contracts, not scaffolded routes.
+
 | Operation | Contract |
 | --- | --- |
 | `POST /api/sessions` | Authorized host creates a session |
@@ -26,7 +28,7 @@ Session states: setup, live, degraded, ended, expired. Keep transport health, tr
 | `POST /api/sessions/:id/end` | Host-only, idempotent stop; fence ingest and persist end/expiry times |
 | `WS /api/sessions/:id/ingest` | Host audio/clock messages; require current lease and epoch |
 | `POST /api/sessions/:id/frames` | Timestamped images; require host role, current lease and epoch |
-| `GET /api/sessions/:id/events` | Member-only SSE with replay cursor and snapshot fallback |
+| `GET /api/sessions/:id/events` | Member-only, reconnectable SSE with replay cursor and snapshot fallback |
 | `PUT /api/bookmarks/:id` | Owner-only idempotent create/update with expected revision |
 | `GET /api/me/bookmarks?sessionId=...` | Return the current attendee's selections |
 | `DELETE /api/bookmarks/:id` | Owner deletion plus recap invalidation |
@@ -42,8 +44,8 @@ Specify lifecycle payload schemas alongside their implementation. Ended sessions
 
 Each session event carries a cursor, session ID, event kind, entity ID/revision, and source time where applicable. Event kinds include transcript update, frame observation, capture state, and clock heartbeat. Use a discriminated schema per kind.
 
-Private bookmark and recap status never enters the shared caption channel. Use bounded polling of owner-only bookmark and recap reads while the relevant view is open, including stale-result changes. Validate membership on stream creation and enforce revocation while connected. Bound payload sizes, queue sizes, and session duration.
+Private bookmark and recap status never enters the shared caption channel. Use bounded polling of owner-only bookmark and recap reads while the relevant view is open, including stale-result changes. Validate membership on stream creation and enforce revocation while connected. Bound payload sizes, queue sizes, and session duration. Function expiry reconnects transport without ending the session. Persist leases and replay state outside function memory; reject stale epochs across all instances. Provider reconnects retain source-clock mapping. Persist a finalized transcript offset separately from audio acknowledgments; replay retained, unfinalized audio with overlap deduplication. Report unrecoverable transcript gaps separately from audio gaps. Disable shared caching for member and owner responses.
 
 Duplicate audio epoch/sequence with the same checksum acknowledges the existing chunk; changed content conflicts. Bookmark retries reuse an operation ID; a deliberate second mark gets a new ID. Stale edits conflict instead of overwriting. Save acknowledgments distinguish local pending data from server persistence.
 
-Recap generation binds to source revisions. Check them again before publishing the result. Edits, deletion, redaction, and expiry invalidate affected results. Empty or unresolved selections do not produce unsupported takeaways. Validate model source IDs and evidence excerpts before saving.
+Recap requests persist an owner-scoped recap and durable generation job, then return the recap ID for the existing status endpoint. Request retries use an operation ID to reuse the same recap and job. Recap generation binds to source revisions. Check them again before publishing the result. Edits, deletion, redaction, and expiry invalidate affected results. Empty or unresolved selections do not produce unsupported takeaways. Validate model source IDs and evidence excerpts before saving.

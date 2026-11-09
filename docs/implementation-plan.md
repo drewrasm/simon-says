@@ -2,14 +2,30 @@
 
 Status: not started. These checkboxes describe outcomes, not permission to implement. Complete one vertical slice before expanding scope.
 
+## Three builder tracks
+
+The [building tracks](building-tracks.md) detail ownership, ordered deliverables, dependencies, and integration checkpoints within the same Next.js app.
+
+| Track | Owns | First working slice |
+| --- | --- | --- |
+| UI | Next.js pages and components, shadcn/ui, host controls, QR join, captions, selection cards, recap views | Two attendees join and read shared captions |
+| Capture and transcription | Browser capture module, Vercel ingest function, source clock, Deepgram adapter, transcript and frame persistence, shared caption feed | One mic produces captions and aligned frames; stop fences ingest |
+| Private highlights and recaps | Identity and membership, owner checks, bookmarks, evidence alignment, notes, recap jobs, exports, data lifecycle | Each attendee saves and reads only their own aligned evidence |
+
+One builder drives milestone 0 with input from the others. Agree on the first shared contracts before splitting. The capture builder supplies a browser module to the UI builder. The highlights builder supplies membership checks to both tracks. Coordinate changes to contracts and migrations; keep feature modules separate within `apps/web/src/server`.
+
+Integrate shared captions first, private evidence second, and recaps third. Tracks divide ownership, not milestone acceptance.
+
 ## Milestones
 
-- [ ] **0. Minimal runnable monorepo.** Create needed [workspaces](architecture.md), pin compatible Node/pnpm versions, and commit one lockfile. Configure strict TypeScript, Vite + React, shadcn/ui, lint/format checks, and Vitest. Add root scripts, `.env.example`, and local Postgres/object-storage configuration. Prove install, typecheck, relevant tests, and build; document real commands in README. Keep credentials server-only. Complete CI and end-to-end tooling in milestone 5.
-- [ ] **1. One host, multiple readers.** Implement host identity, attendee membership, pre-capture/join disclosures, mic/screen checks, capture epochs, the transcription adapter, shared captions, and host stop with persisted end time. Gate: real audio produces captions on two attendee devices through one transcription stream; a real frame carries a matching timestamp; stop ends capture. Defer menus and dashboards until this works.
-- [ ] **2. Private, aligned highlights.** Add evidence migrations. Persist segments, frames, event cursors, and owner-scoped bookmarks. Implement live and paragraph anchors, owner status reads, pending states, notes, trimming, deletion, and reconnect replay. Gate: two attendees mark different moments; each gets the correct text/images and cannot read the other's notes.
-- [ ] **3. Illustrated recaps.** Generate only from resolved selected evidence. Implement owner-only recap reads and status updates. Validate references, bind source revisions, and support portable HTML and Markdown export. Gate: distinct selections yield distinct recaps with inspectable passages/images; failures preserve saved evidence.
-- [ ] **4. Recovery and data lifecycle.** Implement membership revocation, source redaction, retention cleanup, and source-reference handling. Verify fencing, gaps, stale clocks, duplicate messages, and lifecycle routes. Add content-free telemetry. Gate: fault tests remain honest about missing evidence and prove ownership. Automatic repair transcription is optional; missing-range detection is required.
-- [ ] **5. Demo and delivery.** Add CI and Playwright coverage of the core flow and ownership. Prove documented setup and checks from a clean checkout. Run the actual host/attendee flow on target devices; inspect transcript errors and code-image legibility. Document limitations and AI assistance. Verify production builds and deployment configuration before any separately authorized deployment.
+When documenting local setup in milestone 0, distinguish ordinary Next.js development from the proposed WebSocket route's `vercel dev` requirement. Verify local ingest support in milestone 1.
+
+- [ ] **0. Minimal runnable monorepo.** Create needed [workspaces](architecture.md), pin compatible Node/pnpm versions, and generate one lockfile. Configure one Next.js App Router app, strict TypeScript, shadcn/ui, lint/format checks, and Vitest. Add root scripts, `.env.example`, and local Postgres/object-storage configuration. Prove install, typecheck, relevant tests, and build; document real commands in README. Document `apps/web` as the Vercel project root. Keep credentials server-only and verify server/client import boundaries. Do not provision or deploy yet. Complete CI and end-to-end tooling in milestone 5.
+- [ ] **1. One host, multiple readers.** Implement host identity, attendee membership, pre-capture/join disclosures, mic/screen checks, capture epochs, the transcription adapter, durable audio and transcript progress, replay events, shared captions, and host stop with persisted end time. Gate: real audio produces captions on two attendee devices through one transcription stream; a real frame carries a matching timestamp; stop ends capture. Verify Vercel WebSocket routing, function-duration reconnects, shared caption delivery across instances, and durable leases before accepting this milestone. Acceptance requires an authorized preview deployment with a database, private storage, and shared event source; local checks alone leave this gate open. Defer menus and dashboards until this works.
+- [ ] **2. Private, aligned highlights.** Extend the session timeline schema with owner-scoped bookmarks and retained selection evidence. Implement live and paragraph anchors, owner status reads, pending states, notes, trimming, deletion, and reconnect replay. Gate: two attendees mark different moments; each gets the correct text/images and cannot read the other's notes.
+- [ ] **3. Illustrated recaps.** Generate only from resolved selected evidence. Select and verify a durable Vercel-compatible job mechanism. Implement owner-only recap reads and status updates, including retry and timeout recovery. Validate references, bind source revisions, and support portable HTML and Markdown export. Gate: distinct selections yield distinct recaps with inspectable passages/images; failures preserve saved evidence.
+- [ ] **4. Recovery and data lifecycle.** Implement membership revocation, source redaction, scheduled retention cleanup, and source-reference handling. Verify interrupted cleanup resumes safely. Verify fencing, gaps, stale clocks, duplicate messages, and lifecycle routes. Add content-free telemetry. Gate: fault tests remain honest about missing evidence and prove ownership. Automatic repair transcription is optional; missing-range detection is required.
+- [ ] **5. Demo and delivery.** Add CI and Playwright coverage of the core flow and ownership. Prove documented setup and checks from a clean checkout. Run the actual host/attendee flow on target devices; inspect transcript errors and code-image legibility. Document limitations and AI assistance. Verify Next.js production builds and Vercel deployment configuration before any separately authorized deployment.
 
 After each milestone, record a short evidence note here: verified behavior, checks run, and remaining gaps. Never check a milestone off from source inspection alone.
 
@@ -17,7 +33,7 @@ After each milestone, record a short evidence note here: verified behavior, chec
 
 Use authorized synthetic audio and screens with known timing. Include these checks:
 
-1. Three attendees share one live transcription stream; a stale second host cannot publish audio or frames. A host crash leaves the session visibly degraded until an authorized new epoch starts or the host ends it.
+1. Three attendees share one live transcription stream; a stale second host cannot publish audio or frames. A host crash leaves the session visibly degraded until an authorized new epoch starts or the host ends it. Repeat with separate function instances and forced function expiry. Expire a function after durable audio acknowledgment but before final transcript delivery; verify replay produces no silent gap or duplicate words.
 2. Slide A ends at 30s, B follows. A 15–45s mark includes both. A mark ending before 30s excludes B despite delayed uploads. Record sampling uncertainty.
 3. Four-second caption delay does not change live versus paragraph anchor semantics. Stale clock sync prevents a guessed live mark.
 4. Duplicate/out-of-order transcript events converge to one latest segment. Reconnect replays corrections or returns a complete snapshot.
@@ -30,13 +46,14 @@ Use authorized synthetic audio and screens with known timing. Include these chec
 
 ## Hackathon cut
 
-Estimate: two experienced builders and five focused hours, including scaffolding, not a guarantee. First hour: minimal workspace setup, then capture and join/feed in parallel. Second: persistence and aligned bookmarks. Third: illustrated recap. Fourth: lifecycle implementation and failure checks. Fifth: CI, end-to-end verification, demo, and documentation. Reserve submission time separately.
+Three builders work through the tracks above after shared setup. Timebox the first integration to host capture, two caption readers, and one private saved interval. Estimate the remaining work after that slice runs; Vercel transport and provider setup are unverified. Reserve time for lifecycle checks, CI, end-to-end verification, and submission.
 
 If the core slice fails, cut voice, OCR, repair transcription, search, and additional sponsor integrations first. Never cut ownership checks or hide capture gaps. Report simulated integrations explicitly.
 
 ## Resolve before the affected milestone
 
-- Before capture: target browser/device, authorized mic/screen route, provider account and retention settings.
+- Before capture: target browser/device, authorized mic/screen route, provider account and retention settings, Vercel WebSocket routing, function limits, and shared event delivery.
+- Before milestone 1 acceptance: authorize the Vercel preview and provision its database, private storage, and shared event source.
 - Before public access: identity mechanism, host access, invitation expiry, limits, revocation, redaction, and storage policy.
-- Before recap: text/multimodal provider, structured output, data handling, and budget.
-- Before deployment: hosting, object store, migrations, long-lived connection support, and operator ownership.
+- Before recap: text/multimodal provider, structured output, data handling, budget, and durable job execution.
+- Before deployment: Vercel project and plan, database and private object store, migrations, connection recovery, cleanup scheduling, and operator ownership. Deployment still requires authorization.
