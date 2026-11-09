@@ -151,6 +151,30 @@ describe("session search with synthetic ES HTTP fixtures", () => {
     expect((await searchSession(options)).indexingState).toBe("current");
   });
 
+  it("bounds the registry, evicting the least recently written session", async () => {
+    recordAcknowledgedSegments([
+      syntheticSegment({ sessionId, segmentId: "segment-2" }),
+    ]);
+    const otherSessions = Array.from({ length: 100 }, () => randomUUID());
+    for (const other of otherSessions)
+      recordAcknowledgedSegments([syntheticSegment({ sessionId: other })]);
+
+    expect(globalThis.simonSaysUnsearchedSegments?.size).toBe(100);
+    expect((await searchSession(options)).indexingState).toBe("current");
+
+    recordAcknowledgedSegments(
+      Array.from({ length: 1100 }, (_, index) =>
+        syntheticSegment({ sessionId, segmentId: `segment-${index + 2}` }),
+      ),
+    );
+    expect(globalThis.simonSaysUnsearchedSegments?.get(sessionId)?.size).toBe(
+      1001,
+    );
+    expect(globalThis.simonSaysUnsearchedSegments?.has(otherSessions[0]!)).toBe(
+      false,
+    );
+  });
+
   it("keeps failures unavailable while segments are pending", async () => {
     recordAcknowledgedSegments([
       syntheticSegment({ sessionId, segmentId: "segment-2" }),

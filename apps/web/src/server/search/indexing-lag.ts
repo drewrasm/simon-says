@@ -13,17 +13,35 @@ declare global {
 const unsearchedSegments = () =>
   (globalThis.simonSaysUnsearchedSegments ??= new Map());
 
+// Search returns `unavailable` above 1,000 segments, so more entries never change its answer.
+const maxSegmentsPerSession = 1001;
+const maxSessions = 100;
+
 /** Call only after Elasticsearch acknowledged the write. */
 export const recordAcknowledgedSegments = (
   segments: readonly TranscriptSegment[],
 ) => {
+  const sessions = unsearchedSegments();
+
   for (const { sessionId, segmentId, revision } of segments) {
     const acknowledged: AcknowledgedRevisions =
-      unsearchedSegments().get(sessionId) ?? new Map();
+      sessions.get(sessionId) ?? new Map();
 
-    if (revision > (acknowledged.get(segmentId) ?? 0))
+    const tracked = acknowledged.has(segmentId);
+    if (
+      (tracked || acknowledged.size < maxSegmentsPerSession) &&
+      revision > (acknowledged.get(segmentId) ?? 0)
+    )
       acknowledged.set(segmentId, revision);
-    unsearchedSegments().set(sessionId, acknowledged);
+
+    // Reinsert so iteration order is least recently written first.
+    sessions.delete(sessionId);
+    sessions.set(sessionId, acknowledged);
+  }
+
+  for (const sessionId of sessions.keys()) {
+    if (sessions.size <= maxSessions) break;
+    sessions.delete(sessionId);
   }
 };
 
