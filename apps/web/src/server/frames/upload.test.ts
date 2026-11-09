@@ -113,6 +113,7 @@ describe("frame endpoint", () => {
   it("fails closed in production and without explicit dev opt-in", async () => {
     for (const env of [
       {},
+      { NODE_ENV: "production" },
       { NODE_ENV: "production", CAPTIONS_DEV_SESSION: "demo" },
     ])
       expect(
