@@ -74,6 +74,13 @@ describe("caption contracts", () => {
     expect(
       captionEventSchema.safeParse({ ...base, kind: "bookmark.saved" }).success,
     ).toBe(false);
+    // Inverted ranges are rejected on every range-carrying event.
+    expect(
+      captionEventSchema.safeParse({ ...events[0], estimatedEndMs: 1 }).success,
+    ).toBe(false);
+    expect(
+      captionEventSchema.safeParse({ ...events[2], endMs: 1 }).success,
+    ).toBe(false);
   });
 
   it("validates ingest control messages", () => {

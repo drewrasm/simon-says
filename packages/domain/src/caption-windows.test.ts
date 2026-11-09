@@ -68,6 +68,27 @@ describe("QuietDetector", () => {
   });
 });
 
+describe("QuietDetector discontinuities", () => {
+  it("restarts units at a sample-offset gap instead of spanning it", () => {
+    const detector = new QuietDetector({ sampleRate: RATE });
+    const audio = synthesize([{ ms: 100, kind: "speech" }], RATE);
+    // 300 samples leaves a partial unit pending, then the stream jumps ahead.
+    expect(detector.push(0, audio.subarray(0, 300))).toEqual([]);
+    const units = detector.push(48_000, audio.subarray(0, 960));
+    expect(units.map((u) => u.startSample)).toEqual([48_000, 48_480]);
+  });
+
+  it("keeps unit alignment across odd-sized contiguous frames", () => {
+    const detector = new QuietDetector({ sampleRate: RATE });
+    const audio = synthesize([{ ms: 100, kind: "speech" }], RATE);
+    const first = detector.push(0, audio.subarray(0, 700));
+    const second = detector.push(700, audio.subarray(700, 1_440));
+    expect([...first, ...second].map((u) => u.startSample)).toEqual([
+      0, 480, 960,
+    ]);
+  });
+});
+
 describe("WindowPlanner", () => {
   it("cuts at the first real pause after the minimum window", () => {
     const { decisions, cuts, cutMs } = run([

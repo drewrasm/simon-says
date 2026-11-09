@@ -73,11 +73,21 @@ export class QuietDetector {
     );
   }
 
-  /** Feed one frame; returns the complete 20 ms units it closed. */
+  /**
+   * Feed one frame; returns the complete 20 ms units it closed. A frame that
+   * does not continue where the previous one ended (a gap or an overlap)
+   * discards the partial unit, so units never span a discontinuity.
+   */
   push(sampleOffset: number, samples: Int16Array): AnalysisUnit[] {
     const units: AnalysisUnit[] = [];
-    if (this.pendingStartSample === null)
+    const expected =
+      this.pendingStartSample === null
+        ? null
+        : this.pendingStartSample + this.pendingCount;
+    if (expected !== sampleOffset) {
       this.pendingStartSample = sampleOffset;
+      this.pendingCount = 0;
+    }
     let index = 0;
     while (index < samples.length) {
       const take = Math.min(

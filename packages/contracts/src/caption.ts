@@ -62,15 +62,20 @@ const eventBase = {
 };
 
 /** Live, unstored text for a window; replaced wholesale by later events. */
-export const captionInterimEventSchema = z.object({
-  ...eventBase,
-  kind: z.literal("caption.interim"),
-  epoch,
-  windowId: id,
-  text: z.string().max(10_000),
-  startMs: ms,
-  estimatedEndMs: ms,
-});
+export const captionInterimEventSchema = z
+  .object({
+    ...eventBase,
+    kind: z.literal("caption.interim"),
+    epoch,
+    windowId: id,
+    text: z.string().max(10_000),
+    startMs: ms,
+    estimatedEndMs: ms,
+  })
+  .refine((event) => event.estimatedEndMs >= event.startMs, {
+    message: "estimatedEndMs must not precede startMs",
+    path: ["estimatedEndMs"],
+  });
 
 /** Final segments for a window; supersede that window's interim text. */
 export const captionFinalEventSchema = z.object({
@@ -87,14 +92,19 @@ export const captionGapReasonSchema = z.enum([
 ]);
 
 /** A source range with no transcript; never reported as caught up. */
-export const captionGapEventSchema = z.object({
-  ...eventBase,
-  kind: z.literal("caption.gap"),
-  epoch,
-  startMs: ms,
-  endMs: ms,
-  reason: captionGapReasonSchema,
-});
+export const captionGapEventSchema = z
+  .object({
+    ...eventBase,
+    kind: z.literal("caption.gap"),
+    epoch,
+    startMs: ms,
+    endMs: ms,
+    reason: captionGapReasonSchema,
+  })
+  .refine((event) => event.endMs >= event.startMs, {
+    message: "endMs must not precede startMs",
+    path: ["endMs"],
+  });
 
 export const captureStateEventSchema = z.object({
   ...eventBase,
