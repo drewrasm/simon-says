@@ -29,8 +29,8 @@ Keep durable choices here. Mark proposals explicitly; add rationale and conseque
 
 These tools appear in the [hackathon resources](https://www.wemakedevs.org/hackathons/cnh/resources). Considering them does not authorize installation or enablement; no integration is confirmed.
 
-- **Dash0:** trace caption latency, transcription failures, and recap errors without logging captured content, private notes, or model prompts.
-- **Sonar/Gitar:** development tooling to review the three builders' PRs and catch bugs. No auto-apply, automatic pushes, or PR comments are authorized.
+- **Dash0:** plan integration during milestone 1 to trace caption latency, transcription failures, and recap errors without logging captured content, private notes, or model prompts.
+- **Sonar/Gitar:** plan adoption when feature PRs begin, as development tooling to review the three builders' PRs and catch bugs. No auto-apply, automatic pushes, or PR comments are authorized.
 - **Elasticsearch:** optional stretch work after live captions and private highlights work. Search transcript passages by keyword or meaning, then explicitly select results for a personal recap. Preserve session access, ownership, and source references.
 
 Any search index must follow source expiry, redaction, and deletion. Search reads must recheck current access against Postgres, including membership revocation.

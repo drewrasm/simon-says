@@ -41,9 +41,9 @@ First working slice: two attendees join one session and read real shared caption
 Build the source timeline and shared feed in this order:
 
 1. **Capture and stream, milestone 1.** Implement browser mic/screen capture, source clock, durable host lease and epoch validation, audio ingest, and the proposed Deepgram adapter. Publish interim and final captions through one transcription stream per session. Ingest a real timestamped frame. Implement host stop with ingest fencing and persisted end/expiry times.
-2. **Verify transport, milestone 1.** Prove the proposed Vercel WebSocket routing, bounded connection recovery, and shared caption delivery across function instances. Choose the shared event mechanism. Persist audio acknowledgments, transcript revisions, finalized transcript progress, frame observations, and replay cursors with track 3's migrations. Replay unfinalized audio without duplicate words and preserve the session clock across provider reconnects. Runtime feasibility remains unverified until these checks pass.
+2. **Verify transport, milestone 1.** Prove the proposed Vercel WebSocket routing, bounded connection recovery, and shared caption delivery across function instances. Choose the shared event mechanism. Plan content-free Dash0 ingest and caption telemetry during this milestone. Persist audio acknowledgments, transcript revisions, finalized transcript progress, frame observations, and replay cursors with track 3's migrations. Replay unfinalized audio without duplicate words and preserve the session clock across provider reconnects. Runtime feasibility remains unverified until these checks pass.
 3. **Supply bookmark evidence, milestone 2.** Expose stable source IDs, ranges, revisions, and capture health for bookmark resolution. Complete authorized snapshot fallback and reconnect handling for the selection flow.
-4. **Recover and verify, milestones 4–5.** Test duplicates, out-of-order messages, stale hosts, capture loss, and gaps. Apply revocation to connected streams. Add content-free ingest and caption telemetry in milestone 4. In milestone 5, test the target laptop, mic route, and browser; inspect caption errors, slide transitions, and screenshot legibility.
+4. **Recover and verify, milestones 4–5.** Test duplicates, out-of-order messages, stale hosts, capture loss, and gaps. Apply revocation to connected streams. Extend the milestone 1 telemetry with recovery diagnostics in milestone 4. In milestone 5, test the target laptop, mic route, and browser; inspect caption errors, slide transitions, and screenshot legibility.
 
 Dependencies: track 3 supplies host identity and membership checks. Track 2 owns capture behavior inside `apps/web`; track 1 owns its presentation. Private bookmark and recap events never enter the shared feed. Automatic repair transcription remains optional.
 
@@ -78,7 +78,7 @@ The implementation plan remains the single milestone checklist and verification 
 
 ## Keep the scope manageable
 
-See [tools under consideration](decisions.md#tools-under-consideration): Dash0 for capture and recap diagnosis, Sonar/Gitar for all three builders' PR review, and Elasticsearch for optional passage search and selection after captions and private highlights work. These are planning notes, not approved integrations.
+See [tools under consideration](decisions.md#tools-under-consideration): Dash0 for capture and recap diagnosis, Sonar/Gitar for all three builders' PR review, and Elasticsearch for optional passage search and selection after captions and private highlights work. Follow the [tool rollout timing](implementation-plan.md#tool-rollout): Dash0 during milestone 1, Sonar/Gitar when feature PRs begin, and Elasticsearch after the working core. These are planning notes, not approved integrations.
 
 Tracks divide responsibility, not equal effort or independent schedules. Track 3 has early access work and later recap work. Once capture is stable, track 2 can help with alignment fixtures and lifecycle checks; track 1 can help with end-to-end coverage.
 

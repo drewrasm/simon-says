@@ -29,6 +29,14 @@ When documenting local setup in milestone 0, distinguish ordinary Next.js develo
 
 After each milestone, record a short evidence note here: verified behavior, checks run, and remaining gaps. Never check a milestone off from source inspection alone.
 
+## Tool rollout
+
+- Plan Dash0 integration during milestone 1 for content-free caption latency, disconnect, and transcription failure telemetry. Extend it to save and recap errors as those features arrive.
+- Plan Sonar/Gitar adoption when feature PRs begin. Automatic fixes, pushes, and PR comments remain unauthorized.
+- Keep Elasticsearch as a stretch goal after shared captions and private highlights work. Search results must preserve source references and current access checks.
+
+This records planned timing, not completed integrations or authorization to install or enable services. See [tools under consideration](decisions.md#tools-under-consideration).
+
 ## Milestone 0 evidence
 
 Verified locally on November 9, 2026 with Node 22.22.0 and pnpm 11.24.0:
