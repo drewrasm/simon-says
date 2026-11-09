@@ -52,6 +52,7 @@ export class CaptionTransport {
       model?: TranscriptionModel;
       delay?: CaptionDelay;
       sink?: SegmentSink;
+      sinkDegradedReason?: "missing_elasticsearch_config";
       telemetry?: CaptionTelemetry;
       reconnectGraceMs?: number;
       finishTimeoutMs?: number;
@@ -76,6 +77,14 @@ export class CaptionTransport {
         ended: false,
       };
       this.sessions.set(id, session);
+      if (this.options.sinkDegradedReason)
+        session.hub.publish({
+          kind: "capture.state",
+          session: "degraded",
+          audio: "stopped",
+          captionLagMs: null,
+          reason: this.options.sinkDegradedReason,
+        });
       if (!this.options.model)
         session.hub.publish({
           kind: "capture.state",
@@ -332,9 +341,15 @@ export class CaptionTransport {
         });
         session.hub.publish({
           kind: "capture.state",
-          session: this.options.model ? "live" : "degraded",
+          session:
+            this.options.model && !this.options.sinkDegradedReason
+              ? "live"
+              : "degraded",
           audio: "receiving",
           captionLagMs: null,
+          ...(this.options.sinkDegradedReason
+            ? { reason: this.options.sinkDegradedReason }
+            : {}),
           ...(!this.options.model
             ? { reason: "missing_provider_key" as const }
             : {}),

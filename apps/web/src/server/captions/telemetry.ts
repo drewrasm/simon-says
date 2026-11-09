@@ -2,6 +2,9 @@ import type { CutReason } from "@simon-says/domain/caption-windows";
 
 /** Content-free numeric metrics only; Dash0 binding is a separate change. */
 export type CaptionMetric =
+  | "es_write_latency_ms"
+  | "es_write_retries"
+  | "es_write_failures"
   | "lag_ms"
   | "rotation_gap_ms"
   | "window_duration_ms"

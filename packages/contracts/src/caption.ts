@@ -141,6 +141,7 @@ export const captureStateEventSchema = z.object({
   reason: z
     .enum([
       "missing_provider_key",
+      "missing_elasticsearch_config",
       "transcription_failed",
       "segment_sink_failed",
       "backlog_limit",

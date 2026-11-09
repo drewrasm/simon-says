@@ -168,7 +168,7 @@ Confirm cluster identifiers and access, available quota/storage class, image reg
 
 ## S3 caption configuration (server only)
 
-The S3 pipeline has only been exercised with an injected fake transcription model. No provider call or cluster change is established by its local tests. Production caption routes use Track 3's real membership authority whenever `DATABASE_URL` is configured; `SESSION_SECRET` verifies the principal cookie. Durable content persistence remains an acceptance gap. `CAPTIONS_DEV_SESSION` never enables access with `NODE_ENV=production`.
+The S3 pipeline has only been exercised with an injected fake transcription model. No provider call or cluster change is established by its local tests. Production caption routes use Track 3's real membership authority whenever `DATABASE_URL` is configured; `SESSION_SECRET` verifies the principal cookie. The C2 Elasticsearch segment sink is locally verified; deployed content persistence and cross-store progress remain unverified. `CAPTIONS_DEV_SESSION` never enables access with `NODE_ENV=production`.
 
 | Variable               | Runtime source                                                                          | Behavior                                                                                                                                                                                             |
 | ---------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -190,3 +190,9 @@ KUBECONFIG=/dev/null kubectl kustomize infra/k8s
 ```
 
 This only renders local files; no cluster action is authorized by rendering. Do not configure provider access merely to run tests: `pnpm test` uses `ai/test` only. Keys, audio, transcripts, prompts, and raw provider errors must never enter logs. Sink failure is visible degradation plus a gap, not final publication. The process-local sink, replay log, audio receipt positions, and lease stub cannot provide restart/cross-pod durability. Dash0 integration, gateway transport, and provider network/retention verification remain follow-ups.
+
+### C2 runtime sink configuration
+
+Supply both server-only `ELASTICSEARCH_URL` and `ELASTICSEARCH_API_KEY` in `app-credentials`, namespace `team-simon-says`, and inject both into the application environment. This change documents the requirement; Secret provisioning and Deployment wiring remain operator work. With neither or only one configured, the app boots and development captions visibly report `missing_elasticsearch_config` while using process-local storage. Malformed supplied values fail boot validation without echoing credentials.
+
+Before enabling the sink, an authorized operator must run `pnpm es:setup` against the cloud project using setup credentials and the approved `ELASTICSEARCH_INFERENCE_ID`; runtime uses the scoped app key and exact write aliases from the existing operator steps. Cloud setup, inference permissions and cost approval, app-credentials injection, and cluster egress verification have not been performed by the C2 local implementation. No inference override is supplied by the runtime sink. The local integration uses `.multilingual-e5-small-elasticsearch` only; never copy that local override into cloud configuration without approval.

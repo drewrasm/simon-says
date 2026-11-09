@@ -204,7 +204,7 @@ Verified locally November 9, 2026 with Node 22.22.0 and pnpm 11.24.0, after rebu
 
 No API keys, OpenAI calls, kubectl, helm, cluster operations, or telemetry/search-backend writes were used. This verifies offline models and packaged transport only.
 
-Milestone 1 remains unchecked: Elasticsearch sink (M3), Postgres auth/leases/audio receipt and finalized offsets (Track 3), shared durable event delivery, real host/attendee capture, real provider latency/accuracy/retention, Dash0 export, gateway and cluster behavior are unverified. Development ack/sink/replay state is process-local and does not survive restart. Production caption access fails closed.
+Milestone 1 remains unchecked: deployed Elasticsearch persistence (local C2 sink evidence below), Postgres auth/leases/audio receipt and finalized offsets (Track 3), shared durable event delivery, real host/attendee capture, real provider latency/accuracy/retention, Dash0 export, gateway and cluster behavior are unverified. Development ack/replay state and the unconfigured sink fallback are process-local and does not survive restart. Production caption access fails closed.
 
 ### PR #13 main-merge verification
 
@@ -245,3 +245,13 @@ PR #18 merged while this slice was in progress; `feat/t2-caption-access` was reb
 - Remaining gaps: Track 3 exports no lease/epoch API, so host epoch fencing remains per-session in-process memory. Durable cross-pod fencing, acknowledgments, source persistence, and replay remain unverified. Membership tests use mocks rather than live Postgres; the real microphone, provider, deployed host/attendee flow, and overall C2 gate remain open.
 
 Track 1 handoff: the host connects to WebSocket `/api/sessions/:id/ingest` after claiming its host link, with the signed principal cookie present, and sends the existing hello/PCM frames. Attendees subscribe with same-origin `EventSource` at `/api/sessions/:id/events`; the browser includes the principal cookie automatically. Membership must already exist; caption reads do not create a principal or join a session.
+
+## Track 2 C2 Elasticsearch segment sink — local evidence
+
+November 9, 2026: implemented create-only bulk segment persistence through `simon-says-segments`, exact stored-source checks on 409 replay, a three-second total retry/abort budget, numeric telemetry hooks, optional boot-validated configuration, and visible missing-configuration degradation. Strict mapping fields match C1b / PR #16. `expiresAt` remains absent until session end is known; retention deadline attachment and deletion remain lifecycle work.
+
+Verification uses only `http://localhost:9200`, credentials read from the local start-local `.env`, and AI SDK `MockTranscriptionModelV4`. `pnpm es:test:local` ran `pnpm es:setup` with `.multilingual-e5-small-elasticsearch`: both mappings and write aliases verified; setup completed. The integration passed fake-model audio → window manager → assembler → Elasticsearch → final publication, checked deterministic IDs and exact source fields, retried identical documents through real 409 verification, and passed a session-filtered half-open overlap query. Synthetic documents were removed. Ordinary tests explicitly skip this opt-in integration.
+
+`pnpm install --frozen-lockfile`, `pnpm check` (lint, formatting, strict workspace/server/scripts types and offline tests), and `pnpm build` passed locally. Unit coverage includes exact bulk shape, identical/conflicting 409s, transient item and network retries, partial-bulk replay, permanent failures, budget exhaustion producing degraded state plus an exact-range gap without final, and in-flight deadline cancellation. Post-rebase verification on `origin/main` at `a5b157d` (including Track 3 PR #29): **24 test files passed, 219 tests passed / 1 opt-in integration skipped**; the explicit local integration separately passed **1 test / 1 file**. The production Next.js build and custom server bundle passed.
+
+**Open:** PR #17's `ObservationSink` is not merged, so its Elasticsearch implementation is a follow-up. No cloud project, OpenAI, kubectl/helm, cluster, telemetry backend, or PR-comment operation was used. Deployment injection of both ES variables from `app-credentials`, authorized cloud setup/inference readiness, production ingest authority, cross-store acknowledgments, shared SSE replay, Dash0 export, and lifecycle cleanup remain unverified. This local slice does not pass the deployed C2 gate.

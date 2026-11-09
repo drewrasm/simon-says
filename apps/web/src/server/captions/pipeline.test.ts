@@ -494,6 +494,7 @@ async function socketServer(
   fake = fakeModel(),
   reconnectGraceMs = 10000,
   sink?: SegmentSink,
+  sinkDegradedReason?: "missing_elasticsearch_config",
 ) {
   const transport = new CaptionTransport({
     authority: new DevIngestAuthority("dev.session_1-test"),
@@ -501,6 +502,7 @@ async function socketServer(
     managerConfig: { planner },
     reconnectGraceMs,
     ...(sink ? { sink } : {}),
+    ...(sinkDegradedReason ? { sinkDegradedReason } : {}),
   });
   const server = createServer(async (req, res) => {
     if (!(await transport.handleHttp(req, res))) res.writeHead(404).end();
@@ -1025,6 +1027,33 @@ it("shutdown waits for a replaced epoch still committing its tail", async () => 
     ws.terminate();
     replacement?.terminate();
     await feed.close();
+    await server.close();
+  }
+});
+
+it("SSE visibly reports missing Elasticsearch configuration with the development memory fallback", async () => {
+  const server = await socketServer(
+    true,
+    fakeModel(),
+    10000,
+    undefined,
+    "missing_elasticsearch_config",
+  );
+  const abort = new AbortController();
+  try {
+    const response = await fetch(
+      `${server.base}/api/sessions/dev.session_1-test/events`,
+      { signal: abort.signal },
+    );
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("missing_sse_body");
+    const { value } = await reader.read();
+    expect(new TextDecoder().decode(value)).toContain(
+      '"reason":"missing_elasticsearch_config"',
+    );
+    await reader.cancel();
+  } finally {
+    abort.abort();
     await server.close();
   }
 });

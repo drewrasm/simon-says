@@ -7,12 +7,25 @@ import { WebSocketServer } from "ws";
 import { createOpenAI } from "@ai-sdk/openai";
 import { CaptionTransport } from "../src/server/captions/transport";
 import { createIngestAuthority } from "../src/server/captions/access-authority";
+import { elasticsearchClient } from "../src/server/search/es-client";
+import { ElasticsearchSegmentSink } from "../src/server/search/elasticsearch-segment-sink";
 import { readRuntimeEnv } from "./env.js";
 
 const runtime = readRuntimeEnv(process.env);
 const { port, probeToken } = runtime;
+const elasticsearch = runtime.elasticsearch;
 const captions = new CaptionTransport({
   authority: createIngestAuthority(process.env),
+  ...(elasticsearch
+    ? {
+        sink: {
+          writeSegments: (segments) =>
+            new ElasticsearchSegmentSink(
+              elasticsearchClient(elasticsearch),
+            ).writeSegments(segments),
+        },
+      }
+    : { sinkDegradedReason: "missing_elasticsearch_config" }),
   delay: runtime.captionDelay,
   reconnectGraceMs: runtime.captionReconnectGraceMs,
   ...(runtime.openaiApiKey &&

@@ -24,7 +24,8 @@
     "db:check": "pnpm --filter @simon-says/db check",
     "storage:check": "sh infra/check-storage.sh",
     "es:setup": "tsx scripts/es-setup.ts",
-    "es:smoke": "tsx scripts/es-smoke.ts"
+    "es:smoke": "tsx scripts/es-smoke.ts",
+    "es:test:local": "tsx scripts/es-test-local.ts"
   },
   "devDependencies": {
     "@elastic/elasticsearch": "9.5.1",
