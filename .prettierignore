@@ -6,3 +6,5 @@ packages/db/src/generated
 # Preserve official vendored skills byte-for-byte.
 .agents/skills/
 .claude/skills/
+
+apps/web/dist
