@@ -260,7 +260,10 @@ describe("recap generation and citations", () => {
       passage("d"),
     ];
     expect(limitPassages(passages)).toEqual(passages.slice(0, 1));
-    const short = Array.from({ length: 10_000 }, () => passage("x"));
+    const short = Array.from({ length: 10_000 }, (_, index) => ({
+      ...passage("x"),
+      segmentId: `x${index}`,
+    }));
     expect(JSON.stringify(limitPassages(short)).length).toBeLessThanOrEqual(
       60_000,
     );
