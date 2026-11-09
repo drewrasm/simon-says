@@ -136,6 +136,8 @@ PR #10 was merged with `origin/main` (`7ea1c01`) locally on November 9, 2026, pr
 
 `pnpm install --frozen-lockfile`, `pnpm check` (61 tests in 8 files, plus lint, formatting, and strict type checking), and `pnpm build` passed with Node 22.22.0 and pnpm 11.24.0. This verifies merge compatibility locally; real microphone capture, live transcription, and deployed acceptance were not exercised.
 
+Known gap: the host client accepts a lower `ready` cursor and resends the frames it still holds, but the server rejects frames that skip past its sequence as non-retryable `invalid_frame`. Until the server records the lost range as a `caption.gap` with `audio_missing`, as [contracts](contracts.md) require, a server restart ends host capture.
+
 ## Track 3 progress
 
 Owner: Logan. Milestones 1–4 stay open until their deployed gates pass.
