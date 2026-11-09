@@ -8,6 +8,5 @@ resources:
   - postgres.yaml
 images:
   - name: app
-    # Bootstrap only; merge the first deploy/<sha> PR before applying Argo CD.
     newName: ghcr.io/drewrasm/simon-says
-    newTag: main
+    newTag: c97978f31ae1150f622bae09fe882f193f780bea
