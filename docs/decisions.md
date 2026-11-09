@@ -65,7 +65,7 @@ Logan confirmed these on November 9, 2026. Neither decision proves a live integr
 
 - **Approximate note clock (Track 1, November 9):** notes pin `markedAtMs` to time since session creation until Track 2 supplies a capture-aligned session clock; see [contracts](contracts.md#track-3-payloads). Notes use Track 3's bookmark API.
 
-- **LLM workflows:** recaps use OpenAI through the Vercel AI SDK (`ai`), as [decided](#confirmed-by-the-track-3-owner). Proposal: Agent/tool-loop APIs and durable job execution remain implementation choices; vendoring guidance does not install or validate an integration.
+- **LLM workflows:** recaps use OpenAI through the Vercel AI SDK (`ai` structured output, no tools), as [decided](#confirmed-by-the-track-3-owner). C4 defaults `RECAP_MODEL` to `gpt-5.4-mini` and runs generation request-scoped through Next.js `after()`; see the [recap contract](contracts.md#track-3-payloads). Proposal: a durable job queue with restart recovery remains an implementation choice.
 
 - Next.js Route Handlers with a custom Node WebSocket entry point, reconnectable SSE, and the confirmed server-only caption adapter. Prove packaging in checkpoint 0A and cross-pod recovery in milestone 1. Propose a durable Postgres event log with bounded polling; leases and replay cannot depend on pod memory.
 - Use CloudNativePG for PostgreSQL; propose private S3-compatible storage, a Postgres-backed job worker, and Kubernetes CronJobs for cleanup. Storage location, job library, capacity, and post-hackathon hosting remain open. Isolate provider adapters from domain rules.
@@ -105,6 +105,10 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 - [AI SDK `experimental_streamTranscribe`](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-transcribe): streaming API and OpenAI example. Plan B uses successive windows for the SDK lifecycle described above.
 - [Hackathon resources](https://www.wemakedevs.org/hackathons/cnh/resources), [rules](https://www.wemakedevs.org/hackathons/cnh/rules), [schedule](https://www.wemakedevs.org/hackathons/cnh/schedule).
 - [Plaud highlights](https://support.plaud.ai/hc/en-us/articles/63429919023385-Highlight-a-moment-while-recording-for-v4-0-x-or-later): marking recorded moments already exists. Simon Says emphasizes shared session capture with private, illustrated selections; uniqueness is not established.
+
+## Data model audit (November 9, 2026)
+
+The `host` membership is the only source of truth for who hosts a session. The `sessions.hostPrincipalId` column is deprecated and removed over three releases, so every image stays compatible with the one before it: this release makes it nullable and still writes it, and nothing reads it; the next release stops writing it; a later release drops it. Writing it now matters because the previous image's Prisma client declares it non-null and fails to read a session row where it is NULL. A host link legitimately grants host membership to a second device, so there is no one-host unique index. Bookmark anchor and range rules from the bookmark contract are enforced by Postgres CHECK constraints in migration SQL (anchor columns per kind, non-negative and ordered ranges, all-or-nothing actual range, non-negative clock uncertainty), because Prisma cannot express them in the schema; adding them fails if any existing row violates them. Session states are listed once in `sessionStatusSchema`; `capture.state` excludes `expired`, because expired sessions deny stream access.
 
 ## S3 Plan B caption implementation
 
