@@ -2,8 +2,11 @@ import type { BookmarkResponse } from "@simon-says/contracts/bookmark";
 import type { ReactNode } from "react";
 import { NotesExportActions } from "./note-card-actions";
 import { NotesList } from "./notes-list";
+import { RecapSection } from "./recap-section";
+import { SearchSection } from "./search-section";
 
 type NotesPanelProps = {
+  sessionId: string;
   title: string;
   bookmarks: BookmarkResponse[];
   /** Panel-level actions, such as Clip last 30s. */
@@ -14,6 +17,7 @@ type NotesPanelProps = {
 
 /** Desktop side panel: heading, export, clip and note controls, the list. */
 export const NotesPanel = ({
+  sessionId,
   title,
   bookmarks,
   actions,
@@ -30,6 +34,8 @@ export const NotesPanel = ({
       </div>
     </div>
     <NotesExportActions title={title} bookmarks={bookmarks} />
+    <RecapSection sessionId={sessionId} bookmarks={bookmarks} />
+    <SearchSection sessionId={sessionId} />
     {actions}
     {form}
     <NotesList bookmarks={bookmarks} />
