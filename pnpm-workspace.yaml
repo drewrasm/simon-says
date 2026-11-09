@@ -6,6 +6,7 @@ allowBuilds:
   "@prisma/engines": true
   esbuild: true
   prisma: true
+  protobufjs: false
   sharp: true
 
 # Elastic transport allows API 1.x, but its OTel core peer requires <1.10.

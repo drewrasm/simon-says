@@ -147,3 +147,13 @@ The caption transport is disabled unless a single `CAPTIONS_DEV_SESSION` is expl
 ## Local capture sink
 
 Run `pnpm exec tsx scripts/capture-sink.ts` beside `pnpm dev` for a local-only WebSocket sink at `ws://127.0.0.1:8787`. Pass that URL to `HostCapture` in a host integration harness; Track 1's host controls are a separate integration. The sink acknowledges binary frames and prints only frame counts, arrival rate, last sequence/sample offset, and validation errors on disconnect. It has no authentication, persistence, or transcription and binds only to loopback.
+
+## Content-free caption telemetry
+
+The custom Node server exports manual traces and metrics over OTLP HTTP/protobuf only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. See [Dash0 operator setup](docs/deployment.md#dash0-application-otlp-c2) for server-only endpoint/header settings and [exported metadata](docs/hackathon.md#data-and-failure-boundaries) for the allowlist. No log exporter or auto-instrumentation is enabled. Run the local, credential-free exporter and content-leak checks with:
+
+```sh
+pnpm exec vitest run apps/web/src/server/telemetry/telemetry.test.ts
+```
+
+These tests use fake transcription, in-memory exporters, and a localhost OTLP HTTP receiver. They do not verify live Dash0 ingest or call OpenAI.

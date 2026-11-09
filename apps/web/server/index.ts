@@ -7,11 +7,15 @@ import { WebSocketServer } from "ws";
 import { createOpenAI } from "@ai-sdk/openai";
 import { CaptionTransport } from "../src/server/captions/transport";
 import { DevIngestAuthority } from "../src/server/captions/ingest-authority";
+import { startTelemetry } from "../src/server/telemetry/runtime";
 import { readRuntimeEnv } from "./env.js";
 
 const runtime = readRuntimeEnv(process.env);
+const { version } = JSON.parse(await readFile("package.json", "utf8"));
+const telemetry = startTelemetry(process.env, version);
 const { port, probeToken } = runtime;
 const captions = new CaptionTransport({
+  ...(telemetry ? { telemetry: telemetry.record } : {}),
   authority: new DevIngestAuthority(
     runtime.captionsDevSession,
     process.env.NODE_ENV === "production",
@@ -202,7 +206,8 @@ async function shutdown(exitCode: number) {
     wss.close(() => {
       void app
         .close()
-        .then(() => {
+        .then(async () => {
+          await telemetry?.shutdown(2000);
           clearTimeout(deadline);
           console.log("shutdown: complete");
           process.exit(exitCode);

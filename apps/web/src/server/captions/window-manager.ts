@@ -10,6 +10,7 @@ import {
   WindowPlanner,
   DEFAULT_WINDOW_PLANNER_CONFIG,
   type WindowPlannerConfig,
+  type CutReason,
 } from "@simon-says/domain/caption-windows";
 import type { TimedDelta } from "@simon-says/domain/caption-timing";
 import { CaptionAssembler } from "./assembler";
@@ -29,6 +30,10 @@ type Window = {
   abort: AbortController;
   cancelled: boolean;
   cutAt: number | undefined;
+  cutReason: CutReason | "stop";
+  retries: number;
+  outcome: "success" | "error" | "cancelled";
+  telemetryEnded: boolean;
 };
 
 export class WindowManager {
@@ -118,6 +123,7 @@ export class WindowManager {
         this.prewarmed ??= this.create(decision.atSample);
       } else {
         this.options.telemetry?.(`window_cut_${decision.reason}`, 1);
+        this.active.cutReason = decision.reason;
         this.active.endSample = decision.cutSample;
         this.active.closed = true;
         this.active.wake?.();
@@ -151,17 +157,43 @@ export class WindowManager {
       abort: new AbortController(),
       cancelled: false,
       cutAt: undefined,
+      cutReason: "stop",
+      retries: 0,
+      outcome: "cancelled",
+      telemetryEnded: false,
     };
     this.windows.add(window);
+    this.options.telemetry?.("window_start", 1, {
+      session_id: this.options.hub.sessionId,
+      window_id: window.id,
+    });
     this.options.telemetry?.(
       "backlog",
       this.windows.size + this.options.assembler.backlog,
     );
     window.task = this.run(window).finally(() => {
+      this.endTelemetry(window);
       this.windows.delete(window);
-      this.options.telemetry?.("backlog", this.windows.size);
+      this.options.telemetry?.(
+        "backlog",
+        this.windows.size + this.options.assembler.backlog,
+      );
     });
     return window;
+  }
+
+  /** Finish even if a provider ignores abort; late settlement cannot double count. */
+  private endTelemetry(window: Window) {
+    if (window.telemetryEnded) return;
+    window.telemetryEnded = true;
+    this.options.telemetry?.("window_end", 1, {
+      session_id: this.options.hub.sessionId,
+      window_id: window.id,
+      duration_ms: sampleOffsetToMs(window.endSample - window.startSample),
+      cut_reason: window.cutReason,
+      retry_count: window.retries,
+      outcome: window.outcome,
+    });
   }
 
   private async run(window: Window) {
@@ -250,7 +282,9 @@ export class WindowManager {
             // Delta timestamps are unavailable. Arrival since the latest audio pull is an observable lag proxy.
             this.lagMs =
               this.lagMs * 0.8 + Math.max(0, performance.now() - sentAt) * 0.2;
-            this.options.telemetry?.("lag_ms", this.lagMs);
+            this.options.telemetry?.("lag_ms", this.lagMs, {
+              phase: "interim",
+            });
             deltas.push({ text: part.delta, sentThroughMs });
             this.options.assembler.interim(
               window.id,
@@ -281,15 +315,25 @@ export class WindowManager {
           deltas,
           lagMs: this.lagMs,
         });
+        window.outcome = "success";
+        this.options.telemetry?.(
+          "lag_ms",
+          Math.max(0, performance.now() - sentAt),
+          { phase: "final" },
+        );
         return;
       } catch {
         abort.abort();
         if (window.cancelled) return;
-        this.options.telemetry?.("errors", 1);
+        this.options.telemetry?.("errors", 1, {
+          error_code: "transcription_failed",
+        });
         if (attempt < 2) {
+          window.retries++;
           this.options.telemetry?.("retries", 1);
           continue;
         }
+        window.outcome = "error";
         this.options.hub.publish({
           kind: "capture.state",
           session: "degraded",
@@ -336,7 +380,8 @@ export class WindowManager {
       // Fence stalled provider/sink work before reporting every unresolved source range.
       this.options.assembler.cancel();
       for (const window of this.windows) {
-        if (!window.cancelled && window.endSample > window.startSample)
+        if (!window.cancelled && window.endSample > window.startSample) {
+          this.options.telemetry?.("gaps", 1);
           this.options.hub.publish({
             kind: "caption.gap",
             epoch: this.options.epoch,
@@ -344,6 +389,7 @@ export class WindowManager {
             endMs: sampleOffsetToMs(window.endSample),
             reason: "transcription_failed",
           });
+        }
       }
       this.cancel();
       expire();
@@ -374,8 +420,10 @@ export class WindowManager {
   cancel() {
     this.stopped = true;
     this.options.assembler.cancel();
+    this.options.telemetry?.("backlog", 0);
     for (const window of this.windows) {
       window.cancelled = true;
+      this.endTelemetry(window);
       window.abort.abort();
       window.wake?.();
     }

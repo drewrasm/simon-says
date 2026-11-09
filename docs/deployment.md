@@ -26,7 +26,7 @@ Verified through the Radar MCP on November 9, 2026:
 
 External services verified on the same date:
 
-- Dash0 organization in AWS US West (`us-west-2`); MCP access works through browser OAuth. App telemetry export is not implemented.
+- Dash0 organization in AWS US West (`us-west-2`); MCP access works through browser OAuth. App-side OTLP export is implemented and locally tested; real Dash0 ingest is unverified.
 - Elastic Cloud Serverless Elasticsearch project in AWS `us-west-2`, Elasticsearch 9.7.0: `https://my-elasticsearch-project-fb0a5d.es.us-west-2.aws.elastic.cloud` with Kibana at the matching `.kb.` host. It has no indices yet. The `elastic` CLI and Agent Builder MCP work with a per-person API key.
 
 Project MCP configuration lives in `.mcp.json` (Claude Code) and `.codex/config.toml` (Codex); the [README](../README.md#agent-mcp-servers) has sign-in steps. The files hold URLs and environment variable names only.
@@ -51,6 +51,25 @@ C1b supplies mappings and local verification only. No cloud setup, cloud key cre
 The app descriptor grants `read`, `write` (including `create_doc`, updates and document deletes), and `view_index_metadata` on **only** `simon-says-segments`, `simon-says-observations`, `segments-v1`, and `observations-v1`. It grants no index creation, mapping/alias management, key management, or cluster privileges. No `monitor_inference` is granted: automatic inference through mapped `semantic_text` fields worked locally for indexing and semantic search with `cluster: []`. Direct calls to the [Inference API](https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-inference-inference) require `monitor_inference`; the app does not call that API directly. See [privileges](https://www.elastic.co/docs/reference/elasticsearch/security-privileges) and [automatic semantic inference](https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/semantic-text). Cloud Jina/EIS permissions remain to be verified with approval; do not broaden privileges without evidence.
 
 The tool pins `@elastic/elasticsearch` 9.5.1, the latest published v9 client available during implementation (9.7.0 was unavailable). It matches the server major version and uses APIs available before the documented cloud ES 9.7.0. Local ES is 9.5.6; this is not cloud compatibility verification. See the [storage contract](contracts.md#elasticsearch-v1-storage-boundary) for v2 reindex/cutover and key-scope updates.
+
+## Dash0 application OTLP (C2)
+
+The custom Node server initializes manual traces and metrics only when `OTEL_EXPORTER_OTLP_ENDPOINT` is nonempty. No operator or auto-instrumentation is installed. The operator's hostPath requirement does not fit this cluster. Without the endpoint, telemetry is disabled. Invalid configuration disables telemetry with a fixed diagnostic; an unreachable exporter never delays startup or caption processing. Export timeouts are one second; shutdown allows up to two seconds for telemetry inside the existing ten-second process drain deadline.
+
+Operator steps below require separate authorization; this PR does not create tokens, write Secrets, roll out the app, or send to Dash0:
+
+1. In the team's Dash0 organization, verify region **AWS `us-west-2`**. Open **Settings → Endpoints** and copy the **OTLP HTTP** base endpoint (without `/v1/traces` or `/v1/metrics`); use the value shown by Dash0 rather than guessing it. Open **Settings → Auth Tokens** and create/copy an ingest token scoped to the intended dataset. Keep the token in the secret manager.
+2. With approval, use Radar MCP with cluster id `kiTZ7VFRruo`, namespace `team-simon-says`, to merge these entries into Secret `app-credentials`, preserving all existing credentials:
+   ```text
+   OTEL_EXPORTER_OTLP_ENDPOINT=<Dash0 OTLP HTTP base endpoint>
+   OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <token>,Dash0-Dataset=<dataset>
+   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+   ```
+   The comma separates two headers; there is one space between `Bearer` and the token. This exact capitalization/format is documented by [Dash0's Node.js integration](https://www.dash0.com/hub/integrations/int_nodejs/overview) and [direct OTLP setup](https://www.dash0.com/docs/dash0/opentelemetry/distributions/python/getting-started#sending-directly-to-dash0). The Deployment already maps all three keys from this Secret. Never put them in build arguments or client environment variables.
+3. For resource identity, set server-only `DEPLOYMENT_ENVIRONMENT` (otherwise `NODE_ENV`, then `development`) and `IMAGE_SHA` to the deployed image's commit SHA when available. `service.name` is always `simon-says`; `service.version` falls back to `apps/web/package.json` version (`0.0.0`). Resource detection and arbitrary `OTEL_RESOURCE_ATTRIBUTES` are excluded from exported data.
+4. After separately approving rollout and telemetry writes, inspect `caption.window` under service `simon-says` in the chosen dataset. Check interim/final `caption.lag`, retries/gaps/errors, connection gauges, and resource identity. Inspect exported payloads for the [allowlist](hackathon.md#data-and-failure-boundaries). Record a live caption trace with no captured text for C2. Record an Agent0/MCP diagnosis tied to an observed request/problem separately for C4. Local tests do not close either live gate.
+
+Local verification: `pnpm exec vitest run apps/web/src/server/telemetry/telemetry.test.ts` runs fake transcription over real local WebSocket/SSE connections with in-memory trace/metric exporters, marker leak assertions, and a local HTTP OTLP receiver that checks protobuf and fake authorization/dataset headers. The ES latency histogram is emitted only by a `SegmentSink` declaring `kind: "elasticsearch"`; the current development sink produces no misleading ES latency. No real provider or Dash0 credentials are required.
 
 ## Caption provider configuration
 
