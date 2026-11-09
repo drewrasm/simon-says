@@ -100,18 +100,19 @@ The next checkpoint is **0A: Kubernetes deployment foundation**, followed by liv
 
 ## Agent MCP servers
 
-`.mcp.json` (Claude Code) and `.codex/config.toml` (Codex) configure one MCP server per hackathon tool. They hold URLs and environment variable names only; never add tokens, because the repository is public.
+`.mcp.json` (Claude Code) and `.codex/config.toml` (Codex) configure one MCP server per hackathon tool, plus Shortcut for project tracking. They hold URLs and environment variable names only; never add tokens, because the repository is public.
 
 | Server          | Tool                  | Sign-in                                                                                                                 |
 | --------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `radar-cloud`   | Radar Cloud           | Browser OAuth. Accept the Radar Cloud invite first, then choose **Cloud Native Hackathon** under "Organization access". |
 | `dash0`         | Dash0 (AWS US West)   | Browser OAuth with your Dash0 team organization account.                                                                |
 | `elasticsearch` | Elastic Agent Builder | API key in `ELASTIC_MCP_AUTHORIZATION`, formatted as `ApiKey <encoded key>`.                                            |
+| `shortcut`      | Shortcut              | Browser OAuth with your Shortcut workspace account.                                                                     |
 
 Gitar runs as a GitHub App and has no MCP server. Its review instructions live in `.gitar/review/`; CI is `.github/workflows/check.yml`. Never commit to `main`: open every change as a pull request so CI and Gitar review it, with the sole exception of [guarded machine-generated deploy-tag PRs](docs/decisions.md#c1a-release-tags).
 
-- **Claude Code:** start a session in this repository and approve the project servers. Run `/mcp`, pick `radar-cloud` and `dash0`, and choose **Authenticate**.
-- **Codex:** trust this project, then run `codex mcp login radar-cloud` and `codex mcp login dash0`.
+- **Claude Code:** start a session in this repository and approve the project servers. Run `/mcp`, pick `radar-cloud`, `dash0`, and `shortcut`, and choose **Authenticate**.
+- **Codex:** trust this project, then run `codex mcp login radar-cloud`, `codex mcp login dash0`, and `codex mcp login shortcut`.
 
 ### Elastic access
 

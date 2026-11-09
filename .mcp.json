@@ -14,6 +14,10 @@
       "headers": {
         "Authorization": "${ELASTIC_MCP_AUTHORIZATION:-}"
       }
+    },
+    "shortcut": {
+      "type": "http",
+      "url": "https://mcp.shortcut.com/mcp"
     }
   }
 }
