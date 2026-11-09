@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: team-simon-says
+resources:
+  - deployment.yaml
+  - service.yaml
+  - httproute.yaml
+  - postgres.yaml
+images:
+  - name: app
+    # Operator must replace with an authorized immutable image/digest before use.
+    newName: example.invalid/simon-says/app
+    newTag: REPLACE_BEFORE_DEPLOY

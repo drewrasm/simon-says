@@ -11,7 +11,7 @@
     "dev": "pnpm --filter @simon-says/web dev",
     "build": "pnpm db:generate && pnpm --filter @simon-says/web build",
     "start": "pnpm --filter @simon-says/web start",
-    "typecheck": "pnpm db:generate && pnpm -r --if-present typecheck",
+    "typecheck": "pnpm db:generate && pnpm -r --if-present typecheck && tsc -p scripts/tsconfig.json",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -22,17 +22,20 @@
     "db:generate": "pnpm --filter @simon-says/db generate",
     "db:validate": "pnpm --filter @simon-says/db validate",
     "db:check": "pnpm --filter @simon-says/db check",
-    "storage:check": "sh infra/check-storage.sh"
+    "storage:check": "sh infra/check-storage.sh",
+    "es:setup": "tsx scripts/es-setup.ts",
+    "es:smoke": "tsx scripts/es-smoke.ts"
   },
   "devDependencies": {
-    "typescript": "5.9.3",
+    "@elastic/elasticsearch": "9.5.1",
     "@types/node": "22.19.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "9.39.1",
     "eslint-config-next": "16.4.5",
     "prettier": "^3",
-    "vitest": "^5.1.0",
-    "tsx": "4.21.0"
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vitest": "^5.1.0"
   }
 }
