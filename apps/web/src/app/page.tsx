@@ -1,4 +1,5 @@
-import { Button } from "@simon-says/ui/components/button";
+import { buttonVariants } from "@simon-says/ui/components/button";
+import Link from "next/link";
 
 const HomePage = () => (
   <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-6 px-6 py-16">
@@ -12,7 +13,14 @@ const HomePage = () => (
       One conference session feed. Save the moments that matter to you.
     </p>
     <div className="flex flex-col items-start gap-3">
-      <Button disabled>Sessions coming soon</Button>
+      <div className="flex flex-wrap gap-3">
+        <Link href="/host/new" className={buttonVariants()}>
+          Host a session
+        </Link>
+        <Link href="/join" className={buttonVariants({ variant: "outline" })}>
+          Join with a code
+        </Link>
+      </div>
       <p className="text-sm text-muted-foreground">
         Live capture and personal recaps are still in development.
       </p>
