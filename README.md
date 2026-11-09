@@ -4,21 +4,26 @@ One conference session feed. Personal, illustrated takeaways.
 
 The host captures the speaker's microphone and screen once. Attendees join by QR code, read live captions, and save moments. Each attendee gets a private recap with source passages and aligned screenshots.
 
-**Status:** milestone 0 foundation is implemented and locally verified; evidence is tracked in the [implementation plan](docs/implementation-plan.md). Product flows and deployed provider integrations are not implemented. Local Elasticsearch mapping/query verification is recorded in the implementation plan.
+**Status:** milestone 0 foundation is implemented and locally verified; its evidence, including local Elasticsearch mapping/query verification, is recorded in the [implementation plan](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzODUyLTVmY2MtNGU0YS05Y2IwLTNlMjc4MGY4M2UxOSI=). Product flows and deployed provider integrations are not implemented. Current status and new evidence live on [Shortcut stories](https://app.shortcut.com/simon-says).
 
 ## Start here
 
-- [Delivery plan](docs/delivery-plan.md): **start here today** — deadline, cut, per-track checkpoints, working agreement, and status board.
+Planned work, status, blockers, and evidence are tracked in the [simon-says Shortcut workspace](https://app.shortcut.com/simon-says). Its planning docs:
+
+- [Delivery plan](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzA4LWQ4YWUtNDE2NS1hNzg0LTI4MmQ4YWVmNDNkZCI=): **start here today** — deadline, cut, per-track checkpoints, and working agreement. Status lives on each track's stories.
+- [Implementation plan](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzODUyLTVmY2MtNGU0YS05Y2IwLTNlMjc4MGY4M2UxOSI=): ordered milestones, acceptance checks, and evidence recorded before the move to Shortcut.
+- [Building tracks](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzlmLWMzMDMtNGUwYy1hOTBhLWM4MzJjZGU3ZDQwNSI=): three-builder ownership, handoffs, and first working slices.
+- [Hackathon integrations](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzc1LTA2YmQtNDllNS04NjZhLTg0NmY2NTczYzk5NyI=): four sponsor tracks, accounts, owners, and evidence.
+
+In this repository:
+
 - [Product](docs/product.md): experience, MVP, and limits.
 - [Architecture](docs/architecture.md): monorepo ownership, data flow, and invariants.
 - [Contracts](docs/contracts.md): records, APIs, and event semantics.
-- [Implementation plan](docs/implementation-plan.md): ordered milestones and acceptance checks.
-- [Building tracks](docs/building-tracks.md): three-builder ownership, handoffs, and first working slices.
-- [Hackathon integrations](docs/hackathon.md): four sponsor tracks, accounts, owners, and evidence.
 - [Deployment plan](docs/deployment.md): Kubernetes through Radar, prerequisites, and release checks.
 - [Design system](docs/design-system.md): shadcn preset, tokens, components, and reference page at `/design-system`.
 - [Decisions](docs/decisions.md): confirmed choices, proposals, and open questions.
-- [Agent instructions](AGENTS.md): how to work in this repository.
+- [Agent instructions](AGENTS.md): how to work in this repository, including the Shortcut workflow.
 
 ## Local setup
 
@@ -41,7 +46,7 @@ Open `http://localhost:8080` (the custom server's default `PORT`). The session a
 
 To try session creation and joining locally, apply migrations with `pnpm --filter @simon-says/db migrate:deploy`, then start the server with the root `.env` exported (`set -a; . ./.env; set +a; pnpm dev`) so it has `DATABASE_URL` and `SESSION_SECRET`. Open `/host/new` in one window and the join link in a private window. Use `localhost`: the device cookie is `Secure` on any other host, so a phone on a LAN IP over HTTP cannot join; test phones against the deployed HTTPS URL.
 
-`pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection. The workspace uses Next.js and shadcn/ui for the application, with Prisma for PostgreSQL. See the implementation plan for completed verification and remaining work.
+`pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection. The workspace uses Next.js and shadcn/ui for the application, with Prisma for PostgreSQL. See the [implementation plan](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzODUyLTVmY2MtNGU0YS05Y2IwLTNlMjc4MGY4M2UxOSI=) for completed verification and [Shortcut](https://app.shortcut.com/simon-says) for remaining work.
 
 ### Local Elasticsearch mappings and smoke check
 
@@ -63,11 +68,11 @@ unset ELASTICSEARCH_API_KEY ES_LOCAL_API_KEY ES_LOCAL_PASSWORD
 
 Setup creates `segments-v1` / `observations-v1` and their `simon-says-*` write aliases, verifies mappings on rerun, fails on drift, and repairs aliases atomically. `--dry-run` performs reads only. Smoke accepts only `http://localhost:9200` and the local E5 endpoint; it writes three synthetic finalized segments and an observation under reserved session `es-smoke-c1b`, checks overlap/semantic queries, duplicate IDs, create conflicts and strict fields, then deletes only those reserved documents. Do not use that session ID for application data or run the smoke concurrently. The first E5 inference may need a model download/deployment and adequate Docker memory; failures are reported, not replaced with fake vectors. No cloud connection is part of local verification.
 
-The mappings' inference endpoint is parameterized and defaults to `.jina-embeddings-v5-text-small`, which Track 3 [decided](docs/decisions.md#confirmed-by-the-track-3-owner) and which is confirmed in the team project ([cloud setup evidence](docs/implementation-plan.md#elastic-cloud-setup-evidence)). See [storage contracts](docs/contracts.md#elasticsearch-v1-storage-boundary) and [approval-gated operator setup](docs/deployment.md#elasticsearch-setup-operator-approval-required).
+The mappings' inference endpoint is parameterized and defaults to `.jina-embeddings-v5-text-small`, which Track 3 [decided](docs/decisions.md#confirmed-by-the-track-3-owner) and which is confirmed in the team project ([cloud setup evidence](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzODUyLTVmY2MtNGU0YS05Y2IwLTNlMjc4MGY4M2UxOSI=)). See [storage contracts](docs/contracts.md#elasticsearch-v1-storage-boundary) and [approval-gated operator setup](docs/deployment.md#elasticsearch-setup-operator-approval-required).
 
 ## Deployment and hackathon scope
 
-The deployment target is Kubernetes operated through Radar. The team cluster is provisioned. The local 0A foundation includes an explicitly compiled Next.js custom server, non-root container, offline manifests, and build-only CI. GitOps activation and cluster deployment require separate authorization. See the [0A evidence](docs/implementation-plan.md#checkpoint-0a-local-evidence) for verification and remaining gates.
+The deployment target is Kubernetes operated through Radar. The team cluster is provisioned. The local 0A foundation includes an explicitly compiled Next.js custom server, non-root container, offline manifests, and build-only CI. GitOps activation and cluster deployment require separate authorization. See the [0A evidence](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzODUyLTVmY2MtNGU0YS05Y2IwLTNlMjc4MGY4M2UxOSI=) for verification and remaining gates.
 
 ### Local container and transport probes
 
@@ -96,7 +101,7 @@ These are **transport probes**, not product capture APIs. Set server-only `PROBE
 
 `pnpm dev` uses the custom entry point with Next HMR (default port 8080; override with `PORT`). Server TypeScript changes require restarting it. `pnpm build` generates Prisma, builds Next, and compiles the server into `apps/web/dist`; `pnpm start` runs it without `tsx`. No standalone output is used. SIGTERM commits caption tail windows within five seconds (or emits gaps), then ends caption SSE; probes close with code 1012. The process drains for at most 10 seconds inside the manifest's 20-second grace period.
 
-The next checkpoint is **0A: Kubernetes deployment foundation**, followed by live captions in milestone 1. All four hackathon tracks are planned: Radar operations, Dash0 observability, Sonar/Gitar development review, and Elasticsearch as the core shared-content store and passage search layer. See the [deployment plan](docs/deployment.md) and [integration scope](docs/hackathon.md).
+The next checkpoint is **0A: Kubernetes deployment foundation**, followed by live captions in milestone 1. All four hackathon tracks are planned: Radar operations, Dash0 observability, Sonar/Gitar development review, and Elasticsearch as the core shared-content store and passage search layer. See the [deployment plan](docs/deployment.md) and [integration scope](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzc1LTA2YmQtNDllNS04NjZhLTg0NmY2NTczYzk5NyI=).
 
 ## Agent MCP servers
 
