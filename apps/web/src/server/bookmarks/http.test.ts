@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SourceUnavailable } from "../evidence/resolve";
 import { AccessError } from "../access/errors";
 import { RevisionConflict } from "./service";
 import {
@@ -140,6 +141,12 @@ describe("bookmark HTTP boundaries", () => {
     putBookmark.mockRejectedValueOnce(new AccessError(404, "not_found"));
     await expectResponse(await handlePutBookmark(request(), id), 404, {
       error: "not_found",
+    });
+    putBookmark.mockRejectedValueOnce(
+      new SourceUnavailable("source_unavailable"),
+    );
+    await expectResponse(await handlePutBookmark(request(), id), 503, {
+      error: "source_unavailable",
     });
     putBookmark.mockRejectedValueOnce(
       new Error("Synthetic private database detail"),
