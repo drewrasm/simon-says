@@ -1,0 +1,388 @@
+{
+  "apiVersion": "perses.dev/v1alpha1",
+  "kind": "PersesDashboard",
+  "metadata": {
+    "name": "simon-says-live-captions"
+  },
+  "spec": {
+    "display": {
+      "name": "Simon Says — live captions",
+      "description": "Live hackathon demo · service simon-says · Default dataset · last 15 minutes. Enable Auto: On for Dash0 adaptive refresh (10-second query minimum step). Caption histograms use milliseconds. Empty latency intervals indicate no observations."
+    },
+    "duration": "15m",
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "items": [
+            {
+              "content": {
+                "$ref": "#/spec/panels/lag"
+              },
+              "width": 16,
+              "height": 8,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/viewers"
+              },
+              "width": 8,
+              "height": 8,
+              "x": 16,
+              "y": 0
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/windows"
+              },
+              "width": 8,
+              "height": 8,
+              "x": 0,
+              "y": 8
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/es"
+              },
+              "width": 8,
+              "height": 8,
+              "x": 8,
+              "y": 8
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/backlog"
+              },
+              "width": 8,
+              "height": 8,
+              "x": 16,
+              "y": 8
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/health"
+              },
+              "width": 12,
+              "height": 8,
+              "x": 0,
+              "y": 16
+            },
+            {
+              "content": {
+                "$ref": "#/spec/panels/duration"
+              },
+              "width": 12,
+              "height": 8,
+              "x": 12,
+              "y": 16
+            }
+          ]
+        }
+      }
+    ],
+    "panels": {
+      "lag": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Caption lag · p50 / p95",
+            "description": "Interim and final lag; histogram estimates in milliseconds over a rolling 2-minute window. No observations produce gaps."
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "visual": {
+                "display": "line",
+                "palette": {
+                  "mode": "auto"
+                }
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "milliseconds"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.50, sum by (phase) (rate({otel_metric_name=\"caption.lag\",otel_metric_type=\"histogram\",service_name=\"simon-says\"}[2m])))",
+                    "seriesNameFormat": "{{phase}} · p50",
+                    "minStep": "10s"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum by (phase) (rate({otel_metric_name=\"caption.lag\",otel_metric_type=\"histogram\",service_name=\"simon-says\"}[2m])))",
+                    "seriesNameFormat": "{{phase}} · p95",
+                    "minStep": "10s"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "viewers": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Live viewers · SSE connections",
+            "description": "Current open SSE connections across app instances; connections are not unique people."
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "visual": {
+                "display": "line",
+                "palette": {
+                  "mode": "auto"
+                }
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "decimal"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum({otel_metric_name=\"caption.sse.connections\",otel_metric_type=\"gauge\",service_name=\"simon-says\"})",
+                    "seriesNameFormat": "Viewers",
+                    "minStep": "10s"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "windows": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Caption windows / minute",
+            "description": "Completed windows per minute, split by cut reason; rolling 2-minute rate from histogram observation count."
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "visual": {
+                "display": "line",
+                "palette": {
+                  "mode": "auto"
+                }
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "decimal"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (cut_reason) (histogram_count(rate({otel_metric_name=\"caption.window.duration\",otel_metric_type=\"histogram\",service_name=\"simon-says\"}[2m]))) * 60",
+                    "seriesNameFormat": "{{cut_reason}}",
+                    "minStep": "10s"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "es": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Elasticsearch writes · p95",
+            "description": "Write latency estimate in milliseconds over a rolling 2-minute window."
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "visual": {
+                "display": "line",
+                "palette": {
+                  "mode": "auto"
+                }
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "milliseconds"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum(rate({otel_metric_name=\"caption.es.write_latency\",otel_metric_type=\"histogram\",service_name=\"simon-says\"}[2m])))",
+                    "seriesNameFormat": "ES write p95",
+                    "minStep": "10s"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "backlog": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Ingest backlog",
+            "description": "Current queued ingest work summed across app instances."
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "visual": {
+                "display": "line",
+                "palette": {
+                  "mode": "auto"
+                }
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "decimal"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum({otel_metric_name=\"caption.ingest.backlog\",otel_metric_type=\"gauge\",service_name=\"simon-says\"})",
+                    "seriesNameFormat": "Backlog",
+                    "minStep": "10s"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "health": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Gaps / retries / errors · last 15m",
+            "description": "Rolling 15-minute counter increases. PromQL extrapolation can produce fractional counts. Missing series remain missing."
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "visual": {
+                "display": "line",
+                "palette": {
+                  "mode": "auto"
+                }
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "decimal"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (otel_metric_name) (increase({otel_metric_name=~\"caption.gaps|caption.retries|caption.errors\",otel_metric_type=\"sum\",service_name=\"simon-says\"}[15m]))",
+                    "seriesNameFormat": "{{otel_metric_name}}",
+                    "minStep": "10s"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "duration": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Caption window duration · p95",
+            "description": "Source window duration in milliseconds by cut reason, not span execution time. Histogram estimates may saturate at the highest finite bucket."
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "visual": {
+                "display": "line",
+                "palette": {
+                  "mode": "auto"
+                }
+              },
+              "yAxis": {
+                "format": {
+                  "unit": "milliseconds"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum by (cut_reason) (rate({otel_metric_name=\"caption.window.duration\",otel_metric_type=\"histogram\",service_name=\"simon-says\"}[2m])))",
+                    "seriesNameFormat": "{{cut_reason}}",
+                    "minStep": "10s"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
