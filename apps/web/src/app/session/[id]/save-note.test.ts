@@ -6,14 +6,14 @@ const draft: NoteDraft = {
   bookmarkId: randomUUID(),
   operationId: randomUUID(),
   sessionId: randomUUID(),
-  markedAtMs: 804_000,
+  anchor: { kind: "live", markedAtMs: 804_000 },
 };
 
 const saved = {
   id: draft.bookmarkId,
   sessionId: draft.sessionId,
   revision: 1,
-  anchor: { kind: "live", markedAtMs: draft.markedAtMs },
+  anchor: draft.anchor,
   requestedRange: { startMs: 774_000, endMs: 804_000 },
   actualRange: null,
   clockUncertaintyMs: 5_000,
@@ -44,7 +44,7 @@ describe("saveNote", () => {
       sessionId: draft.sessionId,
       operationId: draft.operationId,
       expectedRevision: null,
-      anchor: { kind: "live", markedAtMs: draft.markedAtMs },
+      anchor: draft.anchor,
       note: "Check the mics",
     });
   });
@@ -85,6 +85,27 @@ describe("saveNote", () => {
     });
     expect(result).toEqual({ kind: "rejected" });
     expect(called).toBe(false);
+  });
+
+  it("sends a paragraph anchor for a note with an attached line", async () => {
+    let body: unknown;
+    const anchor = {
+      kind: "paragraph" as const,
+      segmentId: "seg-1",
+      segmentRevision: 2,
+      range: { startMs: 800_000, endMs: 804_000 },
+    };
+    await saveNote({ ...draft, anchor }, "Quote this", async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Response.json({ ...saved, anchor });
+    });
+    expect(body).toMatchObject({ anchor, note: "Quote this" });
+  });
+
+  it("treats 503 source_unavailable as retryable", async () => {
+    expect(
+      await saveNote(draft, "x", reply(503, { error: "source_unavailable" })),
+    ).toEqual({ kind: "error" });
   });
 
   it("reports network failures and malformed bodies as retryable", async () => {

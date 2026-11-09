@@ -1,61 +1,33 @@
-import {
-  bookmarkResponseSchema,
-  putBookmarkRequestSchema,
-  type BookmarkResponse,
-} from "@simon-says/contracts/bookmark";
+import type { BookmarkAnchor } from "@simon-says/contracts/bookmark";
+import { putBookmark, type PutBookmarkResult } from "./bookmark-client";
 
 export type NoteDraft = {
   bookmarkId: string;
   operationId: string;
   sessionId: string;
-  markedAtMs: number;
+  /** A live mark at the talk time, or a paragraph on an attached line. */
+  anchor: BookmarkAnchor;
 };
 
-export type SaveNoteResult =
-  | { kind: "saved"; bookmark: BookmarkResponse }
-  | { kind: "rejected" }
-  | { kind: "conflict" }
-  | { kind: "error" };
+export type SaveNoteResult = PutBookmarkResult;
 
 /**
- * Creates a live-anchored note through `PUT /api/bookmarks/:id`. The draft's IDs
- * stay fixed across retries, so a retry after a lost response is idempotent.
+ * Creates a note through `PUT /api/bookmarks/:id`. The draft's IDs stay fixed
+ * across retries, so a retry after a lost response is idempotent.
  */
-export const saveNote = async (
+export const saveNote = (
   draft: NoteDraft,
   note: string,
   fetcher: typeof fetch = fetch,
-): Promise<SaveNoteResult> => {
-  const body = putBookmarkRequestSchema.safeParse({
-    sessionId: draft.sessionId,
-    operationId: draft.operationId,
-    expectedRevision: null,
-    anchor: { kind: "live", markedAtMs: draft.markedAtMs },
-    note,
-  });
-  if (!body.success) return { kind: "rejected" };
-
-  let response: Response;
-  try {
-    response = await fetcher(`/api/bookmarks/${draft.bookmarkId}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body.data),
-    });
-  } catch {
-    return { kind: "error" };
-  }
-  if (response.status === 400 || response.status === 404) {
-    return { kind: "rejected" };
-  }
-  // The draft's IDs are already taken by different content.
-  if (response.status === 409) return { kind: "conflict" };
-  if (!response.ok) return { kind: "error" };
-
-  const parsed = bookmarkResponseSchema.safeParse(
-    await response.json().catch(() => null),
+): Promise<SaveNoteResult> =>
+  putBookmark(
+    draft.bookmarkId,
+    {
+      sessionId: draft.sessionId,
+      operationId: draft.operationId,
+      expectedRevision: null,
+      anchor: draft.anchor,
+      note,
+    },
+    fetcher,
   );
-  return parsed.success
-    ? { kind: "saved", bookmark: parsed.data }
-    : { kind: "error" };
-};

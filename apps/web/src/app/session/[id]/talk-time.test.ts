@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  createSessionClock,
-  formatTalkTime,
-  sessionElapsedMs,
-} from "./talk-time";
+import { formatTalkTime, isUnpinned, UNPINNED_MARK_MS } from "./talk-time";
 
 describe("formatTalkTime", () => {
   it("pads hours, minutes, and seconds", () => {
@@ -17,23 +13,28 @@ describe("formatTalkTime", () => {
   });
 });
 
-describe("createSessionClock", () => {
-  it("advances from the server's elapsed time by monotonic time", () => {
-    let monotonic = 1_000;
-    const clock = createSessionClock(60_000, () => monotonic);
-    expect(clock()).toBe(60_000);
-    monotonic += 2_500;
-    expect(clock()).toBe(62_500);
+describe("isUnpinned", () => {
+  it("is true for a live note saved with the unpinned mark", () => {
+    expect(
+      isUnpinned({
+        anchor: { kind: "live", markedAtMs: UNPINNED_MARK_MS },
+        requestedRange: { startMs: 0, endMs: 0 },
+      }),
+    ).toBe(true);
   });
-});
 
-describe("sessionElapsedMs", () => {
-  const createdAt = new Date("2026-11-09T20:00:00Z");
-
-  it("measures from session creation and never goes negative", () => {
-    expect(sessionElapsedMs(createdAt, createdAt.getTime() + 1_500)).toBe(
-      1_500,
-    );
-    expect(sessionElapsedMs(createdAt, createdAt.getTime() - 1)).toBe(0);
+  it("is false for a pinned live mark or a paragraph range", () => {
+    expect(
+      isUnpinned({
+        anchor: { kind: "live", markedAtMs: 804_000 },
+        requestedRange: { startMs: 774_000, endMs: 804_000 },
+      }),
+    ).toBe(false);
+    expect(
+      isUnpinned({
+        anchor: { kind: "paragraph" },
+        requestedRange: { startMs: 5_000, endMs: 5_000 },
+      }),
+    ).toBe(false);
   });
 });

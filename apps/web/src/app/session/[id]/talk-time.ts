@@ -10,20 +10,17 @@ export const formatTalkTime = (ms: number) => {
 };
 
 /**
- * Reads the session clock on the client from the server's elapsed time at
- * render plus monotonic time since, so device clock skew never moves a mark.
+ * The mark sent for notes until Track 2 records when the capture clock starts.
+ * It yields the zero-width range `[0, 0]`, which evidence resolution never
+ * matches against captions, so no note gets a quote from the wrong moment.
  */
-export const createSessionClock = (
-  elapsedAtRenderMs: number,
-  readMonotonicMs: () => number = () => performance.now(),
-) => {
-  const startedAt = readMonotonicMs();
-  return () => elapsedAtRenderMs + (readMonotonicMs() - startedAt);
+export const UNPINNED_MARK_MS = 0;
+
+type Pinnable = {
+  anchor: { kind: "live"; markedAtMs: number } | { kind: "paragraph" };
+  requestedRange: { startMs: number; endMs: number };
 };
 
-/**
- * Approximate session-clock milliseconds: time since the session was created.
- * Track 2's capture clock replaces this before marks resolve against captions.
- */
-export const sessionElapsedMs = (createdAt: Date, now = Date.now()) =>
-  Math.max(0, now - createdAt.getTime());
+/** True for a note saved without a place in the talk (see `UNPINNED_MARK_MS`). */
+export const isUnpinned = ({ anchor, requestedRange }: Pinnable) =>
+  anchor.kind === "live" && requestedRange.startMs === requestedRange.endMs;
