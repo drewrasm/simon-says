@@ -1,0 +1,15 @@
+.git
+**/node_modules
+**/.next
+**/dist
+**/.env*
+**/*.tsbuildinfo
+**/coverage
+packages/db/src/generated
+.agents
+.claude
+.github
+docs
+infra
+tests
+.DS_Store
