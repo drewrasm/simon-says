@@ -24,7 +24,7 @@ Collect evidence during ordinary development. Do not invent incidents or claim a
 | [Dash0](https://www.dash0.com/)                        | Team organization, dataset, OTLP endpoint/token, Agent0, and MCP access                            | Pending verification                                                    |
 | [Gitar](https://app.gitar.ai/)                         | Repository administrator installs the GitHub App for this repo after reviewing permissions         | Pending explicit enablement                                             |
 | [Elastic Cloud](https://cloud.elastic.co/)             | Search project, scoped API key, and inference endpoint                                             | Pending; Serverless is proposed                                         |
-| Transcription and recap providers                      | Account, processing/retention settings, keys, and budget                                           | Providers remain open; Deepgram and AI SDK are proposals                |
+| Transcription and recap providers                      | Account, processing/retention settings, keys, and budget                                           | Transcription direction confirmed; runtime unverified; recap open       |
 | Database and object storage                            | Persistent Postgres and private object access from the cluster                                     | CloudNativePG proposed; object storage undecided                        |
 
 Store runtime credentials in cluster Secrets or an approved secret manager. Keep values out of chat, git, images, build arguments, and browser bundles. An account does not establish quota, connectivity, or permission to deploy.

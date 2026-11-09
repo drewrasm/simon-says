@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the milestone 0 workspace foundation is complete with local verification. Next.js on Kubernetes operated through Radar and Prisma for PostgreSQL are confirmed. Cluster access is pending. The product runtime design below remains proposed and unverified. See [decisions](decisions.md) for choices requiring validation.
+Status: the milestone 0 workspace foundation is complete with local verification. Next.js on Kubernetes operated through Radar and Prisma for PostgreSQL are confirmed. Cluster access is pending. Track 2's transcription provider and adapter direction are confirmed by its owner; runtime behavior is unverified. The remaining product runtime design below is proposed. See [decisions](decisions.md) for choices requiring validation.
 
 ## Data flow
 
@@ -62,9 +62,19 @@ Search returns candidates. Recheck membership, current source revisions, redacti
 
 Dash0 receives content-free OpenTelemetry from the Node runtime and worker. Allowlist attributes and suppress captured text, queries, notes, model prompts, credentials, and signed URLs. Disable content-bearing automatic instrumentation. Radar handles cluster operations; Dash0 handles application traces and metrics. The [hackathon plan](hackathon.md) defines evidence and ownership for all four tracks.
 
+## Transcription and text passes
+
+Track 2's confirmed direction is a direct OpenAI Realtime transcription protocol adapter in `apps/web/src/server`. Start with Liquid AI LFM3-Audio-2B LiveASR through llama.cpp `llama serve` v0.8.0 or newer at `/v1/realtime?intent=transcription`; OpenAI realtime transcription is the swap provider. Send `input_audio_buffer.append`/`commit` and consume transcription `.delta`/`.completed` events across many items per session. Own commit boundaries and source-clock mapping from sent audio offsets. Resample PCM16 input to 16 kHz for LFM3-Audio or the configured provider rate (OpenAI's example uses 24 kHz). Provider choice, URLs, model IDs, and credentials stay server-only; never use `NEXT_PUBLIC_` variables.
+
+LFM3-Audio LiveASR uses `Perform live ASR.`, English only, about 0.96 s chunks, and text context restarts about every 30 s. A local spike confirmed live deltas from the stock GGUF on the realtime endpoint, with about 1 s granularity. Context restarts appear as newlines within one item and degrade the words that follow them; see the [spike evidence](decisions.md#confirmed-by-the-track-2-owner). This is not a verified deployment. Local `llama serve` is for development; model access from the cluster through OpenAI or a reachable model host remains open.
+
+The caption adapter does not use `experimental_streamTranscribe`: `@ai-sdk/openai` 4.0.x commits only at input end, closes on the first completed item, and supplies no segment timestamps. Our adapter stamps segments with the source clock, not provider timestamps.
+
+Proposed milestone 2–3 work uses `ai` through `createOpenAICompatible` pointed at `llama serve`, or `@ai-sdk/openai`, for text and vision passes. A Liquid vision model (LFM2.5-VL or LFM3-VL family) extracts a glossary from each changed screen frame. A small Liquid text model corrects finalized segments using it, preserving original text in earlier revisions and using existing `TranscriptSegment` `corrected` provenance. Correction never blocks live captions. Screen and transcript text remain untrusted data, never instructions. These passes are outside milestone 1.
+
 ## Timeline invariants
 
-- Use one host monotonic capture clock. Map audio sample offsets, frame capture times, and provider word offsets through an ingest epoch. Never align by upload arrival time.
+- Use one host monotonic capture clock. Map audio sample offsets and frame capture times through an ingest epoch. Stamp transcript ranges from sent audio offsets, not provider timestamps. Never align by upload arrival time.
 - Fence ingest with a host lease and epoch. Stale hosts cannot publish after replacement; one active session has one live transcription stream.
 - Estimate the live session clock on attendee devices. Record uncertainty. If sync is stale, disable live marks and allow paragraph-anchored marks.
 - Replace interim text; patch final segments by stable ID and revision. Replayed events must not duplicate words or undo a newer correction.
@@ -88,7 +98,7 @@ Number audio chunks, attach time ranges/checksums, and acknowledge durable write
 - Proposed expiry: shared audio, transcript, and frames 24 hours after session end; selected evidence and recaps 30 days after selection. Confirm policy before real recording.
 - Materialize selected text revisions and retain authorized selected image references before shared-source expiry. Deletion and expiry jobs must handle references and invalidate dependent recaps.
 - Host redaction invalidates affected hosted selections and recaps. Personal deletion does not remove others' shared source. Downloaded exports cannot be recalled.
-- Keep content out of logs, telemetry, session replay, and errors. Verify provider retention controls, including Deepgram opt-out. Never claim system-wide 30-second retention.
+- Keep content out of logs, telemetry, session replay, and errors. Verify provider retention controls, including provider data-use opt-out where available. Never claim system-wide 30-second retention.
 - Measure ingest lag, caption lag, transcription failures, source gaps, durable-save latency, and recap errors. Verify Dash0 telemetry with real requests and inspect exported payloads for content leaks.
 
 Use authenticated object access and short-lived image links. Exports embed selected images and sanitized text, with no access tokens. Source and provider text are untrusted data.

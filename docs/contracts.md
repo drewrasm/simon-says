@@ -15,6 +15,8 @@ Status: proposed. Implement runtime schemas in `packages/contracts`; derive type
 | Bookmark          | Owner, session, operation ID, live/paragraph anchor, clock uncertainty, requested/actual ranges, segment revisions, frame IDs, note, revision, completeness |
 | Recap             | Owner, bookmark revisions, takeaways, evidence spans, frame references, status                                                                              |
 
+Transcript time ranges use our source clock mapped from sent audio offsets, not provider timestamps. Optional milestone 2–3 correction writes new revisions using the existing `corrected` provenance and preserves original text; it never blocks live captions.
+
 Session states: setup, live, degraded, ended, expired. Keep transport health, transcript finality, bookmark persistence, and evidence completeness separate.
 
 ## API
