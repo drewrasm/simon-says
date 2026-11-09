@@ -14,7 +14,7 @@ The installer-generated `skills-lock.json` records upstream paths and content ha
 
 Codex reads the canonical `.agents/skills/<name>/SKILL.md` files. Claude Code discovers the same files through `.claude/skills/<name>` relative symlinks into that committed directory. The links stay inside the repository and work from a fresh clone on systems that support Git symlinks; no global skill directory or `node_modules` target is required. Restart the agent session after installation or updates.
 
-Vercel-authored React guidance and the AI SDK proposal remain applicable with Kubernetes hosting; their names do not select Vercel deployment. Vendored upstream files remain unchanged.
+Vercel-authored React guidance and the confirmed AI SDK caption direction remain applicable with Kubernetes hosting; their names do not select Vercel deployment. Vendored upstream files remain unchanged.
 
 These are guidance, not runtime integrations. Follow repository scope, ownership, privacy, and authorization rules when applying them. In particular, the AI SDK skill's dependency setup instructions apply during an authorized implementation task; they do not authorize adding dependencies in a skills-only task.
 

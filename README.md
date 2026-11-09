@@ -4,10 +4,11 @@ One conference session feed. Personal, illustrated takeaways.
 
 The host captures the speaker's microphone and screen once. Attendees join by QR code, read live captions, and save moments. Each attendee gets a private recap with source passages and aligned screenshots.
 
-**Status:** milestone 0 foundation is implemented and locally verified; evidence is tracked in the [implementation plan](docs/implementation-plan.md). Product flows and provider integrations are not implemented.
+**Status:** milestone 0 foundation is implemented and locally verified; evidence is tracked in the [implementation plan](docs/implementation-plan.md). Product flows and deployed provider integrations are not implemented. Local Elasticsearch mapping/query verification is recorded in the implementation plan.
 
 ## Start here
 
+- [Delivery plan](docs/delivery-plan.md): **start here today** — deadline, cut, per-track checkpoints, working agreement, and status board.
 - [Product](docs/product.md): experience, MVP, and limits.
 - [Architecture](docs/architecture.md): monorepo ownership, data flow, and invariants.
 - [Contracts](docs/contracts.md): records, APIs, and event semantics.
@@ -40,9 +41,58 @@ Open the local URL printed by Next.js. Run `pnpm services:down` to stop the loca
 
 `pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection. The workspace uses Next.js and shadcn/ui for the application, with Prisma for PostgreSQL. See the implementation plan for completed verification and remaining work.
 
+### Local Elasticsearch mappings and smoke check
+
+Use Elastic start-local in Docker, separately from the repository's Postgres/object-store Compose services. If installed at `~/simon-says-elastic-local`, start it there with `./start.sh`. Load its local credentials without printing them (the generated `.env` uses shell variable expansion):
+
+```sh
+set -a
+. "$HOME/simon-says-elastic-local/.env"
+set +a
+export ELASTICSEARCH_URL=http://localhost:9200
+export ELASTICSEARCH_API_KEY="$ES_LOCAL_API_KEY"
+export ELASTICSEARCH_INFERENCE_ID=.multilingual-e5-small-elasticsearch
+pnpm es:setup --dry-run
+pnpm es:setup
+pnpm es:setup
+pnpm es:smoke
+unset ELASTICSEARCH_API_KEY ES_LOCAL_API_KEY ES_LOCAL_PASSWORD
+```
+
+Setup creates `segments-v1` / `observations-v1` and their `simon-says-*` write aliases, verifies mappings on rerun, fails on drift, and repairs aliases atomically. `--dry-run` performs reads only. Smoke accepts only `http://localhost:9200` and the local E5 endpoint; it writes three synthetic finalized segments and an observation under reserved session `es-smoke-c1b`, checks overlap/semantic queries, duplicate IDs, create conflicts and strict fields, then deletes only those reserved documents. Do not use that session ID for application data or run the smoke concurrently. The first E5 inference may need a model download/deployment and adequate Docker memory; failures are reported, not replaced with fake vectors. No cloud connection is part of local verification.
+
+The mappings' inference endpoint is parameterized and defaults to proposed Jina; production endpoint selection remains Track 3's decision. See [storage contracts](docs/contracts.md#elasticsearch-v1-storage-boundary) and [approval-gated operator setup](docs/deployment.md#elasticsearch-setup-operator-approval-required).
+
 ## Deployment and hackathon scope
 
-The deployment target is Kubernetes operated through Radar. Keep Next.js, shadcn/ui, and Prisma. The team cluster is provisioned; container packaging, GitOps, live transport, and deployment are not yet implemented or verified. `pnpm dev` still runs the existing Next.js foundation locally.
+The deployment target is Kubernetes operated through Radar. The team cluster is provisioned. The local 0A foundation includes an explicitly compiled Next.js custom server, non-root container, offline manifests, and build-only CI. GitOps activation and cluster deployment require separate authorization. See the [0A evidence](docs/implementation-plan.md#checkpoint-0a-local-evidence) for verification and remaining gates.
+
+### Local container and transport probes
+
+```sh
+docker build -t simon-says:checkpoint-0a .
+docker run -d --name simon-says-0a -p 127.0.0.1:18080:8080 \
+  -e DATABASE_URL=postgresql://dummy:dummy@127.0.0.1:5432/dummy \
+  -e PROBE_TOKEN=local-checkpoint-0a-probe-token-12345 simon-says:checkpoint-0a
+curl -f http://127.0.0.1:18080/healthz
+curl -f http://127.0.0.1:18080/readyz
+curl -f http://127.0.0.1:18080/
+PROBE_TOKEN=local-checkpoint-0a-probe-token-12345 node scripts/probe.mjs http://127.0.0.1:18080
+curl -N -H 'Authorization: Bearer local-checkpoint-0a-probe-token-12345' \
+  http://127.0.0.1:18080/api/probe/sse
+docker exec simon-says-0a id
+docker stop --time 20 simon-says-0a
+docker logs simon-says-0a
+docker rm simon-says-0a
+docker buildx build --platform linux/amd64 --load -t simon-says:checkpoint-0a-amd64 .
+KUBECONFIG=/dev/null kubectl kustomize infra/k8s
+```
+
+Wait for `Next prepared` in container logs before probing readiness. The dummy database URL requires no running database for this app shell. `/healthz` checks process liveness; `/readyz` checks Next preparation and becomes unavailable during shutdown. Provider/database health is excluded until persistence-backed routes exist.
+
+These are **transport probes**, not product capture APIs. Set server-only `PROBE_TOKEN` (32–128 URL-safe characters) to enable them; leave it unset to disable them. Use a fresh secret outside local development. SSE requires a Bearer header; WebSocket clients offer subprotocols `simon-probe` and `token.<PROBE_TOKEN>` (the server selects only `simon-probe`). Never put tokens in URLs or logs. Probes accept only fixed `ping` → `pong` and heartbeat messages, cap connections at 16 combined, and end after 30 seconds. SSE bypasses compression and sets `X-Accel-Buffering: no`. The Node 22 script checks unauthorized SSE and incremental delivery too.
+
+`pnpm dev` uses the custom entry point with Next HMR (default port 8080; override with `PORT`). Server TypeScript changes require restarting it. `pnpm build` generates Prisma, builds Next, and compiles the server into `apps/web/dist`; `pnpm start` runs it without `tsx`. No standalone output is used. SIGTERM ends SSE, closes WebSockets with code 1012, and drains for at most 10 seconds inside the manifest's 20-second grace period.
 
 The next checkpoint is **0A: Kubernetes deployment foundation**, followed by live captions in milestone 1. All four hackathon tracks are planned: Radar operations, Dash0 observability, Sonar/Gitar development review, and Elasticsearch as the core shared-content store and passage search layer. See the [deployment plan](docs/deployment.md) and [integration scope](docs/hackathon.md).
 
@@ -56,7 +106,7 @@ The next checkpoint is **0A: Kubernetes deployment foundation**, followed by liv
 | `dash0`         | Dash0 (AWS US West)   | Browser OAuth with your Dash0 team organization account.                                                                |
 | `elasticsearch` | Elastic Agent Builder | API key in `ELASTIC_MCP_AUTHORIZATION`, formatted as `ApiKey <encoded key>`.                                            |
 
-Gitar runs as a GitHub App and has no MCP server.
+Gitar runs as a GitHub App and has no MCP server. Its review instructions live in `.gitar/review/`; CI is `.github/workflows/check.yml`. Never commit to `main`: open every change as a pull request so CI and Gitar review it.
 
 - **Claude Code:** start a session in this repository and approve the project servers. Run `/mcp`, pick `radar-cloud` and `dash0`, and choose **Authenticate**.
 - **Codex:** trust this project, then run `codex mcp login radar-cloud` and `codex mcp login dash0`.
@@ -84,4 +134,8 @@ export ELASTIC_MCP_AUTHORIZATION="ApiKey $(security find-generic-password -s ela
 
 Official `ai-sdk`, `vercel-react-best-practices`, and `elasticsearch-onboarding` skills are vendored in `.agents/skills/` for Codex, with relative `.claude/skills/` symlinks for Claude Code. They are available from a fresh clone without installing app dependencies. Start a new agent session after changing skills.
 
-See [agent skill provenance and updates](docs/agent-skills.md) for pinned sources, installation commands, and the retired Next.js best-practices skill. The AI SDK remains a [proposed implementation default](docs/decisions.md#proposed-implementation-defaults).
+See [agent skill provenance and updates](docs/agent-skills.md) for pinned sources, installation commands, and the retired Next.js best-practices skill. Live captions are confirmed as OpenAI `gpt-realtime-whisper` through server-only AI SDK streaming windows ([Plan B](docs/architecture.md#transcription-and-text-passes)); dependencies and runtime integration remain unimplemented and unverified.
+
+## Local capture sink
+
+Run `pnpm exec tsx scripts/capture-sink.ts` beside `pnpm dev` for a local-only WebSocket sink at `ws://127.0.0.1:8787`. Pass that URL to `HostCapture` in a host integration harness; Track 1's host controls are a separate integration. The sink acknowledges binary frames and prints only frame counts, arrival rate, last sequence/sample offset, and validation errors on disconnect. It has no authentication, persistence, or transcription and binds only to loopback.

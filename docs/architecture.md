@@ -7,7 +7,7 @@ Status: the milestone 0 workspace foundation is complete with local verification
 ```mermaid
 flowchart TD
   Host[Host: mic and screen] --> Ingest[Kubernetes: authenticated ingest]
-  Ingest --> STT[One transcription stream per session]
+  Ingest --> STT[One caption pipeline per session]
   STT --> Content[Elastic Cloud: segment revisions and frame observations]
   Ingest --> Content
   Ingest --> Media[Private object storage: images]
@@ -45,9 +45,9 @@ One Next.js application owns the UI and backend. HTTP endpoints use App Router R
 
 ## Kubernetes runtime
 
-Deploy the existing Next.js app as a Node.js container. Radar supplies cluster visibility, investigations, and deployment operations; Kubernetes runs the app. Keep HTTP APIs in Route Handlers. A proposed custom Node entry point owns WebSocket upgrades and delegates HTTP to Next.js. Prove its packaging, development command, and graceful shutdown in checkpoint 0A; do not assume a Route Handler supports upgrades outside Vercel. A custom server must be packaged explicitly rather than assuming Next.js standalone output includes it.
+Deploy the existing Next.js app as a Node.js container. Radar supplies cluster visibility, investigations, and deployment operations; Kubernetes runs the app. Keep product HTTP APIs in Route Handlers. Checkpoint 0A adds a custom Node entry point for health/transport probes, WebSocket upgrades, and Next.js HTTP, explicitly compiled and packaged without standalone output. See [0A local evidence](implementation-plan.md#checkpoint-0a-local-evidence) for packaging, development HMR, and shutdown verification; cluster behavior remains unverified. Do not assume a Route Handler supports upgrades outside Vercel.
 
-Start with one application replica, but keep all leases, replay cursors, audio acknowledgments, and transcript progress durable. Rolling deployments can overlap pods. Reconnect with backoff, replay from the last finalized source offset, deduplicate overlap, and preserve the source clock. Pod termination must not end a session or silently discard acknowledged audio. Keep missing audio distinct from missing transcript.
+Start with one application replica, but keep all leases, replay cursors, audio acknowledgments, and transcript progress durable. Rolling deployments can overlap pods. Reconnect with backoff, replay frames the host still holds, deduplicate overlap, and preserve the source clock. Pod termination must not end a session; audio beyond host resend capacity becomes a visible gap while raw-audio persistence is deferred. Keep missing audio distinct from missing transcript.
 
 Propose a Postgres event log with bounded polling for cross-pod SSE delivery. Notification mechanisms may reduce latency but cannot replace durable replay. Validate latency and load in milestone 1. The gateway must pass WebSocket upgrades and unbuffered SSE. Bound uploads, connection counts, and backpressure; keep authorization at each boundary.
 
@@ -57,7 +57,7 @@ Recap and source cleanup work need durable Postgres jobs, retries, and leases. P
 
 ## Search and observability
 
-Elasticsearch is the system of record for shared source content from milestone 1: every transcript segment revision with live/corrected/repaired provenance, and screen observations with capture time, frame ID, checksum, glossary terms, and private image object key. Track 2 writes these during ingest. Postgres owns identity, sessions, membership, host lease/epoch, audio acknowledgments, finalized-transcript offset, bookmarks, notes, recaps, and job queue. No private data or identity-linked search queries enter Elasticsearch.
+Elasticsearch is the system of record for shared source content from milestone 1: every finalized transcript segment revision with live/corrected/repaired provenance, and screen observations with capture time, frame ID, checksum, glossary terms, and private image object key. Track 2 writes these during ingest. Postgres owns identity, sessions, membership, host lease/epoch, audio acknowledgments, finalized-transcript offset, bookmarks, notes, recaps, and job queue. No private data or identity-linked search queries enter Elasticsearch.
 
 Track 3 resolves bookmarks by `startMs`/`endMs` on the session clock against Elasticsearch, filtered to segment revisions and frames. Fixed requested ranges never move when later content arrives. Track 3 also implements “Find the Right Talk” keyword search plus `semantic_text` over segments and glossary terms; track 1 owns its UI. Confirm the embedding/inference endpoint (for example Jina) in the Elastic project before using it. Results resolve to source ranges that attendees explicitly keep as paragraph-anchored selections; search never adds evidence automatically.
 
@@ -69,18 +69,63 @@ Dash0 receives content-free OpenTelemetry from the Node runtime and worker. Allo
 
 ## Transcription and text passes
 
-Track 2's confirmed direction is a direct OpenAI Realtime transcription protocol adapter in `apps/web/src/server`. Start with Liquid AI LFM3-Audio-2B LiveASR through llama.cpp `llama serve` v0.8.0 or newer at `/v1/realtime?intent=transcription`; OpenAI realtime transcription is the swap provider. Send `input_audio_buffer.append`/`commit` and consume transcription `.delta`/`.completed` events across many items per session. Own commit boundaries and source-clock mapping from sent audio offsets. Resample PCM16 input to 16 kHz for LFM3-Audio or the configured provider rate (OpenAI's example uses 24 kHz). Provider choice, URLs, model IDs, and credentials stay server-only; never use `NEXT_PUBLIC_` variables.
+**Plan B, confirmed by Dylan on November 9, 2026:** OpenAI only, using hackathon credits. Live captions use `gpt-realtime-whisper` through server-only `ai` 7.0.x `experimental_streamTranscribe` and `@ai-sdk/openai` 4.0.x `openai.transcription(model)`. `gpt-live-transcribe` is a same-price config swap. See [pricing and SDK evidence](decisions.md#confirmed-by-the-track-2-owner). This pipeline is planned, not implemented or runtime-verified.
 
-LFM3-Audio LiveASR uses `Perform live ASR.`, English only, about 0.96 s chunks, and text context restarts about every 30 s. A local spike confirmed live deltas from the stock GGUF on the realtime endpoint, with about 1 s granularity. Context restarts appear as newlines within one item and degrade the words that follow them; see the [spike evidence](decisions.md#confirmed-by-the-track-2-owner). This is not a verified deployment. Local `llama serve` is for development; model access from the cluster through OpenAI or a reachable model host remains open.
+```mermaid
+flowchart LR
+  subgraph Host["Host browser"]
+    Mic["Mic"] --> Worklet["AudioWorklet<br/>24 kHz PCM16<br/>100 ms frames<br/>{epoch, seq, sampleOffset}"]
+    Worklet --> Resend["2-min resend buffer"]
+  end
+  subgraph Pod["Server pod (team-simon-says)"]
+    Ingest["Ingest WS handler<br/>checks lease + epoch"]
+    Ring["Ring buffer (2 min)"]
+    WM["WindowManager<br/>pause detector decides rotation"]
+    Asm["CaptionAssembler"]
+    Ingest --> Ring --> WM
+    WM -- "deltas + finals" --> Asm
+  end
+  subgraph OpenAI["OpenAI"]
+    WN["Window N<br/>streamTranscribe"]
+    WN1["Window N+1<br/>pre-opened"]
+  end
+  PG[("Postgres<br/>lease, epoch, acks")]
+  ES[("Elasticsearch<br/>final segments")]
+  SSE["SSE shared feed"]
+  Att["Attendees"]
+  Resend -- "frames over WS" --> Ingest
+  Ingest -- "acks" --> Resend
+  Ingest <--> PG
+  WM -- "audio" --> WN
+  WM -- "audio after cut" --> WN1
+  WN -- "transcript-delta / final" --> WM
+  WN1 -- "transcript-delta / final" --> WM
+  Asm -- "interim text" --> SSE
+  Asm -- "final segments" --> ES
+  Asm -- "final segments" --> SSE
+  SSE --> Att
+```
 
-The caption adapter does not use `experimental_streamTranscribe`: `@ai-sdk/openai` 4.0.x commits only at input end, closes on the first completed item, and supplies no segment timestamps. Our adapter stamps segments with the source clock, not provider timestamps.
+**Host capture:** `getUserMedia` with echo cancellation, noise suppression, and AGC off; `AudioContext({sampleRate: 24000})`; an AudioWorklet emits 2,400-sample (100 ms) PCM16 frames with `{epoch, seq, sampleOffset}`. `sampleOffset / 24` gives source-clock milliseconds. Retain a two-minute resend buffer and reconnect with backoff.
 
-Proposed milestone 2–3 work uses `ai` through `createOpenAICompatible` pointed at `llama serve`, or `@ai-sdk/openai`, for text and vision passes. A Liquid vision model (LFM2.5-VL or LFM3-VL family) extracts a glossary from each changed screen frame. A small Liquid text model corrects finalized segments using it, preserving original text in earlier revisions and using existing `TranscriptSegment` `corrected` provenance. Correction never blocks live captions. Screen and transcript text remain untrusted data, never instructions. These passes are outside milestone 1.
+**Ingest:** the custom Node server owns WebSocket ingest, Postgres lease/epoch checks, a two-minute ring buffer, and batched acknowledgments. A duplicate `seq` in the same epoch with the same checksum is acked idempotently; changed content conflicts. Raw-audio persistence to object storage is deferred today. Acknowledgments confirm receipt into the ring buffer, not durable storage; the [contracts](contracts.md#live-caption-ingest-and-events) define this and mark the AudioChunk record deferred.
+
+**WindowManager:** the SDK commits once when input closes and ends at its first final, so run successive windows. Rotate at the first pause of at least 300 ms after 15 s, or force at 25 s at the quietest 20 ms in the last second. Pre-open N+1 about 1 s early. Frames from the cut go to N+1; closing N's input commits it. Keep pause detection, rotation planning, and timing estimation pure in `packages/domain`; the SDK call lives in `apps/web/src/server/captions/`.
+
+**CaptionAssembler:** deltas become interim text over SSE only, with estimated audio time per delta (offset sent minus measured lag). The final replaces interim text. Split it into sentences with estimated ranges (about ±1–2 s, `timing: { kind: "estimated", uncertaintyMs }`), writing revision 1 to Elasticsearch with provenance `live` and idempotent ID `sessionId:epoch:segmentId:revision`. Publish captions in window order. Persist final content before advancing the Postgres finalized offset or publishing durable final events; settle cross-store ordering and crash recovery in milestone 1.
+
+**Failures:** replay a failed window from the ring buffer up to two retries, then emit a gap event `[startMs, endMs]`. On host drops, the host resends frames the server has not acknowledged. Acknowledgment is receipt into the server ring buffer, not durable storage (see [contracts](contracts.md#live-caption-ingest-and-events)), and the host discards acknowledged frames. So on pod restart, acknowledged audio that was not yet finalized is lost: the new pod resumes transcription at the first frame the host still holds and emits a `caption.gap` (`audio_missing`) from the last finalized offset to that frame. Do not claim acknowledged audio survives restart without durable bytes. Show lag in caption health and Dash0.
+
+**Limits and validation:** no live vocabulary hints: streaming prompt and keywords warn as unsupported. There are no SDK segment timestamps (`segments: []`); timing is estimated. Use one replica for in-process SSE fan-out; multiple replicas require the shared event source described above, including during rolling overlap. Unverified until a key exists: session length limits, faster-than-realtime replay, final/delta differences, latency per `delay`, and rate limits. Start `providerOptions.openai.streaming.delay` at `low`; supported choices are `minimal|low|medium|high|xhigh`. Test pure domain logic and fake transcription models without a key; make the first real call in the cluster with the key in the Secret.
+
+**Dash0:** one span per window; content-free interim and final caption lag, rotation gap, window duration, retries, errors, ingest backlog, reconnects, and Elasticsearch write latency. Never audio, text, or prompts.
+
+**Proposed glossary and correction, milestones 2–3:** OpenAI through the AI SDK, using the cheapest OpenAI model that passes the check, chosen at implementation. Extract terms from changed frames; correct finalized captions asynchronously with new `corrected` revisions and preserved originals. Both passes stay off the live caption path. Screen and transcript text are untrusted data, never instructions.
 
 ## Timeline invariants
 
 - Use one host monotonic capture clock. Map audio sample offsets and frame capture times through an ingest epoch. Stamp transcript ranges from sent audio offsets, not provider timestamps. Never align by upload arrival time.
-- Fence ingest with a host lease and epoch. Stale hosts cannot publish after replacement; one active session has one live transcription stream.
+- Fence ingest with a host lease and epoch. Stale hosts cannot publish after replacement; one active session has one caption pipeline with successive transcription windows.
 - Estimate the live session clock on attendee devices. Record uncertainty. If sync is stale, disable live marks and allow paragraph-anchored marks.
 - Replace interim text; patch final segments by stable ID and revision. Replayed events must not duplicate words or undo a newer correction.
 - Replay SSE from a cursor. If history expired, supply an authorized snapshot and cursor. Do not report a silent gap as caught up.
@@ -94,7 +139,17 @@ Propose one screen observation per second. Deduplicate identical images but reta
 
 Sampling can miss short visuals. Inspect code legibility before choosing compression and dimensions. Attaching screenshots is MVP; OCR or multimodal interpretation is optional and must cite the frame separately from spoken text.
 
-Number audio chunks, attach time ranges/checksums, and acknowledge durable writes. Proposed host resend capacity is two minutes. Exceeding it exposes a gap. Optional repair transcription creates revised segments with repaired provenance. Track audio coverage separately from transcription accuracy.
+Number audio frames, attach source offsets/checksums, and distinguish receipt acks from final-content persistence. Host resend capacity is two minutes; raw-audio object persistence is deferred today. Exceeding it exposes a gap. Optional repair transcription creates revised segments with repaired provenance. Track audio coverage separately from transcription accuracy.
+
+### Host audio module (S2)
+
+`apps/web/src/capture/host-capture.ts` provides `HostCapture({ epoch, ingestUrl, deviceId? })`. Track 1 creates one instance per epoch in the host UI, calls `start()` from an explicit host gesture, and calls idempotent `stop()` on stop/unmount. Stop is terminal: acquire a new epoch and create a new instance to restart. Device selection uses `listMicrophones()` (no permission prompt) and `deviceId`; change devices by stopping and starting a new instance. Importing the module or subscribing never requests microphone access; attendee pages must never call `start()`.
+
+`useHostCapture(capture)` in `use-host-capture.ts` is a passive React adapter over `subscribe(listener)` and `getSnapshot()`. Its immutable health snapshot exposes `mic` (`idle`, `requesting`, `live`, `denied`, `error`), `connection` (`connecting`, `open`, `reconnecting`, `closed`, `rejected`), `level` (0–1 RMS), `unackedMs`, and `localGaps`. `open` means the server sent validated `ready`, not merely that the socket opened. A nonretryable rejection closes the socket and releases the mic while preserving `rejected`. Startup failures update health and reject `start()`; runtime failures update health and stop resources.
+
+The static `/capture/processor.js` worklet imports `/capture/pcm.js`, the same pure DSP used by unit tests. It requests a 24 kHz AudioContext; if unsupported it retries the browser default. The worklet linearly resamples the actual context rate to the contracts' 24 kHz rate, preserving fractional phase across render quanta. It emits exactly 2,400 PCM16 mono samples and RMS per frame. Sequence starts at zero; sample offsets advance by 2,400, independent of wall time. Stop ends tracks, closes the context/socket, and discards an incomplete final frame; it does not claim durable delivery of unacknowledged audio.
+
+The ingest client uses the shared binary encoder and validated JSON `hello`/`ready`/`ack`/`rejected` schemas. It replays retained frames after the server cursor, bounds its resend audio to the contracts' 120 seconds, and reconnects with jitter up to 15 seconds. An overfull browser send queue also triggers reconnect. Dropped unacknowledged frames create local gaps with inclusive `startSampleOffset` and exclusive `endSampleOffset`; adjacent gaps merge. These remain in the health snapshot after acknowledgment so Track 1 can display lost local coverage. Gaps are local evidence of unavailable resend audio, not proof of a server transcript gap, and are not sent as a new wire message. Authentication, durable ingest, and session end remain server/Track 3 integration work.
 
 ## Access, retention, and operations
 

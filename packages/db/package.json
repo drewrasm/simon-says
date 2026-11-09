@@ -8,6 +8,8 @@
   "scripts": {
     "generate": "prisma generate",
     "validate": "prisma validate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
     "typecheck": "tsc --noEmit",
     "check": "node --conditions=react-server --import tsx scripts/check.ts"
   },

@@ -8,3 +8,4 @@ coverage/
 .vercel/
 .DS_Store
 packages/db/src/generated/
+apps/web/dist/

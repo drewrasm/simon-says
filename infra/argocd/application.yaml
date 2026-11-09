@@ -1,0 +1,21 @@
+# Apply only through Radar with explicit operator approval.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app
+  namespace: team-simon-says
+spec:
+  project: team-simon-says
+  source:
+    repoURL: https://github.com/drewrasm/simon-says.git
+    targetRevision: main
+    path: infra/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: team-simon-says
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - PruneLast=true
