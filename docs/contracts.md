@@ -63,6 +63,30 @@ Duplicate audio epoch/sequence with the same checksum acknowledges the existing 
 
 Recap requests persist an owner-scoped recap and durable generation job, then return the recap ID for the existing status endpoint. Request retries use an operation ID to reuse the same recap and job. Recap generation binds to source revisions. Check them again before publishing the result. Edits, deletion, redaction, and expiry invalidate affected results. Empty or unresolved selections do not produce unsupported takeaways. Validate model source IDs and evidence excerpts before saving.
 
+## Live caption ingest and events
+
+Implemented as schemas in `packages/contracts` and pure rules in `packages/domain`; the server pipeline and host capture module that use them are separate changes. Runtime behavior with a live provider is unverified.
+
+**Audio frames.** The host sends binary WebSocket messages: a 16-byte little-endian header (version 1, kind 1 = PCM16 mono, reserved, epoch u32, sequence u32, sample offset u32) followed by PCM16 samples at 24 kHz. Frames normally carry 2,400 samples (100 ms) and at most 4,800. The sample offset counts samples since capture start and is the session source clock: `ms = sampleOffset / 24`. A u32 offset covers about 49 hours. The host keeps up to 120 s of unacknowledged frames for resend.
+
+**Control messages.** After connecting, the host sends `hello` with its epoch, highest unacknowledged sequence, and sample rate. The server replies `ready` with the sequence it has acknowledged through; the host resends everything after it. `ack` advances acknowledgment. `rejected` carries `unauthorized`, `stale_epoch`, `session_ended`, `invalid_frame`, `sequence_conflict`, or `overloaded`, and whether retrying can help.
+
+**Segments.** A `TranscriptSegment` carries session, epoch, the transcription window that produced it, a stable segment ID, revision, `startMs`/`endMs`, text, provenance (`live`, `corrected`, `repaired`), and timing. Live timing is always `estimated` with an `uncertaintyMs` half-width, because streaming text has no provider timestamps. The Elasticsearch document ID is `sessionId:epoch:segmentId:revision`.
+
+**Shared caption events** (SSE, discriminated by `kind`, each with `cursor` and `sessionId`):
+
+| Kind              | Meaning                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `caption.interim` | Live, unstored text for one window with its start and estimated end; each event replaces that window's previous interim text |
+| `caption.final`   | Final timed segments for a window; supersedes its interim text                                                               |
+| `caption.gap`     | A source range with no transcript, because transcription failed or audio is missing                                          |
+| `capture.state`   | Session state, audio receipt (`receiving`, `stalled`, `stopped`), and caption lag                                            |
+| `clock.heartbeat` | Latest source-clock time received from the host                                                                              |
+
+**Window rotation.** One window is one provider streaming call. A window rotates at the first pause of at least 300 ms after 15 s; after 25 s it rotates at the first quiet unit or speech low point (quietest quarter of the last second and 3 dB under its median); at 27 s it rotates regardless. The next window is pre-opened 1 s before the minimum. Pauses are judged on 20 ms units against an adaptive noise floor. Every sample before a cut belongs to the earlier window.
+
+**Timing estimate.** Interim text is placed at the audio offset sent when it arrived, minus measured lag. Final text is split into sentences; each sentence end maps to the delta arrival timeline by relative character position. Ranges are contiguous, inside the window, and the last sentence ends at the window end. Without deltas, sentences are spread linearly with uncertainty of half the window.
+
 ## Search and source durability
 
 A search request carries query text, a bounded result limit, and an optional opaque cursor. Keep query text out of URLs and telemetry. Require current session membership before searching. Return passage IDs, segment IDs and revisions, source ranges, authorized excerpts, and an indexing state such as current, catching up, or unavailable. Do not treat stale or unavailable search as an authoritative empty result.

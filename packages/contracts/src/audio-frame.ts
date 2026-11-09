@@ -33,8 +33,7 @@ export type AudioFrame = {
 };
 
 export type AudioFrameDecodeResult =
-  | { ok: true; frame: AudioFrame }
-  | { ok: false; reason: AudioFrameError };
+  { ok: true; frame: AudioFrame } | { ok: false; reason: AudioFrameError };
 
 export type AudioFrameError =
   | "too_short"

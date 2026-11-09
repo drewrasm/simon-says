@@ -23,9 +23,7 @@ const segment: TranscriptSegment = {
 describe("caption contracts", () => {
   it("derives deterministic document IDs", () => {
     expect(segmentDocumentId(segment)).toBe("s1:2:w7-0:1");
-    expect(segmentDocumentId({ ...segment, revision: 2 })).toBe(
-      "s1:2:w7-0:2",
-    );
+    expect(segmentDocumentId({ ...segment, revision: 2 })).toBe("s1:2:w7-0:2");
   });
 
   it("rejects segments that end before they start", () => {

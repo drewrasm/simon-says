@@ -69,9 +69,7 @@ describe("audio frames", () => {
     expect(() =>
       encodeAudioFrame(frame(new Int16Array(MAX_FRAME_SAMPLES + 1))),
     ).toThrow(RangeError);
-    expect(() => encodeAudioFrame({ ...frame(), seq: -1 })).toThrow(
-      RangeError,
-    );
+    expect(() => encodeAudioFrame({ ...frame(), seq: -1 })).toThrow(RangeError);
     expect(() => encodeAudioFrame({ ...frame(), epoch: 0 })).toThrow(
       RangeError,
     );
