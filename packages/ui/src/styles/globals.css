@@ -103,7 +103,11 @@
   --success-foreground: oklch(0.508 0.118 165.612);
 }
 
-.dark {
+/* Routes that render inside [data-page-theme="dark"] darken the whole document,
+   so the body, overscroll, and browser chrome never show the light theme. */
+.dark,
+:root:has([data-page-theme="dark"]) {
+  color-scheme: dark;
   --background: oklch(0.145 0.008 326);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.212 0.019 322.12);
