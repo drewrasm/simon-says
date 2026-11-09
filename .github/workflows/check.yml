@@ -48,7 +48,9 @@ jobs:
         run: sh apps/web/src/server/bookmarks/test-integration.sh
       - run: pnpm check
       - name: Test deploy-tag diff guard offline
-        run: python3 scripts/test-deploy-diff.py
+        run: |
+          python3 scripts/test-deploy-diff.py
+          python3 scripts/test-propose-deploy.py
       - run: pnpm build
 
   container:
@@ -159,6 +161,6 @@ jobs:
       - name: Propose and merge immutable deploy tag through a guarded PR
         if: steps.current.outputs.release == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DEPLOY_TOKEN || secrets.GITHUB_TOKEN }}
           AUTO_DEPLOY: ${{ vars.AUTO_DEPLOY }}
         run: bash scripts/propose-deploy.sh
