@@ -21,24 +21,6 @@ export const syntheticSegment = (
   expiresAt: "2099-01-01T00:00:00.000Z",
 });
 
-export const syntheticObservation = (
-  captureMs = 0,
-  captureState = "captured",
-) => ({
-  sessionId: "synthetic-session",
-  epoch: 1,
-  observationId: `observation-${captureMs}`,
-  frameId: `frame-${captureMs}`,
-  checksum: "a".repeat(64),
-  objectKey: `synthetic/frames/${captureMs}.webp`,
-  captureState,
-  width: 1280,
-  height: 720,
-  captureMs,
-  glossaryTerms: [],
-  expiresAt: "2099-01-01T00:00:00.000Z",
-});
-
 export const syntheticSearchResponse = (sources: unknown[]) => ({
   took: 1,
   timed_out: false,

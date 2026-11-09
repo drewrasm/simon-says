@@ -92,9 +92,7 @@ const toResponse = (record: BookmarkRecord): BookmarkResponse =>
         : { startMs: record.actualStartMs, endMs: record.actualEndMs },
     clockUncertaintyMs: record.clockUncertaintyMs,
     completeness: record.completeness,
-    evidence: bookmarkEvidenceSchema.parse(
-      record.evidence ?? { segments: [], frames: [] },
-    ),
+    evidence: bookmarkEvidenceSchema.parse(record.evidence ?? { segments: [] }),
     note: record.note,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),

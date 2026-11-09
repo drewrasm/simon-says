@@ -73,17 +73,7 @@ it("validates optional Elasticsearch settings without echoing credentials", () =
   );
 });
 
-it("validates a server-only exact APP_ORIGIN with no default trust", () => {
-  expect(readRuntimeEnv({}).frameEnv.APP_ORIGIN).toBeUndefined();
-  expect(
-    readRuntimeEnv({
-      APP_ORIGIN: "https://simon.example",
-      DATABASE_URL: "configured",
-    }).frameEnv,
-  ).toMatchObject({
-    APP_ORIGIN: "https://simon.example",
-    DATABASE_URL: "configured",
-  });
+it("rejects a malformed APP_ORIGIN", () => {
   for (const APP_ORIGIN of [
     "",
     "null",

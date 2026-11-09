@@ -48,7 +48,7 @@ const bookmark = {
   actualRange: null,
   clockUncertaintyMs: 100,
   completeness: "pending",
-  evidence: { segments: [], frames: [] },
+  evidence: { segments: [] },
   note: null,
   createdAt: "2026-11-09T18:00:00Z",
   updatedAt: "2026-11-09T18:00:00Z",
@@ -59,7 +59,6 @@ const citation = {
   segmentRevision: 1,
   range,
   excerpt: "Keep source timestamps.",
-  frameId: null,
 };
 
 describe("Track 3 contracts", () => {
@@ -223,7 +222,7 @@ describe("Track 3 contracts", () => {
     ).toBe(2);
   });
 
-  it("preserves resolved source evidence and nullable frame URLs", () => {
+  it("preserves resolved source evidence", () => {
     const resolved = {
       ...bookmark,
       actualRange: range,
@@ -232,21 +231,9 @@ describe("Track 3 contracts", () => {
         segments: [
           { segmentId: "w1-0", revision: 1, range, text: citation.excerpt },
         ],
-        frames: [{ frameId: "f1", capturedAtMs: 0, imageUrl: null }],
       },
     };
     expect(bookmarkResponseSchema.parse(resolved)).toEqual(resolved);
-    expect(
-      bookmarkResponseSchema.safeParse({
-        ...resolved,
-        evidence: {
-          ...resolved.evidence,
-          frames: [
-            { frameId: "f1", capturedAtMs: 0, imageUrl: "javascript:x" },
-          ],
-        },
-      }).success,
-    ).toBe(false);
   });
 
   it("bounds search inputs, defaults limits, and exposes unavailable indexing", () => {

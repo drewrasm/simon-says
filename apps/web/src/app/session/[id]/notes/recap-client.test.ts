@@ -26,7 +26,6 @@ const bookmark = (n: number, captioned: boolean): BookmarkResponse => ({
           },
         ]
       : [],
-    frames: [],
   },
   note: null,
   createdAt: "2026-11-09T20:13:24.000Z",

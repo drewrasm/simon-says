@@ -13,9 +13,6 @@ export const syntheticRecapSelection = () => ({
         text: "Synthetic evidence: shorter meetings leave more time to build.",
       },
     ],
-    frames: [
-      { frameId: "synthetic-frame", capturedAtMs: 1_000, imageUrl: null },
-    ],
   } satisfies BookmarkResponse["evidence"],
 });
 

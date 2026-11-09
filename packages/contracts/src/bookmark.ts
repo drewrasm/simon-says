@@ -38,15 +38,8 @@ export const bookmarkSegmentEvidenceSchema = z.object({
   text: transcriptSegmentSchema.shape.text,
 });
 
-export const bookmarkFrameEvidenceSchema = z.object({
-  frameId: id,
-  capturedAtMs: ms,
-  imageUrl: z.url({ protocol: /^https?$/ }).nullable(),
-});
-
 export const bookmarkEvidenceSchema = z.object({
   segments: z.array(bookmarkSegmentEvidenceSchema),
-  frames: z.array(bookmarkFrameEvidenceSchema),
 });
 
 export const bookmarkResponseSchema = z.object({
@@ -81,7 +74,6 @@ export type PutBookmarkRequest = z.infer<typeof putBookmarkRequestSchema>;
 export type BookmarkSegmentEvidence = z.infer<
   typeof bookmarkSegmentEvidenceSchema
 >;
-export type BookmarkFrameEvidence = z.infer<typeof bookmarkFrameEvidenceSchema>;
 export type BookmarkEvidence = z.infer<typeof bookmarkEvidenceSchema>;
 export type BookmarkResponse = z.infer<typeof bookmarkResponseSchema>;
 export type ListBookmarksResponse = z.infer<typeof listBookmarksResponseSchema>;

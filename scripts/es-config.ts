@@ -47,7 +47,7 @@ export function elasticClient(config: ReturnType<typeof elasticConfig>) {
 
 export async function indexDefinitions(inferenceId: string) {
   return Promise.all(
-    ["segments", "observations"].map(async (name) => {
+    ["segments"].map(async (name) => {
       // Repository-owned JSON; Elasticsearch validates the full mapping at creation.
       const definition = indexDefinition.safeParse(
         JSON.parse(

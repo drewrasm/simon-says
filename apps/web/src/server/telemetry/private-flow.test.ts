@@ -276,7 +276,7 @@ it.each([
       .mockResolvedValue([]);
   if (mode === "empty")
     mocks.bookmark.findMany.mockResolvedValue([
-      { ...selection, evidence: { segments: [], frames: [] } },
+      { ...selection, evidence: { segments: [] } },
     ]);
   if (mode === "invalid-citations")
     mocks.model.mockResolvedValue({ takeaways: [] });

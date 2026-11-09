@@ -18,7 +18,7 @@ const saved = {
   actualRange: null,
   clockUncertaintyMs: 5_000,
   completeness: "pending",
-  evidence: { segments: [], frames: [] },
+  evidence: { segments: [] },
   note: "Check the mics",
   createdAt: "2026-11-09T20:13:24.000Z",
   updatedAt: "2026-11-09T20:13:24.000Z",

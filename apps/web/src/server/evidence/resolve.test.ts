@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestedRange, resolveEvidence } from "./resolve";
-import {
-  syntheticObservation,
-  syntheticSearchResponse,
-  syntheticSegment,
-} from "./fixtures";
+import { syntheticSearchResponse, syntheticSegment } from "./fixtures";
 
 vi.mock("server-only", () => ({}));
 const fetchMock = vi.fn<typeof fetch>();
@@ -14,25 +10,15 @@ const sessionId = "synthetic-session";
 type ServeOptions = {
   segments?: ReturnType<typeof syntheticSegment>[];
   revisions?: ReturnType<typeof syntheticSegment>[];
-  atStart?: ReturnType<typeof syntheticObservation>[];
-  inside?: ReturnType<typeof syntheticObservation>[];
 };
 
 const serve = ({
   segments = [syntheticSegment({ endMs: 40_000 })],
-  atStart = [syntheticObservation(4000)],
-  inside = [syntheticObservation(20_000)],
   revisions = segments,
 }: ServeOptions = {}) => {
-  fetchMock.mockImplementation(async (url, init) => {
+  fetchMock.mockImplementation(async (_url, init) => {
     const body = String(init?.body);
-    const sources = String(url).includes("simon-says-segments")
-      ? body.includes('"terms"')
-        ? revisions
-        : segments
-      : body.includes('"desc"')
-        ? atStart
-        : inside;
+    const sources = body.includes('"terms"') ? revisions : segments;
     return Response.json(syntheticSearchResponse(sources));
   });
 };
@@ -79,7 +65,7 @@ describe("bookmark range resolution (synthetic Elasticsearch HTTP)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("selects the latest revision, frame at start, and frames inside the range", async () => {
+  it("selects the latest revision inside the range", async () => {
     serve({
       segments: [
         syntheticSegment({ endMs: 40_000 }),
@@ -103,10 +89,6 @@ describe("bookmark range resolution (synthetic Elasticsearch HTTP)", () => {
             text: "Synthetic correction.",
           },
         ],
-        frames: [
-          { frameId: "frame-4000", capturedAtMs: 4000, imageUrl: null },
-          { frameId: "frame-20000", capturedAtMs: 20_000, imageUrl: null },
-        ],
       },
     });
     const calls = fetchMock.mock.calls.map(([url, init]) => ({
@@ -129,21 +111,6 @@ describe("bookmark range resolution (synthetic Elasticsearch HTTP)", () => {
         },
       },
     });
-    expect(calls[1]?.body).toMatchObject({
-      size: 1,
-      sort: [{ captureMs: "desc" }, { observationId: "asc" }],
-      query: {
-        bool: {
-          filter: [
-            { term: { sessionId } },
-            { range: { captureMs: { lte: 5000 } } },
-          ],
-        },
-      },
-    });
-    expect(calls[2]?.body.query.bool.filter[1]).toEqual({
-      range: { captureMs: { gt: 5000, lte: 35_000 } },
-    });
   });
 
   it("does not resurrect an older revision when a correction moves outside the range", async () => {
@@ -153,8 +120,6 @@ describe("bookmark range resolution (synthetic Elasticsearch HTTP)", () => {
         syntheticSegment(),
         syntheticSegment({ revision: 2, startMs: 40_000, endMs: 50_000 }),
       ],
-      atStart: [],
-      inside: [],
     });
     expect(
       (await resolveEvidence({ sessionId, range })).evidence.segments,
@@ -187,24 +152,22 @@ describe("bookmark range resolution (synthetic Elasticsearch HTTP)", () => {
     });
   });
 
-  it("rejects expired source revisions and stopped frames", async () => {
+  it("rejects expired source revisions", async () => {
     const expired = {
       ...syntheticSegment({ revision: 2 }),
       expiresAt: "2000-01-01T00:00:00.000Z",
     };
     serve({
       segments: [syntheticSegment(), expired],
-      atStart: [syntheticObservation(4000, "stopped")],
-      inside: [],
     });
     expect(await resolveEvidence({ sessionId, range })).toMatchObject({
       completeness: "pending",
       actualRange: null,
-      evidence: { segments: [], frames: [] },
+      evidence: { segments: [] },
     });
   });
 
-  it("accepts ingest capture states and offset expiry timestamps", async () => {
+  it("accepts offset expiry timestamps", async () => {
     serve({
       segments: [
         {
@@ -212,29 +175,17 @@ describe("bookmark range resolution (synthetic Elasticsearch HTTP)", () => {
           expiresAt: "2099-01-01T00:00:00+00:00",
         },
       ],
-      atStart: [syntheticObservation(4000, "captured")],
-      inside: [syntheticObservation(20_000, "live")],
     });
     expect(await resolveEvidence({ sessionId, range })).toMatchObject({
       completeness: "complete",
       evidence: {
         segments: [{ segmentId: "segment-1" }],
-        frames: [{ frameId: "frame-4000" }, { frameId: "frame-20000" }],
       },
     });
   });
 
-  it("keeps frame-only evidence incomplete and unindexed ranges pending", async () => {
-    serve({
-      segments: [],
-      atStart: [],
-      inside: [syntheticObservation(15_000)],
-    });
-    expect(await resolveEvidence({ sessionId, range })).toMatchObject({
-      completeness: "incomplete",
-      actualRange: null,
-    });
-    serve({ segments: [], atStart: [], inside: [] });
+  it("keeps unindexed ranges pending", async () => {
+    serve({ segments: [] });
     expect((await resolveEvidence({ sessionId, range })).completeness).toBe(
       "pending",
     );
@@ -267,7 +218,7 @@ describe("bookmark range resolution (synthetic Elasticsearch HTTP)", () => {
     });
     expect(await resolveEvidence({ sessionId, range })).toMatchObject({
       completeness: "pending",
-      evidence: { segments: [], frames: [] },
+      evidence: { segments: [] },
     });
   });
 

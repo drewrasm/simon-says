@@ -8,18 +8,10 @@ import { z } from "zod";
 import { createOpenAI } from "@ai-sdk/openai";
 import { CaptionTransport } from "../src/server/captions/transport";
 import { startTelemetry } from "../src/server/telemetry/runtime";
-import { FrameTransport } from "../src/server/frames/transport";
 import { createIngestAuthority } from "../src/server/captions/access-authority";
 import { elasticsearchClient } from "../src/server/search/es-client";
 import { ElasticsearchSegmentSink } from "../src/server/search/elasticsearch-segment-sink";
 import { recordAcknowledgedSegments } from "../src/server/search/indexing-lag";
-import { ElasticsearchObservationSink } from "../src/server/search/elasticsearch-observation-sink";
-import {
-  createFrameUpload,
-  InMemoryObservationSink,
-} from "../src/server/frames/upload";
-import { createFrameAccess } from "../src/server/frames/access-authority";
-import { s3FrameStore } from "../src/server/frames/s3";
 import { readRuntimeEnv } from "./env.js";
 
 const runtime = readRuntimeEnv(process.env);
@@ -83,31 +75,6 @@ const conf = dev
     ).config;
 const app = next({ dev, port, ...(conf ? { conf } : {}) });
 const handle = app.getRequestHandler();
-const frames = new FrameTransport(
-  runtime.frameEnv,
-  new URL(`http://localhost:${port}`).origin,
-  () =>
-    createFrameUpload({
-      access: createFrameAccess(
-        runtime.frameEnv,
-        new URL(`http://localhost:${port}`).origin,
-        authority,
-      ),
-      store: s3FrameStore(runtime.frameEnv),
-      sink: elasticsearch
-        ? {
-            put: (observation) =>
-              new ElasticsearchObservationSink(
-                elasticsearchClient(elasticsearch),
-              ).put(observation),
-          }
-        : new InMemoryObservationSink(),
-      ...(!elasticsearch
-        ? { sinkDegradedReason: "missing_elasticsearch_config" }
-        : {}),
-    }),
-  authority,
-);
 const maxConnections = 16;
 const durationMs = 30_000;
 const drainMs = 10_000;
@@ -195,7 +162,6 @@ const server = createServer(async (req, res) => {
     res.writeHead(426).end();
     return;
   }
-  if (frames.handleHttp(req, res, req.socket.remoteAddress)) return;
   void handle(req, res).catch(() => {
     console.error("HTTP request failed");
     if (!res.headersSent) res.writeHead(500);

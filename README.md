@@ -1,8 +1,8 @@
 # Simon Says
 
-One conference session feed. Personal, illustrated takeaways.
+One conference session feed. Personal takeaways.
 
-The host captures the speaker's microphone and screen once. Attendees join by QR code, read live captions, and save moments. Each attendee gets a private recap with source passages and aligned screenshots.
+The host captures the speaker's microphone once. Attendees join by QR code, read live captions, and save moments. Each attendee gets a private recap with source passages.
 
 ## Try it
 
@@ -47,7 +47,6 @@ pnpm db:generate
 pnpm db:validate
 pnpm db:check
 pnpm --filter @simon-says/db migrate:deploy
-pnpm storage:check
 pnpm check
 pnpm build
 set -a; . ./.env; set +a
@@ -59,10 +58,10 @@ Open `http://localhost:8080`. If port 8080 is in use, run `PORT=8081 pnpm dev` i
 Notes on the steps:
 
 - The `sed` line removes the empty `ELASTICSEARCH_*` entries from your `.env`. The server refuses to start when `ELASTICSEARCH_URL` is exported but empty. Skip the line if you fill those values in.
-- `pnpm services:up` starts PostgreSQL and a private SeaweedFS S3 bucket with local credentials. `pnpm services:down` stops them. Do not use local credentials for deployed services.
+- `pnpm services:up` starts PostgreSQL with local credentials. `pnpm services:down` stops it. Do not use local credentials for deployed services.
 - `migrate:deploy` applies the committed migrations. The database scripts read the root `.env` themselves.
-- `pnpm dev` does not read `.env`. The `set -a` line exports `DATABASE_URL`, `SESSION_SECRET`, and the storage settings into the shell that starts the server. Without them the pages load but session creation and joining fail.
-- `pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection. `pnpm storage:check` checks a signed upload and an anonymous rejection.
+- `pnpm dev` does not read `.env`. The `set -a` line exports `DATABASE_URL` and `SESSION_SECRET` into the shell that starts the server. Without them the pages load but session creation and joining fail.
+- `pnpm check` runs lint, formatting, type checking, and tests. `pnpm db:check` checks the database connection.
 
 To try a session locally, open `/host/new` in one window and the join link in a private window. Use `localhost`: the device cookie is `Secure` on any other host, so a phone on a LAN IP over HTTP cannot join. Test phones against the deployed HTTPS URL.
 
@@ -82,7 +81,7 @@ The steps above set no provider keys. The app starts and degrades visibly. Add k
 
 ### Local Elasticsearch mappings and smoke check
 
-Use Elastic start-local in Docker, separately from the repository's Postgres/object-store Compose services. If installed at `~/simon-says-elastic-local`, start it there with `./start.sh`. Load its local credentials without printing them (the generated `.env` uses shell variable expansion):
+Use Elastic start-local in Docker, separately from the repository's Postgres Compose service. If installed at `~/simon-says-elastic-local`, start it there with `./start.sh`. Load its local credentials without printing them (the generated `.env` uses shell variable expansion):
 
 ```sh
 set -a
@@ -98,7 +97,7 @@ pnpm es:smoke
 unset ELASTICSEARCH_API_KEY ES_LOCAL_API_KEY ES_LOCAL_PASSWORD
 ```
 
-Setup creates `segments-v1` / `observations-v1` and their `simon-says-*` write aliases, verifies mappings on rerun, fails on drift, and repairs aliases atomically. `--dry-run` performs reads only. Smoke accepts only `http://localhost:9200` and the local E5 endpoint; it writes three synthetic finalized segments and an observation under reserved session `es-smoke-c1b`, checks overlap/semantic queries, duplicate IDs, create conflicts and strict fields, then deletes only those reserved documents. Do not use that session ID for application data or run the smoke concurrently. The first E5 inference may need a model download/deployment and adequate Docker memory; failures are reported, not replaced with fake vectors. No cloud connection is part of local verification.
+Setup creates `segments-v1` and its `simon-says-segments` write alias, verifies the mapping on rerun, fails on drift, and repairs aliases atomically. `--dry-run` performs reads only. Smoke accepts only `http://localhost:9200` and the local E5 endpoint; it writes three synthetic finalized segments under reserved session `es-smoke-c1b`, checks overlap/semantic queries, duplicate IDs, create conflicts and strict fields, then deletes only those reserved documents. Do not use that session ID for application data or run the smoke concurrently. The first E5 inference may need a model download/deployment and adequate Docker memory; failures are reported, not replaced with fake vectors. No cloud connection is part of local verification.
 
 The mappings' inference endpoint is parameterized and defaults to `.jina-embeddings-v5-text-small`, which Track 3 [decided](docs/decisions.md#confirmed-by-the-track-3-owner). See [storage contracts](docs/contracts.md#elasticsearch-v1-storage-boundary) and [approval-gated operator setup](docs/deployment.md#elasticsearch-setup-operator-approval-required).
 
@@ -107,7 +106,7 @@ The mappings' inference endpoint is parameterized and defaults to `.jina-embeddi
 - **One replica.** The deployment runs one app replica. Caption fan-out, replay, and the cap of four concurrent recap generations are in-process, so they do not survive a restart or span replicas.
 - **No accounts.** Each browser gets an anonymous device cookie. Notes and recaps belong to that browser; another browser or device is a different attendee.
 - **Recaps are not durable jobs.** A recap is generated in the web process after the request returns. If the process restarts first, the recap is marked failed and you generate a new one.
-- **Note cards show no screenshot.** Saved moments carry caption passages only; the evidence resolver returns no image for a frame.
+- **No screen sharing.** The host shares the microphone only, and saved moments carry caption passages only.
 - **The hosted environment is temporary.** The hackathon cluster is scheduled to end on November 13, 2026. The live URL stops working then.
 
 ## Deployment and hackathon scope

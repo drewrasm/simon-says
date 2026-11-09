@@ -6,11 +6,9 @@ Confirmed: Next.js on Kubernetes operated through Radar, Prisma for PostgreSQL, 
 
 ```mermaid
 flowchart TD
-  Host[Host: mic and screen] --> Ingest[Kubernetes: authenticated ingest]
+  Host[Host: microphone] --> Ingest[Kubernetes: authenticated ingest]
   Ingest --> STT[One caption pipeline per session]
-  STT --> Content[Elastic Cloud: segment revisions and frame observations]
-  Ingest --> Content
-  Ingest --> Media[Private object storage: images]
+  STT --> Content[Elastic Cloud: segment revisions]
   Access[Postgres: identity, sessions, membership, leases] --> Reads[Authorized search, resolution, replay]
   Content --> Reads
   Reads --> Selections
@@ -20,7 +18,6 @@ flowchart TD
   A --> Selections[Postgres: private bookmarks, notes, recaps, jobs]
   B --> Selections
   Selections --> Recap[Private recap with evidence]
-  Media --> Recap
 ```
 
 ## Monorepo ownership
@@ -38,7 +35,7 @@ The [building tracks](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIz
 | `packages/domain`     | Pure timeline, selection, alignment, and revision rules                                                       |
 | `packages/db`         | Prisma schema and client; planned migrations, repositories, and synthetic seeds                               |
 | `infra`               | Local services, deployment definitions, telemetry configuration                                               |
-| `tests/fixtures`      | Authorized audio, screen frames, expected words and timestamps                                                |
+| `tests/fixtures`      | Authorized audio, expected words and timestamps                                                               |
 | `tests/e2e`           | Host/attendee flows and cross-user isolation checks                                                           |
 
 One Next.js application owns the UI and backend. HTTP endpoints use App Router Route Handlers; capture and interactive captions use Client Components. `domain` and `contracts` have no UI, database, or provider dependencies. Only server code imports `db` or server provider SDKs. Mark server modules with `server-only`. Keep application-specific components in web.
@@ -49,21 +46,21 @@ Deploy the existing Next.js app as a Node.js container. Radar supplies cluster v
 
 Start with one application replica, but keep all leases, replay cursors, audio acknowledgments, and transcript progress durable. Rolling deployments can overlap pods. Reconnect with backoff, replay frames the host still holds, deduplicate overlap, and preserve the source clock. Pod termination must not end a session; audio beyond host resend capacity becomes a visible gap while raw-audio persistence is deferred. Keep missing audio distinct from missing transcript.
 
-Propose a Postgres event log with bounded polling for cross-pod SSE delivery. Notification mechanisms may reduce latency but cannot replace durable replay. The gateway must pass WebSocket upgrades and unbuffered SSE. Bound uploads, connection counts, and backpressure; keep authorization at each boundary.
+Propose a Postgres event log with bounded polling for cross-pod SSE delivery. Notification mechanisms may reduce latency but cannot replace durable replay. The gateway must pass WebSocket upgrades and unbuffered SSE. Bound payload sizes, connection counts, and backpressure; keep authorization at each boundary.
 
-Use CloudNativePG for cluster Postgres via Prisma. Elasticsearch on Elastic Cloud Serverless (hackathon trial) owns shared transcript revisions and screen observations; private object storage owns images. The team cluster budget (2 CPU / 4 GiB requests, 4 CPU / 8 GiB limits total) cannot fit Elasticsearch next to the app and Postgres. Private object storage remains a deployment decision; the local SeaweedFS setup proves only local behavior. Use runtime Secrets and explicit migration Jobs. See the [deployment plan](deployment.md) for packaging, rollout, and teardown gates.
+Use CloudNativePG for cluster Postgres via Prisma. Elasticsearch on Elastic Cloud Serverless (hackathon trial) owns shared transcript revisions. The team cluster budget (2 CPU / 4 GiB requests, 4 CPU / 8 GiB limits total) cannot fit Elasticsearch next to the app and Postgres. Use runtime Secrets and explicit migration Jobs. See the [deployment plan](deployment.md) for packaging, rollout, and teardown gates.
 
 Recap and source cleanup work will run as durable Postgres jobs on [pg-boss](decisions.md#confirmed-by-the-track-3-owner) inside the app's Node process, with retries, per-job expiry, and a cron schedule for cleanup. Recaps still run through request-scoped `after()` until then. Cleanup progress must survive interruption. Never rely on an unawaited promise or pod-local files for durable work.
 
 ## Search and observability
 
-Elasticsearch is the system of record for shared source content from milestone 1: every finalized transcript segment revision with live/corrected/repaired provenance, and screen observations with capture time, frame ID, checksum, glossary terms, and private image object key. Track 2 writes these during ingest. Postgres owns identity, sessions, membership, host lease/epoch, audio acknowledgments, finalized-transcript offset, bookmarks, notes, recaps, and job queue. No private data or identity-linked search queries enter Elasticsearch.
+Elasticsearch is the system of record for shared source content from milestone 1: every finalized transcript segment revision with live/corrected/repaired provenance. Track 2 writes these during ingest. Postgres owns identity, sessions, membership, host lease/epoch, audio acknowledgments, finalized-transcript offset, bookmarks, notes, recaps, and job queue. No private data or identity-linked search queries enter Elasticsearch.
 
-Track 3 resolves bookmarks by `startMs`/`endMs` on the session clock against Elasticsearch, filtered to segment revisions and frames. Fixed requested ranges never move when later content arrives. Track 3 also implements “Find the Right Talk” keyword search plus `semantic_text` over segments and glossary terms; track 1 owns its UI. The embedding endpoint is `.jina-embeddings-v5-text-small`. Results resolve to source ranges that attendees explicitly keep as paragraph-anchored selections; search never adds evidence automatically.
+Track 3 resolves bookmarks by `startMs`/`endMs` on the session clock against Elasticsearch, filtered to segment revisions. Fixed requested ranges never move when later content arrives. Track 3 also implements “Find the Right Talk” keyword search plus `semantic_text` over segments; track 1 owns its UI. The embedding endpoint is `.jina-embeddings-v5-text-small`. Results resolve to source ranges that attendees explicitly keep as paragraph-anchored selections; search never adds evidence automatically.
 
 Every Elasticsearch read, including search, resolution, and replay, checks current membership and access in Postgres first, including after revocation. Apply source revision, redaction, and expiry guards before returning content. Durable cleanup jobs remove expired/redacted/deleted documents and prevent retries restoring them. Materialize selected evidence before shared-source expiry.
 
-Use idempotent document IDs based on session, epoch, segment ID, and revision; frame observations use stable observation identity. Elasticsearch persistence is part of durable source acknowledgment. Write ordering across Elasticsearch, the Postgres finalized offset, audio acknowledgments, and replay events, including crash recovery, must be settled before source acknowledgment counts as durable. An Elasticsearch outage visibly degrades captions; retain/retry source content or expose a gap, never silently drop it. A search-only failure leaves captions and saved evidence usable when the content store is healthy.
+Use idempotent document IDs based on session, epoch, segment ID, and revision. Elasticsearch persistence is part of durable source acknowledgment. Write ordering across Elasticsearch, the Postgres finalized offset, audio acknowledgments, and replay events, including crash recovery, must be settled before source acknowledgment counts as durable. An Elasticsearch outage visibly degrades captions; retain/retry source content or expose a gap, never silently drop it. A search-only failure leaves captions and saved evidence usable when the content store is healthy.
 
 Export content-free OpenTelemetry from the Node runtime, including its jobs, to Dash0. Allowlist attributes and suppress captured text, queries, notes, model prompts, credentials, and signed URLs. Disable content-bearing automatic instrumentation. Radar handles cluster operations; Dash0 handles application traces and metrics. The [hackathon plan](https://app.shortcut.com/simon-says/write/IkRvYyI6IjZhZjIzNzc1LTA2YmQtNDllNS04NjZhLTg0NmY2NTczYzk5NyI=) defines evidence and ownership for all four tracks.
 
@@ -108,7 +105,7 @@ flowchart LR
 
 **Host capture:** `getUserMedia` with echo cancellation, noise suppression, and AGC off; `AudioContext({sampleRate: 24000})`; an AudioWorklet emits 2,400-sample (100 ms) PCM16 frames with `{epoch, seq, sampleOffset}`. `sampleOffset / 24` gives source-clock milliseconds. Retain a two-minute resend buffer and reconnect with backoff.
 
-**Ingest:** the custom Node server owns WebSocket ingest, Postgres lease/epoch checks, a two-minute ring buffer, and batched acknowledgments. A duplicate `seq` in the same epoch with the same checksum is acked idempotently; changed content conflicts. Raw-audio persistence to object storage is deferred today. Acknowledgments confirm receipt into the ring buffer, not durable storage; the [contracts](contracts.md#live-caption-ingest-and-events) define this and mark the AudioChunk record deferred.
+**Ingest:** the custom Node server owns WebSocket ingest, Postgres lease/epoch checks, a two-minute ring buffer, and batched acknowledgments. A duplicate `seq` in the same epoch with the same checksum is acked idempotently; changed content conflicts. Raw-audio persistence is deferred today. Acknowledgments confirm receipt into the ring buffer, not durable storage; the [contracts](contracts.md#live-caption-ingest-and-events) define this and mark the AudioChunk record deferred.
 
 **WindowManager:** the SDK commits once when input closes and ends at its first final, so run successive windows. Rotate at the first pause of at least 300 ms after 15 s, or 150 ms after 20 s; after 25 s cut at the first quiet unit or speech low point, with a hard cut at 27 s. Pre-open N+1 about 1 s early. Frames from the cut go to N+1; closing N's input commits it. Keep pause detection, rotation planning, and timing estimation pure in `packages/domain`; the SDK call lives in `apps/web/src/server/captions/`.
 
@@ -120,7 +117,7 @@ flowchart LR
 
 **Dash0:** one span per window; content-free interim and final caption lag, rotation gap, window duration, retries, errors, ingest backlog, reconnects, and Elasticsearch write latency. Never audio, text, or prompts.
 
-**Proposed glossary and correction, milestones 2–3:** OpenAI through the AI SDK, using the cheapest OpenAI model that passes the check, chosen at implementation. Extract terms from changed frames; correct finalized captions asynchronously with new `corrected` revisions and preserved originals. Both passes stay off the live caption path. Screen and transcript text are untrusted data, never instructions.
+**Proposed caption correction, milestones 2–3:** OpenAI through the AI SDK, using the cheapest OpenAI model that passes the check, chosen at implementation. Correct finalized captions asynchronously with new `corrected` revisions and preserved originals, off the live caption path. Transcript text is untrusted data, never instructions.
 
 ### S3 development implementation
 
@@ -136,22 +133,18 @@ Missing provider configuration keeps boot working and reports degraded state wit
 
 ## Timeline invariants
 
-- Use one host monotonic capture clock. Map audio sample offsets and frame capture times through an ingest epoch. Stamp transcript ranges from sent audio offsets, not provider timestamps. Never align by upload arrival time.
+- Use one host monotonic capture clock. Map audio sample offsets through an ingest epoch. Stamp transcript ranges from sent audio offsets, not provider timestamps. Never align by upload arrival time.
 - Fence ingest with a host lease and epoch. Stale hosts cannot ingest after replacement; their previously accepted tails finish independently; one active session has one caption pipeline with successive transcription windows.
 - Estimate the live session clock on attendee devices. Record uncertainty. If sync is stale, disable live marks and allow paragraph-anchored marks.
 - Replace interim text; patch final segments by stable ID and revision. Replayed events must not duplicate words or undo a newer correction.
 - Replay SSE from a cursor. If history expired, supply an authorized snapshot and cursor. Do not report a silent gap as caught up.
-- Resolve bookmarks against Elasticsearch segment revisions and frames within fixed requested `startMs`/`endMs` ranges after a current Postgres access check. A later transcript or image arrival cannot move the range. Partial evidence remains visibly incomplete.
+- Resolve bookmarks against Elasticsearch segment revisions within fixed requested `startMs`/`endMs` ranges after a current Postgres access check. Later transcript arrival cannot move the range. Partial evidence remains visibly incomplete.
 
-## Screen and audio capture
+## Audio capture
 
-Capture mic input separately from the selected screen. A venue needs an actual mixer/interface feed. Start with an authorized USB mic and a tested presentation laptop.
+The host captures microphone input only; nothing shown on screen is captured. A venue needs an actual mixer/interface feed. Start with an authorized USB mic and a tested presentation laptop.
 
-Propose one screen observation per second. Deduplicate identical images but retain observation timestamps and capture health. Include the valid frame at selection start and changed frames within the interval. Preserve both slides across a transition. Display at most three representative images initially; retain access to the rest. A stopped capture invalidates later use of an old frame.
-
-Sampling can miss short visuals. Inspect code legibility before choosing compression and dimensions. Attaching screenshots is MVP; OCR or multimodal interpretation is optional and must cite the frame separately from spoken text.
-
-Number audio frames, attach source offsets/checksums, and distinguish receipt acks from final-content persistence. Host resend capacity is two minutes; raw-audio object persistence is deferred today. Exceeding it exposes a gap. Optional repair transcription creates revised segments with repaired provenance. Track audio coverage separately from transcription accuracy.
+Number audio frames, attach source offsets/checksums, and distinguish receipt acks from final-content persistence. Host resend capacity is two minutes; raw-audio persistence is deferred today. Exceeding it exposes a gap. Optional repair transcription creates revised segments with repaired provenance. Track audio coverage separately from transcription accuracy.
 
 ### Host audio module (S2)
 
@@ -165,15 +158,15 @@ The ingest client uses the shared binary encoder and validated JSON `hello`/`rea
 
 ## Access, retention, and operations
 
-- QR invitations issue distinct attendee memberships, never host credentials. Enforce session access and resource ownership on every API, search, image URL, and event stream.
-- Shared captions exclude private bookmark events. Hosts do not automatically see attendees' notes or recaps. Revocation stops further authorized delivery and image access.
-- Proposed expiry: shared audio, transcript, and frames 24 hours after session end; selected evidence and recaps 30 days after selection. Confirm policy before real recording.
-- Materialize selected text revisions and retain authorized selected image references before shared-source expiry. Deletion, redaction, and expiry jobs must durably resume Elasticsearch document cleanup, handle object references, and invalidate dependent recaps.
+- QR invitations issue distinct attendee memberships, never host credentials. Enforce session access and resource ownership on every API, search, and event stream.
+- Shared captions exclude private bookmark events. Hosts do not automatically see attendees' notes or recaps. Revocation stops further authorized delivery.
+- Proposed expiry: shared audio and transcript 24 hours after session end; selected evidence and recaps 30 days after selection. Confirm policy before real recording.
+- Materialize selected text revisions before shared-source expiry. Deletion, redaction, and expiry jobs must durably resume Elasticsearch document cleanup and invalidate dependent recaps.
 - Host redaction invalidates affected hosted selections and recaps. Personal deletion does not remove others' shared source. Downloaded exports cannot be recalled.
 - Keep content out of logs, telemetry, session replay, and errors. Verify provider retention controls, including provider data-use opt-out where available. Never claim system-wide 30-second retention.
 - Measure ingest lag, caption lag, transcription failures, source gaps, durable-save latency, and recap errors. Verify Dash0 telemetry with real requests and inspect exported payloads for content leaks.
 
-Use authenticated object access and short-lived image links. Exports embed selected images and sanitized text, with no access tokens. Source and provider text are untrusted data.
+Exports contain sanitized text, with no access tokens. Source and provider text are untrusted data.
 
 ## C2 Elasticsearch segment sink
 

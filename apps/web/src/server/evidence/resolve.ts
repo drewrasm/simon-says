@@ -12,14 +12,6 @@ import { AccessError } from "../access/errors";
 
 const expiresAt = z.iso.datetime({ offset: true }).nullable().optional();
 const segmentSchema = transcriptSegmentSchema.safeExtend({ expiresAt });
-const observationSchema = z.object({
-  sessionId: transcriptSegmentSchema.shape.sessionId,
-  frameId: transcriptSegmentSchema.shape.sessionId,
-  captureMs: z.number().nonnegative(),
-  captureState: z.string(),
-  expiresAt,
-});
-
 type Resolution = Pick<
   BookmarkResponse,
   "evidence" | "actualRange" | "completeness" | "clockUncertaintyMs"
@@ -47,7 +39,7 @@ export const resolveEvidence = async ({
   range,
 }: ResolveOptions): Promise<Resolution> => {
   const pending: Resolution = {
-    evidence: { segments: [], frames: [] },
+    evidence: { segments: [] },
     actualRange: null,
     completeness: "pending",
     clockUncertaintyMs: 0,
@@ -57,52 +49,21 @@ export const resolveEvidence = async ({
   try {
     const signal = AbortSignal.timeout(2000);
     const sessionFilter = { term: { sessionId } };
-    const [candidates, atStart, inside] = await Promise.all([
-      searchSources({
-        index: "simon-says-segments",
-        schema: segmentSchema,
-        signal,
-        query: {
-          bool: {
-            filter: [
-              sessionFilter,
-              { range: { startMs: { lt: range.endMs } } },
-              { range: { endMs: { gt: range.startMs } } },
-            ],
-          },
+    const candidates = await searchSources({
+      index: "simon-says-segments",
+      schema: segmentSchema,
+      signal,
+      query: {
+        bool: {
+          filter: [
+            sessionFilter,
+            { range: { startMs: { lt: range.endMs } } },
+            { range: { endMs: { gt: range.startMs } } },
+          ],
         },
-        sort: [{ segmentId: "asc" }, { revision: "desc" }],
-      }),
-      searchSources({
-        index: "simon-says-observations",
-        schema: observationSchema,
-        signal,
-        latestOnly: true,
-        query: {
-          bool: {
-            filter: [
-              sessionFilter,
-              { range: { captureMs: { lte: range.startMs } } },
-            ],
-          },
-        },
-        sort: [{ captureMs: "desc" }, { observationId: "asc" }],
-      }),
-      searchSources({
-        index: "simon-says-observations",
-        schema: observationSchema,
-        signal,
-        query: {
-          bool: {
-            filter: [
-              sessionFilter,
-              { range: { captureMs: { gt: range.startMs, lte: range.endMs } } },
-            ],
-          },
-        },
-        sort: [{ captureMs: "asc" }, { observationId: "asc" }],
-      }),
-    ]);
+      },
+      sort: [{ segmentId: "asc" }, { revision: "desc" }],
+    });
 
     // A correction can move outside the range; never fall back to its older text.
     const revisions = candidates.length
@@ -141,22 +102,7 @@ export const resolveEvidence = async ({
         (a, b) =>
           a.startMs - b.startMs || a.segmentId.localeCompare(b.segmentId),
       );
-    const observations = [...atStart, ...inside];
-    if (observations.some((o) => o.sessionId !== sessionId))
-      throw new Error("Invalid source session");
-    const frames = observations
-      .filter(
-        (o) =>
-          o.captureState !== "stopped" &&
-          unexpired(o, now) &&
-          o.captureMs <= range.endMs,
-      )
-      .map((o) => ({
-        frameId: o.frameId,
-        capturedAtMs: o.captureMs,
-        imageUrl: null,
-      }));
-    if (!segments.length && !frames.length) return pending;
+    if (!segments.length) return pending;
 
     let coveredThrough = range.startMs;
     let hasGap = false;
@@ -176,7 +122,6 @@ export const resolveEvidence = async ({
           range: { startMs: s.startMs, endMs: s.endMs },
           text: s.text,
         })),
-        frames,
       },
       actualRange: first
         ? {

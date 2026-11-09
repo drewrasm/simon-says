@@ -4,7 +4,7 @@ import type { CaptionDelay } from "../src/server/captions/openai-window";
 export function readRuntimeEnv(
   env: Readonly<Record<string, string | undefined>>,
 ) {
-  const appOrigin = readAppOrigin(env.APP_ORIGIN);
+  readAppOrigin(env.APP_ORIGIN);
   const port = Number(env.PORT ?? "8080");
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("PORT must be an integer from 1 to 65535.");
@@ -75,21 +75,6 @@ export function readRuntimeEnv(
     captionReconnectGraceMs,
     captionsDevSession,
     openaiApiKey,
-    // Share validated session configuration; storage remains lazy/optional until
-    // a frame request, where s3FrameStore validates all required S3 settings.
-    frameEnv: {
-      NODE_ENV: env.NODE_ENV,
-      DATABASE_URL: env.DATABASE_URL,
-      APP_ORIGIN: appOrigin,
-      CAPTIONS_DEV_SESSION: captionsDevSession,
-      CAPTIONS_DEV_EPOCH: env.CAPTIONS_DEV_EPOCH,
-      S3_ENDPOINT: env.S3_ENDPOINT,
-      S3_REGION: env.S3_REGION,
-      S3_BUCKET: env.S3_BUCKET,
-      S3_ACCESS_KEY_ID: env.S3_ACCESS_KEY_ID,
-      S3_SECRET_ACCESS_KEY: env.S3_SECRET_ACCESS_KEY,
-      S3_FORCE_PATH_STYLE: env.S3_FORCE_PATH_STYLE,
-    },
   };
 }
 

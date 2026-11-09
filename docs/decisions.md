@@ -5,11 +5,11 @@ Keep durable choices here. Mark proposals explicitly; add rationale and conseque
 ## Confirmed by the team
 
 - **Name:** Simon Says.
-- **Capture:** one host captures the speaker mic and screen; attendees consume a shared transcript and make private selections.
-- **Output:** personal summaries include source passages and screenshots.
+- **Capture:** one host captures the speaker mic; attendees consume a shared transcript and make private selections.
+- **Output:** personal summaries include source passages.
 - **Repository:** one monorepo contains everything needed to develop, test, and deploy the app.
 - **Application and hosting:** keep the full-stack Next.js app and shadcn/ui; deploy to Kubernetes operated through Radar. This supersedes Vercel hosting, not the existing app foundation. The team cluster is provisioned.
-- **Database tooling:** Prisma for PostgreSQL. Local development uses PostgreSQL and a private SeaweedFS S3 bucket. The cluster runs CloudNativePG; deployed private object storage is undecided.
+- **Database tooling:** Prisma for PostgreSQL. Local development uses PostgreSQL. The cluster runs CloudNativePG.
 - **Toolchain:** Node.js 22.22.0, pnpm 11.24.0, Next.js 16.4.5, React 19.3.1, TypeScript 5.9.3, Vitest 5.1, and Prisma 7.10.1.
 - **Workspace:** strict TypeScript, pnpm workspaces, and shared shadcn components. The foundation includes a shadcn Button from the official registry with manual setup.
 - **Workflow:** no direct commits to `main`. Every change, including docs and CI, goes through a branch and pull request that passes `pnpm check` CI and Gitar review before merge, except the guarded machine-generated deploy-tag PRs described below. Auto-apply, automatic pushes, and merges by tools stay disabled unless separately authorized.
@@ -42,15 +42,14 @@ Unmeasured on the real provider: session length limits, faster-than-realtime rep
 
 Dylan confirmed this data split on November 9, 2026.
 
-| Data                                                                                                                                                                                | Store                                                                                                            |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Shared transcript segments, every revision with live/corrected/repaired provenance; screen observations with capture time, frame ID, checksum, slide glossary terms, and object key | Elasticsearch on Elastic Cloud Serverless, using the hackathon trial; system of record for shared source content |
-| Identity, sessions, membership, host lease and ingest epoch, bookmarks, private notes, recaps, job queue, finalized-transcript offset, and audio acknowledgments                    | Postgres via Prisma, using CloudNativePG in the team Kubernetes cluster                                          |
-| Screen frame images                                                                                                                                                                 | Private object storage; Elasticsearch holds only the object key                                                  |
+| Data                                                                                                                                                             | Store                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Shared transcript segments, every revision with live/corrected/repaired provenance                                                                               | Elasticsearch on Elastic Cloud Serverless, using the hackathon trial; system of record for shared source content |
+| Identity, sessions, membership, host lease and ingest epoch, bookmarks, private notes, recaps, job queue, finalized-transcript offset, and audio acknowledgments | Postgres via Prisma, using CloudNativePG in the team Kubernetes cluster                                          |
 
 The team cluster budget (2 CPU / 4 GiB requests, 4 CPU / 8 GiB limits total) cannot fit Elasticsearch alongside the app and Postgres. Elastic Cloud keeps it outside that budget. The Elastic track requires Elasticsearch as the core data layer.
 
-Track 2 writes segments and frame observations during ingest from milestone 1. Track 3 resolves bookmarks by fixed session-clock ranges and implements keyword plus `semantic_text` search; track 1 builds the search UI. Captions come first, but search is core work alongside private highlights, not a later integration. The Track 3 owner chose the embedding endpoint; see [Track 3 decisions](#confirmed-by-the-track-3-owner).
+Track 2 writes segments during ingest from milestone 1. Track 3 resolves bookmarks by fixed session-clock ranges and implements keyword plus `semantic_text` search; track 1 builds the search UI. Captions come first, but search is core work alongside private highlights, not a later integration. The Track 3 owner chose the embedding endpoint; see [Track 3 decisions](#confirmed-by-the-track-3-owner).
 
 Private data never enters Elasticsearch. Every source read checks current membership and access in Postgres first, including replay and resolution after revocation. Expiry, redaction, and deletion require durable, resumable Elasticsearch cleanup; materialize selected evidence before shared-source expiry. Elasticsearch outages visibly degrade captions and cannot silently discard source content. Milestone 1 must settle cross-store write ordering and durable acknowledgment before acceptance.
 
@@ -58,11 +57,12 @@ Private data never enters Elasticsearch. Every source read checks current member
 
 Logan confirmed these on November 9, 2026.
 
+- **No screen sharing:** host screen capture, frame storage, and screenshot evidence were removed on November 9, 2026. The host captures the microphone only; attendees get captions, private notes and clips with source passages, search, and text recaps. This supersedes the earlier capture, output, and storage decisions about screens, screenshots, and private object storage. The change did not delete live data: the `observations-v1` index, its `simon-says-observations` alias, and the `frame-storage` PersistentVolumeClaim and Secret still need manual, approved cleanup. Argo CD prunes the frame-storage Deployment and Service on the next sync.
 - **Embedding endpoint:** `.jina-embeddings-v5-text-small`, configured through `ELASTICSEARCH_INFERENCE_ID`. Processing settings: zero data retention, AWS `us-west-2`. The inference API does not show its per-token rate.
 - **Recap model:** OpenAI through the AI SDK, reusing `OPENAI_API_KEY` from Secret `app-credentials`. The model id is configurable through server-only `RECAP_MODEL`. Recaps send only the owner's selected passages.
 - **Durable jobs:** use [pg-boss](https://github.com/timgit/pg-boss) 12 inside the app's custom Node server. There is no separate worker Deployment or Kubernetes CronJob. It will replace request-scoped recap generation through `after()` and schedule source cleanup; until then, the [recap contract](contracts.md#track-3-payloads) describes current behavior.
   - Recaps: enqueue the job in the same Prisma transaction that creates the recap row. Job data holds only the recap ID, which is also the job key. A bounded retry budget with backoff, and a per-job expiry longer than the 45-second model timeout, recover attempts lost to restarts or timeouts.
-  - Cleanup: a pg-boss cron schedule triggers an expiry sweep that enqueues cleanup jobs keyed by session ID. Fence expired shared-source reads and late writes in Postgres before deleting; selected evidence and its referenced objects keep their own retention. Every step is idempotent and records progress in Postgres, so an interrupted run resumes.
+  - Cleanup: a pg-boss cron schedule triggers an expiry sweep that enqueues cleanup jobs keyed by session ID. Fence expired shared-source reads and late writes in Postgres before deleting; selected evidence keeps its own retention. Every step is idempotent and records progress in Postgres, so an interrupted run resumes.
   - pg-boss tables live in the `pgboss` schema. Extend the `db-migrate` Job to create and upgrade them before enabling jobs; pods start pg-boss without migrating. Keep its connection pool small.
   - Job data, errors, and spans stay content-free. pg-boss stores failure messages and stacks in Postgres and attaches them to spans, so handlers throw only fixed error codes. Its built-in OpenTelemetry records queue names, job IDs, retry counts, and error types.
   - Rejected: graphile-worker releases a crashed worker's jobs only after four hours and has no built-in tracing. A hand-rolled `SKIP LOCKED` table means writing and testing our own leases and retries. A separate worker Deployment costs cluster budget and manifest work; move jobs to one from the same image only if recap calls contend with caption ingest.
@@ -74,10 +74,10 @@ Logan confirmed these on November 9, 2026.
 - **LLM workflows:** recaps use OpenAI through the Vercel AI SDK (`ai` structured output, no tools), as [decided](#confirmed-by-the-track-3-owner). C4 defaults `RECAP_MODEL` to `gpt-5.4-mini` and currently runs generation request-scoped through Next.js `after()`; see the [recap contract](contracts.md#track-3-payloads). [Durable pg-boss jobs](#confirmed-by-the-track-3-owner) replace it.
 
 - Next.js Route Handlers with a custom Node WebSocket entry point, reconnectable SSE, and the confirmed server-only caption adapter. Prove cross-pod recovery before running multiple replicas. Propose a durable Postgres event log with bounded polling; leases and replay cannot depend on pod memory.
-- Use CloudNativePG for PostgreSQL; propose private S3-compatible storage. Storage location, capacity, and post-hackathon hosting remain open. The [job mechanism](#confirmed-by-the-track-3-owner) is decided. Isolate provider adapters from domain rules.
-- Thirty-second marks, one-second screen observations, and a two-minute resend cap. Validate actual timing and readability.
+- Use CloudNativePG for PostgreSQL. Capacity and post-hackathon hosting remain open. The [job mechanism](#confirmed-by-the-track-3-owner) is decided. Isolate provider adapters from domain rules.
+- Thirty-second marks and a two-minute resend cap. Validate actual timing and readability.
 - Shared-source expiry 24 hours after session end; selected-content expiry 30 days after selection. Confirm permission and cleanup behavior before claiming these guarantees.
-- **Slide glossary and caption correction (proposal, milestones 2–3):** use OpenAI through the AI SDK; choose the cheapest OpenAI model that passes the check at implementation. Extract glossary terms from changed screen frames and correct finalized captions asynchronously, preserving originals and writing new `corrected` revisions. Keep both passes off the live caption path. Treat screen and transcript text as untrusted data, never instructions.
+- **Caption correction (proposal, milestones 2–3):** use OpenAI through the AI SDK; choose the cheapest OpenAI model that passes the check at implementation. Correct finalized captions asynchronously, preserving originals and writing new `corrected` revisions. Keep this pass off the live caption path. Treat transcript text as untrusted data, never instructions.
 
 ## Open questions
 
@@ -99,7 +99,7 @@ Elasticsearch as optional stretch work, a derived index with Postgres authoritat
 
 The personal-device recorder with a strict 30-second discard buffer is superseded. Central session retention supports late marks, reconnects, and optional repair. Do not carry its privacy promise into this design.
 
-Voice commands, continuous video playback, on-device transcription, translation, and multiple-room operations are deferred. Screen interpretation and repair transcription are optional extensions.
+Voice commands, continuous video playback, on-device transcription, translation, and multiple-room operations are deferred. Repair transcription is an optional extension. Host screen capture, screenshots, slide glossary extraction, and private object storage for images are superseded by the [Track 3 owner's removal](#confirmed-by-the-track-3-owner).
 
 ## Primary references
 
@@ -108,13 +108,12 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 - [AGENTS.md convention](https://agents.md/): concise agent guidance separate from the human README.
 - [Next.js Route Handlers](https://nextjs.org/docs/app/getting-started/route-handlers), [shadcn Next.js setup](https://ui.shadcn.com/docs/installation/next), [shadcn monorepos](https://ui.shadcn.com/docs/monorepo), [pnpm workspaces](https://pnpm.io/workspaces).
 - [Next.js self-hosting](https://nextjs.org/docs/app/guides/self-hosting), [custom server](https://nextjs.org/docs/app/guides/custom-server), and [Radar starter](https://github.com/skyhook-io/cnh-starter): validate the Node entry point, container, gateway, and cluster configuration before deployment.
-- [Browser screen capture](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia): permission and audio availability constraints.
 - Superseded: [Liquid AI LFM3-Audio-2B](https://huggingface.co/LiquidAI/LFM3-Audio-2B): LiveASR prompt, English-only mode, chunking, input rate, context restarts, and license.
 - Superseded: [LFM3-Audio-2B GGUF](https://huggingface.co/LiquidAI/LFM3-Audio-2B-GGUF): llama.cpp v0.8.0 or newer; realtime support does not establish stock GGUF LiveASR behavior.
 - Superseded: [llama.cpp server README](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#websocket-v1realtime-realtime-transcription): WebSocket `/v1/realtime` schema and transcription intent. The local spike confirmed stock GGUF LiveASR on this endpoint; see the spike evidence above.
 - [AI SDK `experimental_streamTranscribe`](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-transcribe): streaming API and OpenAI example. Plan B uses successive windows for the SDK lifecycle described above.
 - [Hackathon resources](https://www.wemakedevs.org/hackathons/cnh/resources), [rules](https://www.wemakedevs.org/hackathons/cnh/rules), [schedule](https://www.wemakedevs.org/hackathons/cnh/schedule).
-- [Plaud highlights](https://support.plaud.ai/hc/en-us/articles/63429919023385-Highlight-a-moment-while-recording-for-v4-0-x-or-later): marking recorded moments already exists. Simon Says emphasizes shared session capture with private, illustrated selections; uniqueness is not established.
+- [Plaud highlights](https://support.plaud.ai/hc/en-us/articles/63429919023385-Highlight-a-moment-while-recording-for-v4-0-x-or-later): marking recorded moments already exists. Simon Says emphasizes shared session capture with private selections; uniqueness is not established.
 
 ## Data model audit (November 9, 2026)
 
@@ -142,7 +141,7 @@ Use optional `DEPLOY_TOKEN` for a fine-grained PAT or dedicated installed GitHub
 
 ## C1b Elasticsearch storage setup
 
-Track 2 supplies strict `segments-v1` and `observations-v1` mappings behind write aliases, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).
+Track 2 supplies a strict `segments-v1` mapping behind the `simon-says-segments` write alias, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).
 
 The `.jina-embeddings-v5-text-small` default is [decided by Track 3](#confirmed-by-the-track-3-owner), configurable through `ELASTICSEARCH_INFERENCE_ID`. Local smoke uses `.multilingual-e5-small-elasticsearch`, where automatic inference and semantic search need no cluster privileges. The v9 client is pinned to 9.5.1; with operator authorization, check compatibility with cloud 9.7.0 before relying on newer APIs.
 

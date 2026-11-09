@@ -63,22 +63,6 @@ export class HostCapture {
       },
     );
   }
-  /** Same origin as the worklet's first PCM sample; unavailable when audio stops. */
-  getCaptureSampleOffset = (): number | undefined => {
-    if (
-      !this.context ||
-      this.context.state !== "running" ||
-      this.clockStartTime === undefined ||
-      this.stopped
-    )
-      return undefined;
-    return Math.max(
-      0,
-      Math.floor(
-        (this.context.currentTime - this.clockStartTime) * CAPTION_SAMPLE_RATE,
-      ),
-    );
-  };
   getSnapshot = (): CaptureHealth => this.health;
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);

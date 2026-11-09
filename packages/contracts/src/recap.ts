@@ -2,8 +2,6 @@ import { z } from "zod";
 import { sourceRangeSchema } from "@simon-says/contracts/bookmark";
 import { transcriptSegmentSchema } from "@simon-says/contracts/caption";
 
-const id = transcriptSegmentSchema.shape.sessionId;
-
 export const maxRecapBookmarks = 50;
 
 export const createRecapRequestSchema = z.object({
@@ -27,7 +25,6 @@ export const recapCitationSchema = z.object({
   segmentRevision: transcriptSegmentSchema.shape.revision,
   range: sourceRangeSchema,
   excerpt: transcriptSegmentSchema.shape.text,
-  frameId: id.nullable(),
 });
 
 export const recapTakeawaySchema = z.object({
