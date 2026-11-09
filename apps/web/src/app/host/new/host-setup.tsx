@@ -111,9 +111,7 @@ export const HostSetup = () => {
                 }
               >
                 {active
-                  ? level > 0
-                    ? "Receiving audio"
-                    : "Listening… say something to see the level move"
+                  ? "Microphone is on. Speak to see the level move."
                   : STATUS_MESSAGE[status]}
               </span>
             </div>
