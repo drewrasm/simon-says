@@ -102,3 +102,9 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 Track 2 implements one-second capture with checksum deduplication, 1600 px maximum width, WebP/JPEG, and frame timestamps derived from the first audio worklet input's AudioContext time at 24 kHz. Local heartbeat and stopped state do not add a caption SSE variant. The custom Node server routes uploads ahead of Next.js to `apps/web/src/server/frames/transport.ts`, which uses `HostFrameAccess`, S3-compatible `FrameStore`, and `ObservationSink` interfaces. Host access is an explicitly opted-in loopback development stub, disabled in production; the sink and idempotency reservations are in memory pending the separate Elasticsearch/session integration.
 
 SeaweedFS with one 5 Gi PVC is a proposal pending Track 3 requirements/agreement at C1, not an approved deployment choice. It remains outside kustomization and has not been applied. See the [storage proposal](deployment.md#s4-private-frame-storage-proposal-not-applied). Production fencing, lifecycle propagation, retention, and durable observations remain open.
+
+## C1b Elasticsearch storage setup
+
+Track 2 supplies strict `segments-v1` and `observations-v1` mappings behind write aliases, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).
+
+The `.jina-embeddings-v5-text-small` default is a proposal owned by Track 3, configurable through `ELASTICSEARCH_INFERENCE_ID`. Cost, processing settings, and cloud app-key behavior remain unverified. Local smoke uses `.multilingual-e5-small-elasticsearch`; automatic inference and semantic search passed with zero cluster privileges. The v9 client is pinned to available 9.5.1; cloud 9.7.0 remains an authorized operator verification gate.
