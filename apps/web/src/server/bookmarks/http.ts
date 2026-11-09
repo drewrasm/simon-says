@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 import { putBookmarkRequestSchema } from "@simon-says/contracts/bookmark";
 import { SourceUnavailable } from "../evidence/resolve";
+import { tracePrivateHttp } from "../telemetry/private-flow";
 import { AccessError } from "../access/errors";
 import { parseBody, respond } from "../access/http";
 import { readPrincipal } from "../access/principal";
@@ -37,16 +38,18 @@ const requireId = (id: string) => {
 };
 
 export const handlePutBookmark = (request: Request, id: string) =>
-  handleBookmark(async () => {
-    requireId(id);
-    const body = await parseBody(request, putBookmarkRequestSchema);
-    const result = await putBookmark({
-      principalId: await principalId(),
-      id,
-      request: body,
-    });
-    return respond(result.bookmark, result.status);
-  });
+  tracePrivateHttp("bookmark.save", () =>
+    handleBookmark(async () => {
+      requireId(id);
+      const body = await parseBody(request, putBookmarkRequestSchema);
+      const result = await putBookmark({
+        principalId: await principalId(),
+        id,
+        request: body,
+      });
+      return respond(result.bookmark, result.status);
+    }),
+  );
 
 export const handleListBookmarks = (request: Request) =>
   handleBookmark(async () => {

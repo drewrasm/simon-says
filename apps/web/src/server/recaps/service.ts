@@ -1,6 +1,10 @@
 import "server-only";
 
 import { z } from "zod";
+import {
+  startPrivateSpan,
+  type PrivateErrorCode,
+} from "../telemetry/private-flow";
 import { bookmarkResponseSchema } from "@simon-says/contracts/bookmark";
 import {
   createRecapRequestSchema,
@@ -211,108 +215,130 @@ export const limitPassages = (passages: SelectedPassage[]) => {
 };
 
 export const generateRecap = async (id: string) => {
-  const database = getDatabase();
-  const claimed = await database.recap.updateMany({
-    where: { id, status: "pending" },
-    data: { status: "running" },
-  });
-  if (!claimed.count) return;
-  const record = await database.recap.findUniqueOrThrow({ where: { id } });
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const finish = startPrivateSpan("recap.generate");
+  let outcome: "success" | "error" | "stale" | "skipped" = "error";
+  let errorCode: PrivateErrorCode | undefined = "generation_failed";
   try {
-    await requireMembership({
-      principalId: record.ownerPrincipalId,
-      sessionId: record.sessionId,
+    const database = getDatabase();
+    const claimed = await database.recap.updateMany({
+      where: { id, status: "pending" },
+      data: { status: "running" },
     });
-    const snapshot = snapshotSchema.parse(record.bookmarkSnapshot);
-    const records = await database.bookmark.findMany({
-      where: bookmarkFilter(record, snapshot),
-    });
-    if (!revisionsMatch(snapshot, records)) {
-      await database.recap.updateMany({
-        where: { id, status: "running" },
-        data: { status: "stale" },
-      });
+    if (!claimed.count) {
+      outcome = "skipped";
+      errorCode = undefined;
       return;
     }
-    const snapshotOrder = snapshot.map((selected) => selected.bookmarkId);
-    const bookmarks = records
-      .sort((a, b) => snapshotOrder.indexOf(a.id) - snapshotOrder.indexOf(b.id))
-      .map((bookmark) => ({
-        id: bookmark.id,
-        revision: bookmark.revision,
-        evidence: evidenceSchema.parse(
-          bookmark.evidence ?? { segments: [], frames: [] },
-        ),
-      }));
-    const passages = limitPassages(
-      bookmarks.flatMap((bookmark) =>
-        bookmark.evidence.segments
-          .filter((segment) => segment.text.trim())
-          .map((segment) => ({
-            bookmarkId: bookmark.id,
-            segmentId: segment.segmentId,
-            segmentRevision: segment.revision,
-            text: segment.text,
-          })),
-      ),
-    );
-    if (!passages.length) {
-      await database.recap.updateMany({
-        where: { id, status: "running" },
-        data: { status: "failed", failureReason: "no_resolved_evidence" },
+    const record = await database.recap.findUniqueOrThrow({ where: { id } });
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await requireMembership({
+        principalId: record.ownerPrincipalId,
+        sessionId: record.sessionId,
       });
-      return;
-    }
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        controller.abort();
-        reject(new Error("generation_timeout"));
-      }, generationTimeoutMs);
-    });
-    const output = modelRecapSchema.parse(
-      await Promise.race([
-        generateTakeaways({ passages, abortSignal: controller.signal }),
-        timeout,
-      ]),
-    );
-    const takeaways = validateTakeaways(output, bookmarks);
-    await requireMembership({
-      principalId: record.ownerPrincipalId,
-      sessionId: record.sessionId,
-    });
-    await database.$transaction(
-      async (transaction) => {
-        const current = await transaction.bookmark.findMany({
-          where: bookmarkFilter(record, snapshot),
-          select: { id: true, revision: true },
-        });
-        const stale = !revisionsMatch(snapshot, current);
-        await transaction.recap.updateMany({
+      const snapshot = snapshotSchema.parse(record.bookmarkSnapshot);
+      const records = await database.bookmark.findMany({
+        where: bookmarkFilter(record, snapshot),
+      });
+      if (!revisionsMatch(snapshot, records)) {
+        await database.recap.updateMany({
           where: { id, status: "running" },
-          data: {
-            status: stale ? "stale" : takeaways.length ? "ready" : "failed",
-            takeaways: stale ? [] : takeaways,
-            failureReason:
-              stale || takeaways.length ? null : "no_valid_citations",
-          },
+          data: { status: "stale" },
         });
-      },
-      { isolationLevel: "Serializable" },
-    );
-  } catch {
-    await database.recap.updateMany({
-      where: { id, status: "running" },
-      data: {
-        status: "failed",
-        failureReason: controller.signal.aborted
-          ? "generation_timeout"
-          : "generation_failed",
-      },
-    });
+        outcome = "stale";
+        errorCode = undefined;
+        return;
+      }
+      const snapshotOrder = snapshot.map((selected) => selected.bookmarkId);
+      const bookmarks = records
+        .sort(
+          (a, b) => snapshotOrder.indexOf(a.id) - snapshotOrder.indexOf(b.id),
+        )
+        .map((bookmark) => ({
+          id: bookmark.id,
+          revision: bookmark.revision,
+          evidence: evidenceSchema.parse(
+            bookmark.evidence ?? { segments: [], frames: [] },
+          ),
+        }));
+      const passages = limitPassages(
+        bookmarks.flatMap((bookmark) =>
+          bookmark.evidence.segments
+            .filter((segment) => segment.text.trim())
+            .map((segment) => ({
+              bookmarkId: bookmark.id,
+              segmentId: segment.segmentId,
+              segmentRevision: segment.revision,
+              text: segment.text,
+            })),
+        ),
+      );
+      if (!passages.length) {
+        await database.recap.updateMany({
+          where: { id, status: "running" },
+          data: { status: "failed", failureReason: "no_resolved_evidence" },
+        });
+        errorCode = "no_resolved_evidence";
+        return;
+      }
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error("generation_timeout"));
+        }, generationTimeoutMs);
+      });
+      const output = modelRecapSchema.parse(
+        await Promise.race([
+          generateTakeaways({ passages, abortSignal: controller.signal }),
+          timeout,
+        ]),
+      );
+      const takeaways = validateTakeaways(output, bookmarks);
+      await requireMembership({
+        principalId: record.ownerPrincipalId,
+        sessionId: record.sessionId,
+      });
+      await database.$transaction(
+        async (transaction) => {
+          const current = await transaction.bookmark.findMany({
+            where: bookmarkFilter(record, snapshot),
+            select: { id: true, revision: true },
+          });
+          const stale = !revisionsMatch(snapshot, current);
+          const failureReason =
+            stale || takeaways.length ? null : "no_valid_citations";
+          await transaction.recap.updateMany({
+            where: { id, status: "running" },
+            data: {
+              status: stale ? "stale" : takeaways.length ? "ready" : "failed",
+              takeaways: stale ? [] : takeaways,
+              failureReason,
+            },
+          });
+          outcome = stale ? "stale" : takeaways.length ? "success" : "error";
+          errorCode = failureReason ?? undefined;
+        },
+        { isolationLevel: "Serializable" },
+      );
+    } catch {
+      outcome = "error";
+      const failureReason = controller.signal.aborted
+        ? "generation_timeout"
+        : "generation_failed";
+      errorCode = failureReason;
+      await database.recap.updateMany({
+        where: { id, status: "running" },
+        data: {
+          status: "failed",
+          failureReason,
+        },
+      });
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   } finally {
-    if (timer) clearTimeout(timer);
+    finish({ outcome, ...(errorCode ? { errorCode } : {}) });
   }
 };
 

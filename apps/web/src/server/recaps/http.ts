@@ -3,6 +3,7 @@ import "server-only";
 import { after } from "next/server";
 import { z } from "zod";
 import { createRecapRequestSchema } from "@simon-says/contracts/recap";
+import { tracePrivateHttp } from "../telemetry/private-flow";
 import { AccessError } from "../access/errors";
 import { parseBody, respond } from "../access/http";
 import { readPrincipal } from "../access/principal";
@@ -41,37 +42,39 @@ const principalId = async () => {
 };
 
 export const handleCreateRecap = (request: Request, sessionId: string) =>
-  handleRecap(async () => {
-    requireId(sessionId);
-    const owner = await principalId();
-    await requireMembership({ principalId: owner, sessionId });
-    const body = await parseBody(request, createRecapRequestSchema);
-    if (activeGenerations >= maxActiveGenerations)
-      throw new AccessError(429, "recaps_busy");
+  tracePrivateHttp("recap.create", () =>
+    handleRecap(async () => {
+      requireId(sessionId);
+      const owner = await principalId();
+      await requireMembership({ principalId: owner, sessionId });
+      const body = await parseBody(request, createRecapRequestSchema);
+      if (activeGenerations >= maxActiveGenerations)
+        throw new AccessError(429, "recaps_busy");
 
-    activeGenerations += 1;
-    let scheduled = false;
-    try {
-      const result = await createRecap({
-        principalId: owner,
-        sessionId,
-        request: body,
-      });
-      if (result.created) {
-        after(() =>
-          generateRecap(result.response.id)
-            .catch(() => undefined)
-            .finally(() => {
-              activeGenerations -= 1;
-            }),
-        );
-        scheduled = true;
+      activeGenerations += 1;
+      let scheduled = false;
+      try {
+        const result = await createRecap({
+          principalId: owner,
+          sessionId,
+          request: body,
+        });
+        if (result.created) {
+          after(() =>
+            generateRecap(result.response.id)
+              .catch(() => undefined)
+              .finally(() => {
+                activeGenerations -= 1;
+              }),
+          );
+          scheduled = true;
+        }
+        return respond(result.response, result.created ? 201 : 200);
+      } finally {
+        if (!scheduled) activeGenerations -= 1;
       }
-      return respond(result.response, result.created ? 201 : 200);
-    } finally {
-      if (!scheduled) activeGenerations -= 1;
-    }
-  });
+    }),
+  );
 
 export const handleGetRecap = (_request: Request, id: string) =>
   handleRecap(async () => {
