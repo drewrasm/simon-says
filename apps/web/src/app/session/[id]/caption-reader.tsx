@@ -35,7 +35,7 @@ import {
   TranscriptLine,
   type TranscriptTone,
 } from "../../../components/transcript-line";
-import { formatSourceTime, type CaptionFeed } from "./caption-feed";
+import { formatSourceTime, hashTarget, type CaptionFeed } from "./caption-feed";
 import {
   CaptionSelectionContext,
   type CaptionSelection,
@@ -247,9 +247,7 @@ export const CaptionReader = ({
   const jumpToHash = useCallback(() => {
     const ms = pendingHashMs.current;
     if (ms === null) return;
-    const target = [...latestLines.current]
-      .reverse()
-      .find((line) => line.startMs <= ms);
+    const target = hashTarget(latestLines.current, ms);
     const element = target
       ? document.getElementById(lineAnchor(target.startMs))
       : null;

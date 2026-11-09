@@ -2,6 +2,7 @@ import type { CaptionEvent } from "@simon-says/contracts/caption";
 import { describe, expect, it } from "vitest";
 import {
   applyCaptionEvent,
+  hashTarget,
   emptyCaptionFeed,
   formatSourceTime,
   type CaptionFeed,
@@ -83,6 +84,14 @@ describe("caption feed", () => {
     ).toEqual(["First, corrected", "second"]);
   });
 
+  it("keeps a line removed by an empty revision removed when an older one replays", () => {
+    const first = final("1", "w1", [{ id: "a", startMs: 0, text: "x" }]);
+    const emptied = final("2", "w1", [
+      { id: "a", revision: 2, startMs: 0, text: "" },
+    ]);
+    expect(fold([first, emptied, first]).lines).toEqual([]);
+  });
+
   it("orders gaps on the source clock and drops interim text when the session ends", () => {
     const gap = {
       ...base,
@@ -109,6 +118,17 @@ describe("caption feed", () => {
     expect(feed.lines.map((line) => line.kind)).toEqual(["gap", "final"]);
     expect(feed.interim).toEqual([]);
     expect(feed.capture?.session).toBe("ended");
+  });
+
+  it("waits to resolve a #t= link until the feed covers that moment", () => {
+    const line = (startMs: number) => ({ startMs, endMs: startMs + 4_000 });
+    expect(hashTarget([line(0)], 600_000)).toBeNull();
+    expect(hashTarget([line(0), line(598_000)], 600_000)).toEqual(
+      line(598_000),
+    );
+    expect(
+      hashTarget([line(0), line(590_000), line(605_000)], 600_000),
+    ).toEqual(line(590_000));
   });
 
   it("formats session-clock times", () => {

@@ -40,6 +40,11 @@ export type InterimText = {
 export type CaptionFeed = {
   /** Finalized lines and gaps in source-clock order. */
   lines: readonly (FinalLine | GapLine)[];
+  /**
+   * Highest revision seen per segment, including revisions that emptied a
+   * line, so a replayed older revision can't bring removed text back.
+   */
+  revisions: ReadonlyMap<string, number>;
   /** Live, unstored text per transcription window, oldest first. */
   interim: readonly InterimText[];
   capture: Pick<CaptureStateEvent, "session" | "audio" | "reason"> | null;
@@ -52,6 +57,7 @@ export const MAX_LINES = 1_000;
 
 export const emptyCaptionFeed: CaptionFeed = {
   lines: [],
+  revisions: new Map(),
   interim: [],
   capture: null,
   sourceMs: null,
@@ -94,18 +100,15 @@ export const applyCaptionEvent = (
     }
     case "caption.final": {
       const lines = [...feed.lines];
+      const revisions = new Map(feed.revisions);
       let sourceMs = feed.sourceMs;
       for (const segment of event.segments) {
         sourceMs = later(sourceMs, segment.endMs);
+        const seen = revisions.get(segment.segmentId);
+        if (seen !== undefined && seen >= segment.revision) continue;
+        revisions.set(segment.segmentId, segment.revision);
         const key = `s:${segment.segmentId}`;
         const index = lines.findIndex((line) => line.key === key);
-        const existing = index === -1 ? null : lines[index];
-        if (
-          existing?.kind === "final" &&
-          existing.revision >= segment.revision
-        ) {
-          continue;
-        }
         const line: FinalLine = {
           kind: "final",
           key,
@@ -123,6 +126,7 @@ export const applyCaptionEvent = (
       return {
         ...feed,
         lines: trim(lines.filter((line) => line.kind === "gap" || line.text)),
+        revisions,
         interim: feed.interim.filter(
           (entry) => entry.windowId !== event.windowId,
         ),
@@ -162,6 +166,23 @@ export const applyCaptionEvent = (
     case "clock.heartbeat":
       return { ...feed, sourceMs: later(feed.sourceMs, event.sourceMs) };
   }
+};
+
+/**
+ * The line a `#t=<ms>` link should land on: the last line starting at or
+ * before `ms`, but only once the feed proves it holds that moment (a line
+ * covers `ms`, or a later line has arrived). Until then the result is null,
+ * so a replay folded one event at a time doesn't jump to an early line.
+ */
+export const hashTarget = <T extends { startMs: number; endMs: number }>(
+  lines: readonly T[],
+  ms: number,
+): T | null => {
+  const covered = lines.some(
+    (line) => (line.startMs <= ms && ms <= line.endMs) || line.startMs > ms,
+  );
+  if (!covered) return null;
+  return [...lines].reverse().find((line) => line.startMs <= ms) ?? null;
 };
 
 /** Session-clock time as `HH:MM:SS`, for the desktop timestamp column. */
