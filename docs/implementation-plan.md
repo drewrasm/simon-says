@@ -169,6 +169,12 @@ Local verification on November 9, 2026: frozen-lockfile install and `pnpm check`
 
 The release flow now merges only guarded machine-generated tag PRs, with freshness checks, pinned-head merging, retry handling, and the default-enabled `AUTO_DEPLOY` pause variable. See [deployment](deployment.md#release-flow-c1a) and [decisions](decisions.md#c1a-release-tags). Live workflow merging and cluster rollout remain unverified; this work performs no cluster operations, repository setting changes, or PR comments.
 
+### C1a ruleset compatibility fix — local evidence
+
+November 9, 2026: `actionlint`, `bash -n scripts/propose-deploy.sh`, `shellcheck scripts/propose-deploy.sh`, `pnpm install --frozen-lockfile`, and `pnpm check` passed (nine Vitest files / 68 tests). Existing `python3 scripts/test-deploy-diff.py` fixtures still accept only the exact tag bump. New `python3 scripts/test-propose-deploy.py` runs the script with real scratch git history and a mocked GitHub CLI: refused admin merge emits `::error::` and exits 1, the current and newer deploy PRs stay open while the older ancestor PR closes without a comment, and `AUTO_DEPLOY=false` prevents merging. These are local control-flow checks, not a live bypass test.
+
+Observed publish for `4b2963f` opened #25 but the active `main` ruleset refused merging. Superseded #21 was closed without a comment; #25 remains open for recovery. Optional `DEPLOY_TOKEN` and a bypass-enabled actor require Drew's one-time setup in the deployment guide. Live merging and rollout remain unverified. No cluster operations, credential creation, repository setting changes, or PR comments were performed.
+
 ## Milestone 1 S3 evidence (development pipeline)
 
 S3 implements `apps/web/src/server/captions` and mounts product ingest/SSE on the checkpoint 0A server. Verification uses only AI SDK `MockTranscriptionModelV4`, including an in-process random-port HTTP server with real WebSocket and SSE clients and synthetic PCM WAV frames. It covers prewarm/commit handoff, sample partitioning, final order, retry replay, three-attempt gaps, duplicate conflicts, sink-before-final ordering, sink failure visibility, epoch fencing, bounded event replay/snapshots, and missing-provider degradation. No API keys are accessed by these tests and no OpenAI call is made.

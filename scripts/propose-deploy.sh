@@ -39,6 +39,19 @@ fresh() {
   fi
 }
 if ! fresh; then exit 0; fi
+# Close only release branches for ancestors of this source, never a newer release.
+stale_branches=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --state open \
+  --limit 1000 --json number,headRefName,isCrossRepository \
+  --jq '.[] | select(.isCrossRepository == false) | [.number, .headRefName] | @tsv')
+while IFS=$'\t' read -r stale_number stale_branch; do
+  if [[ "$stale_branch" =~ ^deploy/([0-9a-f]{40})$ ]]; then
+    stale_sha=${BASH_REMATCH[1]}
+    if [ "$stale_sha" != "$GITHUB_SHA" ] && git merge-base --is-ancestor "$stale_sha" "$GITHUB_SHA"; then
+      gh pr close "$stale_number" --repo "$GITHUB_REPOSITORY"
+      summary "Closed superseded deploy PR #$stale_number ($stale_sha); newest release is $GITHUB_SHA."
+    fi
+  fi
+done <<< "$stale_branches"
 if [ -z "$existing" ]; then
   # Recover when the branch push succeeded but PR creation was blocked/failed.
   if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
@@ -103,10 +116,12 @@ if ! python3 "$work/check-deploy-diff.py" "$base" "$pr_head" "$GITHUB_SHA"; then
 fi
 # Repeat immediately before merging to catch source changes during validation.
 if ! fresh; then exit 0; fi
-if ! gh pr merge "$existing" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$pr_head"; then
-  state=$(gh pr view "$existing" --repo "$GITHUB_REPOSITORY" --json state --jq .state)
+if ! gh pr merge "$existing" --repo "$GITHUB_REPOSITORY" --merge --admin --match-head-commit "$pr_head"; then
+  # A concurrent successful merge is a safe retry; API failure must still report the setup.
+  state=$(gh pr view "$existing" --repo "$GITHUB_REPOSITORY" --json state --jq .state) || state=UNKNOWN
   if [ "$state" != MERGED ]; then
-    summary "Skipped $GITHUB_SHA: merge of PR #$existing failed; inspect the open PR."
+    echo "::error::Deploy PR #$existing merge refused; left open. Drew: Settings > Rules > Rulesets > main > Bypass list: grant the deployment token actor bypass (For pull requests only). Configure DEPLOY_TOKEN with a bypass-enabled PAT or GitHub App token; GITHUB_TOKEN fallback requires GitHub Actions integration bypass if available. Inspect the gh error above for other merge failures."
+    summary "Failed $GITHUB_SHA: merge of PR #$existing refused; configure ruleset main bypass and DEPLOY_TOKEN. PR left open."
     exit 1
   fi
 fi
