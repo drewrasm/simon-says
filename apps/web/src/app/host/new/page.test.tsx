@@ -5,8 +5,13 @@ import HostSetupPage from "./page";
 describe("host setup page", () => {
   const html = renderToStaticMarkup(<HostSetupPage />);
 
-  it("marks Start session as a stub", () => {
-    expect(html).toContain("Start session does nothing yet");
+  it("no longer marks Start session as a stub", () => {
+    expect(html).not.toContain("does nothing yet");
+  });
+
+  it("offers an optional, bounded session title", () => {
+    expect(html).toContain("Session title (optional)");
+    expect(html).toMatch(/<input[^>]*maxLength="120"/);
   });
 
   it("starts with the microphone untested and Start disabled", () => {
