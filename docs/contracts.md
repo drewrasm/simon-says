@@ -44,7 +44,7 @@ Session states: setup, live, degraded, ended, expired. Keep transport health, tr
 
 ## API
 
-HTTP endpoints run as Next.js Route Handlers in `apps/web`. The proposed audio WebSocket uses a custom Node upgrade handler in the same application container; verify its packaging in checkpoint 0A and live routing in milestone 1. Endpoint paths below are logical contracts, not scaffolded routes.
+HTTP endpoints run as Next.js Route Handlers in `apps/web`. The proposed audio WebSocket uses a custom Node upgrade handler in the same application container; verify its packaging in checkpoint 0A and live routing in milestone 1. Endpoint paths below are logical contracts; only `POST /api/sessions`, `POST /api/join`, and `POST /api/sessions/:id/host` are implemented.
 
 | Operation                                            | Contract                                                                         |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------- |
