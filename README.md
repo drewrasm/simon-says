@@ -84,4 +84,4 @@ export ELASTIC_MCP_AUTHORIZATION="ApiKey $(security find-generic-password -s ela
 
 Official `ai-sdk`, `vercel-react-best-practices`, and `elasticsearch-onboarding` skills are vendored in `.agents/skills/` for Codex, with relative `.claude/skills/` symlinks for Claude Code. They are available from a fresh clone without installing app dependencies. Start a new agent session after changing skills.
 
-See [agent skill provenance and updates](docs/agent-skills.md) for pinned sources, installation commands, and the retired Next.js best-practices skill. The AI SDK remains a [proposed implementation default](docs/decisions.md#proposed-implementation-defaults).
+See [agent skill provenance and updates](docs/agent-skills.md) for pinned sources, installation commands, and the retired Next.js best-practices skill. Live captions are confirmed as OpenAI `gpt-realtime-whisper` through server-only AI SDK streaming windows ([Plan B](docs/architecture.md#transcription-and-text-passes)); dependencies and runtime integration remain unimplemented and unverified.

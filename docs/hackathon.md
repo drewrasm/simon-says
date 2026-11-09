@@ -24,10 +24,18 @@ Collect evidence during ordinary development. Do not invent incidents or claim a
 | [Dash0](https://www.dash0.com/)                        | Team organization, dataset, OTLP endpoint/token, Agent0, and MCP access                            | Organization in AWS US West; MCP configured; ingest unverified                                                                            |
 | [Gitar](https://app.gitar.ai/)                         | Repository administrator installs the GitHub App for this repo after reviewing permissions         | Pending explicit enablement                                                                                                               |
 | [Elastic Cloud](https://cloud.elastic.co/)             | Search project, scoped API key, and inference endpoint                                             | Serverless hackathon-trial project in AWS us-west-2; agent CLI and MCP access verified; app key scope and cluster connectivity unverified |
-| Transcription and recap providers                      | Account, processing/retention settings, keys, and budget                                           | Transcription direction confirmed; runtime unverified; recap open                                                                         |
+| Transcription and recap providers                      | Account, processing/retention settings, keys, and budget                                           | OpenAI only via AI SDK; hackathon credits; key, quota, retention, and runtime unverified; recap model open                                |
 | Database and object storage                            | Persistent Postgres and private object access from the cluster                                     | CloudNativePG selected, unverified; object storage undecided                                                                              |
 
 Store runtime credentials in cluster Secrets or an approved secret manager. Keep values out of chat, git, images, build arguments, and browser bundles. An account does not establish quota, connectivity, or permission to deploy.
+
+## Caption provider configuration
+
+OpenAI is the only model provider, paid with hackathon OpenAI credits. Inject server-only `OPENAI_API_KEY` from Secret `app-credentials` in namespace `team-simon-says`; configure `CAPTION_MODEL=gpt-realtime-whisper` and `CAPTION_DELAY=low` server-side. Never use `NEXT_PUBLIC_` variables. The browser connects only to our ingest server, never directly to OpenAI; no client secrets or ephemeral tokens.
+
+Permit TLS/WebSocket egress to `api.openai.com`. When the key is issued, verify credits, quota, and cluster connectivity. Check OpenAI API data-retention terms for the capture/join disclosures before real recording. The first real transcription call happens in the cluster with the key in the Secret; key-free domain unit tests and fake transcription-model tests precede it. No provider call or key access is part of this documentation change.
+
+Raw-audio object persistence is deferred today; the two-minute host resend and pod ring buffers bound recovery. Single-replica in-process SSE fan-out requires a shared event source before multi-replica delivery, including rolling overlap. Tune `delay` and window thresholds on a real microphone before milestone 1 acceptance.
 
 ## Gitar enablement boundary
 
