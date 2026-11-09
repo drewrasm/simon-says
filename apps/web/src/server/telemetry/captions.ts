@@ -9,11 +9,17 @@ import {
 import type { CaptionMetadata, CaptionTelemetry } from "../captions/telemetry";
 
 export const CAPTION_SCOPE = "simon-says.captions";
-export const SPAN_NAMES = ["caption.window", "caption.ingest", "caption.sse"];
+export const SPAN_NAMES = [
+  "caption.window",
+  "caption.ingest",
+  "caption.sse",
+  "ask",
+];
 export const ATTRIBUTE_KEYS = [
   "operation",
   "outcome",
   "duration_ms",
+  "passage_count",
   "retry_count",
   "cut_reason",
   "window_id",
@@ -30,6 +36,16 @@ export function safeAttributes(input: Attributes): Attributes {
   const output: Attributes = {};
   for (const [key, value] of Object.entries(input)) {
     if (!ATTRIBUTE_KEYS.includes(key)) continue;
+    if (key === "passage_count") {
+      if (
+        typeof value === "number" &&
+        Number.isInteger(value) &&
+        value >= 0 &&
+        value <= 8
+      )
+        output[key] = value;
+      continue;
+    }
     if (
       ["duration_ms", "retry_count", "http.response.status_code"].includes(key)
     ) {

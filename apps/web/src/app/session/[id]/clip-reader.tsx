@@ -8,7 +8,13 @@ import type { ClipLine } from "./clip-line";
 
 type ClipReaderProps = Pick<
   ComponentProps<typeof CaptionReader>,
-  "sessionId" | "title" | "status" | "noteCount" | "notesPanel" | "actions"
+  | "sessionId"
+  | "title"
+  | "status"
+  | "noteCount"
+  | "notesPanel"
+  | "actions"
+  | "toolbarActions"
 >;
 
 /** Connects the attendee reader to the shared clip and note controls. */

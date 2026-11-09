@@ -15,6 +15,7 @@ import {
   ArrowDownToLineIcon,
   CircleCheckIcon,
   NotebookTextIcon,
+  MessageCircleQuestionIcon,
   PanelRightCloseIcon,
   PanelRightOpenIcon,
 } from "lucide-react";
@@ -28,6 +29,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@simon-says/ui/components/tabs";
+import { AskPanel } from "./ask-panel";
 import { BrandMark } from "../../../components/brand-mark";
 import { LiveBadge } from "../../../components/live-badge";
 import { SessionStatusBadge } from "../../../components/session-status-badge";
@@ -57,6 +65,7 @@ type CaptionReaderProps = {
    * notes panel.
    */
   actions?: ReactNode;
+  toolbarActions?: ReactNode;
   /** Let attendees select finalized lines (toggle buttons) for clipping. */
   selectable?: boolean;
   /** Selected lines, in source-clock order, whenever the selection changes. */
@@ -172,6 +181,7 @@ export const CaptionReader = ({
   noteCount,
   notesPanel,
   actions,
+  toolbarActions,
   selectable = false,
   onSelectionChange,
   onLinesChange,
@@ -179,6 +189,19 @@ export const CaptionReader = ({
   onSelectedIdsChange,
 }: CaptionReaderProps) => {
   const [notesOpen, setNotesOpen] = useState(true);
+  const [panelTab, setPanelTab] = useState("notes");
+  const askTrigger = useRef<HTMLButtonElement>(null);
+  const restoreAskFocus = useRef(false);
+  const backToTranscript = () => {
+    restoreAskFocus.current = true;
+    setPanelTab("notes");
+  };
+  useLayoutEffect(() => {
+    if (restoreAskFocus.current) {
+      askTrigger.current?.focus();
+      restoreAskFocus.current = false;
+    }
+  }, [panelTab]);
   const panelShown = Boolean(notesPanel) && notesOpen;
   const { feed, status: stream, retry } = useCaptionStream(sessionId);
   const { step } = useCaptionSize();
@@ -305,11 +328,17 @@ export const CaptionReader = ({
         className={cn(
           "dark h-dvh overflow-hidden bg-background text-foreground",
           panelShown &&
-            "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]",
+            "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,460px)] lg:grid-rows-[auto_auto_minmax(0,1fr)_auto]",
         )}
       >
-        <main className="flex h-dvh min-w-0 flex-col">
-          <header className="flex items-center gap-3 border-b py-3 pr-4 pl-5 lg:flex-wrap lg:px-6">
+        <main
+          className={cn(
+            "flex h-dvh min-w-0 flex-col",
+            panelShown && "lg:contents",
+            panelTab === "ask" && notesOpen && "max-lg:hidden",
+          )}
+        >
+          <header className="flex items-center gap-3 border-b py-3 pr-4 pl-5 lg:col-span-2 lg:flex-wrap lg:px-6">
             <BrandMark className="hidden lg:inline-flex" />
             <span
               aria-hidden="true"
@@ -328,6 +357,23 @@ export const CaptionReader = ({
               </h1>
             </div>
             <div className="flex items-center gap-2">
+              {toolbarActions}
+              {notesPanel ? (
+                <Button
+                  ref={askTrigger}
+                  variant="ghost"
+                  className={
+                    panelTab === "ask" && notesOpen ? "hidden" : "h-11"
+                  }
+                  onClick={() => {
+                    setPanelTab("ask");
+                    setNotesOpen(true);
+                  }}
+                >
+                  <MessageCircleQuestionIcon aria-hidden="true" />
+                  Ask
+                </Button>
+              ) : null}
               <div className="hidden lg:block">
                 <TextSizeControl compact />
               </div>
@@ -358,7 +404,7 @@ export const CaptionReader = ({
                   ) : (
                     <PanelRightOpenIcon data-icon="inline-start" />
                   )}
-                  {notesOpen ? "Hide notes" : `Show notes (${noteCount})`}
+                  {notesOpen ? "Close panel" : `Show notes (${noteCount})`}
                 </Button>
               ) : null}
             </div>
@@ -513,11 +559,48 @@ export const CaptionReader = ({
         {notesPanel ? (
           <aside
             id={NOTES_PANEL_ID}
-            aria-label="My notes"
-            hidden={!notesOpen}
-            className="hidden border-l bg-card lg:flex lg:h-dvh lg:flex-col lg:overflow-y-auto"
+            aria-label="Notes and Ask"
+            className={cn(
+              "relative min-h-0 flex-col border-l bg-card lg:col-start-2 lg:row-start-2 lg:row-end-5 lg:h-auto",
+              !notesOpen
+                ? "hidden"
+                : panelTab === "ask"
+                  ? "flex h-dvh"
+                  : "hidden lg:flex",
+            )}
           >
-            {notesPanel}
+            <Tabs
+              value={panelTab}
+              onValueChange={(value) => setPanelTab(String(value))}
+              className="min-h-0 flex-1 gap-0"
+            >
+              <div className="hidden shrink-0 border-b px-4 py-2 lg:block">
+                <TabsList
+                  variant="line"
+                  aria-label="Session panel"
+                  className="h-9 gap-4"
+                >
+                  <TabsTrigger value="notes" className="px-0">
+                    My notes
+                  </TabsTrigger>
+                  <TabsTrigger value="ask" className="px-0">
+                    Ask
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="notes" className="min-h-0 overflow-y-auto">
+                {notesPanel}
+              </TabsContent>
+              <TabsContent value="ask" className="flex min-h-0 flex-col">
+                {notesOpen ? (
+                  <AskPanel
+                    sessionId={sessionId}
+                    title={title ?? "Live session"}
+                    onBack={backToTranscript}
+                  />
+                ) : null}
+              </TabsContent>
+            </Tabs>
           </aside>
         ) : null}
       </div>
