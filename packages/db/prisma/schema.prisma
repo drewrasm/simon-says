@@ -6,3 +6,95 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum SessionStatus {
+  setup
+  live
+  degraded
+  ended
+  expired
+}
+
+enum MembershipRole {
+  host
+  attendee
+}
+
+enum BookmarkAnchorKind {
+  live
+  paragraph
+}
+
+enum BookmarkCompleteness {
+  pending
+  complete
+  incomplete
+}
+
+model Principal {
+  id             String       @id @default(uuid()) @db.Uuid
+  createdAt      DateTime     @default(now())
+  hostedSessions Session[]
+  memberships    Membership[]
+  bookmarks      Bookmark[]
+
+  @@map("principals")
+}
+
+model Session {
+  id                String        @id @default(uuid()) @db.Uuid
+  title             String?
+  status            SessionStatus @default(setup)
+  hostPrincipalId   String        @db.Uuid
+  hostPrincipal     Principal     @relation(fields: [hostPrincipalId], references: [id])
+  hostLinkTokenHash String        @unique
+  inviteCode        String        @unique
+  createdAt         DateTime      @default(now())
+  endedAt           DateTime?
+  memberships       Membership[]
+  bookmarks         Bookmark[]
+
+  @@map("sessions")
+}
+
+model Membership {
+  id          String         @id @default(uuid()) @db.Uuid
+  sessionId   String         @db.Uuid
+  session     Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  principalId String         @db.Uuid
+  principal   Principal      @relation(fields: [principalId], references: [id])
+  role        MembershipRole
+  createdAt   DateTime       @default(now())
+  revokedAt   DateTime?
+
+  @@unique([sessionId, principalId])
+  @@map("memberships")
+}
+
+model Bookmark {
+  id                 String               @id @default(uuid()) @db.Uuid
+  ownerPrincipalId   String               @db.Uuid
+  ownerPrincipal     Principal            @relation(fields: [ownerPrincipalId], references: [id])
+  sessionId          String               @db.Uuid
+  session            Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  operationId        String
+  anchorKind         BookmarkAnchorKind
+  markedAtMs         Float?
+  segmentId          String?
+  segmentRevision    Int?
+  requestedStartMs   Float
+  requestedEndMs     Float
+  actualStartMs      Float?
+  actualEndMs        Float?
+  clockUncertaintyMs Float
+  revision           Int                  @default(1)
+  note               String?
+  completeness       BookmarkCompleteness @default(pending)
+  evidence           Json?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@unique([ownerPrincipalId, operationId])
+  @@index([ownerPrincipalId, sessionId])
+  @@map("bookmarks")
+}
