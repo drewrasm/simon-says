@@ -18,12 +18,6 @@ export type HostCaptureOptions = {
   deviceId?: string;
 };
 
-/** Listing never requests permission. Labels may be empty until the host grants it. */
-export async function listMicrophones(): Promise<MediaDeviceInfo[]> {
-  return (await navigator.mediaDevices.enumerateDevices()).filter(
-    (device) => device.kind === "audioinput",
-  );
-}
 export function microphoneConstraints(
   deviceId?: string,
 ): MediaStreamConstraints {
@@ -90,17 +84,19 @@ export class HostCapture {
     this.update({ mic: "requesting" });
     try {
       // Resume in the gesture's synchronous turn, before the permission prompt.
+      let context: AudioContext;
       try {
-        this.context = new AudioContext({ sampleRate: CAPTION_SAMPLE_RATE });
+        context = new AudioContext({ sampleRate: CAPTION_SAMPLE_RATE });
       } catch (error) {
         if (
           !(error instanceof DOMException) ||
           error.name !== "NotSupportedError"
         )
           throw error;
-        this.context = new AudioContext();
+        context = new AudioContext();
       }
-      const resumed = this.context.resume();
+      this.context = context;
+      const resumed = context.resume();
       // Handle resume rejection even when getUserMedia rejects first.
       void resumed.catch(() => {});
       const stream = await navigator.mediaDevices.getUserMedia(
@@ -116,9 +112,9 @@ export class HostCapture {
           void this.fail();
         };
       await resumed;
-      await this.context.audioWorklet.addModule("/capture/processor.js");
+      await context.audioWorklet.addModule("/capture/processor.js");
       if (this.stopped) return;
-      this.node = new AudioWorkletNode(this.context, "host-pcm", {
+      this.node = new AudioWorkletNode(context, "host-pcm", {
         processorOptions: {
           outputRate: CAPTION_SAMPLE_RATE,
           frameSamples: FRAME_SAMPLES,
@@ -152,10 +148,10 @@ export class HostCapture {
         }
       };
       this.client.start();
-      this.source = this.context.createMediaStreamSource(stream);
+      this.source = context.createMediaStreamSource(stream);
       this.source.connect(this.node);
       // Worklet emits silence; connecting keeps it scheduled without mic playback.
-      this.node.connect(this.context.destination);
+      this.node.connect(context.destination);
       this.update({ mic: "live" });
     } catch (error) {
       if (this.stopped) return;
