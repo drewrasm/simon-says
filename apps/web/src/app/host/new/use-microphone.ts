@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { microphoneConstraints } from "../../../capture/host-capture";
 
 export type MicStatus = "idle" | "requesting" | "active" | "denied" | "error";
 export type MicDevice = { id: string; label: string };
@@ -38,9 +39,9 @@ export const useMicrophone = () => {
 
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: id ? { deviceId: { exact: id } } : true,
-        });
+        stream = await navigator.mediaDevices.getUserMedia(
+          microphoneConstraints(id),
+        );
       } catch (error) {
         if (mine !== attempt.current) return;
         const denied =
@@ -54,7 +55,14 @@ export const useMicrophone = () => {
         return;
       }
 
-      const context = new AudioContext();
+      let context: AudioContext;
+      try {
+        context = new AudioContext();
+      } catch {
+        stream.getTracks().forEach((track) => track.stop());
+        setStatus("error");
+        return;
+      }
       const analyser = context.createAnalyser();
       analyser.fftSize = 1024;
       // Not connected to the destination, so the host never hears themselves.
@@ -95,7 +103,15 @@ export const useMicrophone = () => {
       };
 
       // Labels are only available after permission is granted.
-      const all = await navigator.mediaDevices.enumerateDevices();
+      let all: MediaDeviceInfo[];
+      try {
+        all = await navigator.mediaDevices.enumerateDevices();
+      } catch {
+        if (mine !== attempt.current) return;
+        stop();
+        setStatus("error");
+        return;
+      }
       if (mine !== attempt.current) return;
       setDevices(
         all

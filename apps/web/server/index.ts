@@ -6,7 +6,7 @@ import next from "next";
 import { WebSocketServer } from "ws";
 import { createOpenAI } from "@ai-sdk/openai";
 import { CaptionTransport } from "../src/server/captions/transport";
-import { DevIngestAuthority } from "../src/server/captions/ingest-authority";
+import { createIngestAuthority } from "../src/server/captions/access-authority";
 import { elasticsearchClient } from "../src/server/search/es-client";
 import { ElasticsearchSegmentSink } from "../src/server/search/elasticsearch-segment-sink";
 import { readRuntimeEnv } from "./env.js";
@@ -15,10 +15,7 @@ const runtime = readRuntimeEnv(process.env);
 const { port, probeToken } = runtime;
 const elasticsearch = runtime.elasticsearch;
 const captions = new CaptionTransport({
-  authority: new DevIngestAuthority(
-    runtime.captionsDevSession,
-    process.env.NODE_ENV === "production",
-  ),
+  authority: createIngestAuthority(process.env),
   ...(elasticsearch
     ? {
         sink: {
@@ -32,8 +29,8 @@ const captions = new CaptionTransport({
   delay: runtime.captionDelay,
   reconnectGraceMs: runtime.captionReconnectGraceMs,
   ...(runtime.openaiApiKey &&
-  runtime.captionsDevSession &&
-  process.env.NODE_ENV !== "production"
+  (process.env.DATABASE_URL ||
+    (runtime.captionsDevSession && process.env.NODE_ENV !== "production"))
     ? {
         model: createOpenAI({ apiKey: runtime.openaiApiKey }).transcription(
           runtime.captionModel,
@@ -73,7 +70,7 @@ function authorized(candidate: string | undefined) {
   );
 }
 
-const server = createServer((req, res) => {
+const server = createServer(async (req, res) => {
   const path = (req.url ?? "/").split("?", 1)[0] ?? "/";
   res.setHeader("Cache-Control", "no-store");
   if (path === "/healthz" || path === "/readyz") {
@@ -91,7 +88,7 @@ const server = createServer((req, res) => {
     res.writeHead(503).end();
     return;
   }
-  if (captions.handleHttp(req, res)) return;
+  if (await captions.handleHttp(req, res)) return;
   if (path === "/api/probe/sse") {
     if (!probeToken) {
       res.writeHead(404).end();
@@ -148,13 +145,14 @@ server.on("connection", (socket) => {
   sockets.add(socket);
   socket.once("close", () => sockets.delete(socket));
 });
-server.on("upgrade", (req, socket, head) => {
+server.on("upgrade", async (req, socket, head) => {
   const path = (req.url ?? "/").split("?", 1)[0] ?? "/";
   if (dev && ready && !stopping && path.startsWith("/_next/")) {
     void app.getUpgradeHandler()(req, socket, head);
     return;
   }
-  if (ready && !stopping && captions.handleUpgrade(req, socket, head)) return;
+  if (ready && !stopping && (await captions.handleUpgrade(req, socket, head)))
+    return;
   const protocols =
     req.headers["sec-websocket-protocol"]?.split(",").map((p) => p.trim()) ??
     [];

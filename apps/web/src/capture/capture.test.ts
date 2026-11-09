@@ -130,7 +130,7 @@ it("trims acks, merges consecutive overflow gaps, and retains gaps after ack", (
   buffer.acknowledge(2);
   expect(buffer.unackedMs).toBe(100);
   buffer.acknowledge(3);
-  expect(buffer.lastSentSeq).toBe(-1);
+  expect(buffer.newestSeq).toBe(-1);
   expect(buffer.localGaps).toHaveLength(1);
 });
 it("caps exponential backoff with equal jitter", () => {
@@ -171,6 +171,39 @@ describe("ingest protocol", () => {
         frame: { epoch: 7, seq: 2, sampleOffset: 4800, samples: samples() },
       },
     ]);
+    client.stop();
+  });
+  it("accepts a lower ready cursor and resends retained frames", () => {
+    vi.useFakeTimers();
+    const { client, sockets, states, sequence } = setup();
+    const first = sockets[0]!;
+    first.open();
+    first.message({ type: "ready", epoch: 7, ackedThroughSeq: -1 });
+    client.push(sequence.next(samples()));
+    client.push(sequence.next(samples()));
+    first.message({ type: "ack", epoch: 7, throughSeq: 0 });
+    first.disconnect();
+    vi.advanceTimersByTime(500);
+    const second = sockets[1]!;
+    second.open();
+    second.message({ type: "ready", epoch: 7, ackedThroughSeq: -1 });
+    expect(
+      second.frames().map((decoded) => decoded.ok && decoded.frame.seq),
+    ).toEqual([1]);
+    expect(states.at(-1)).toBe("open");
+    vi.advanceTimersByTime(60000);
+    expect(sockets).toHaveLength(2);
+    client.stop();
+  });
+  it("reconnects when an ack moves the cursor backwards", () => {
+    vi.useFakeTimers();
+    const { client, sockets, states, sequence } = setup();
+    sockets[0]!.message({ type: "ready", epoch: 7, ackedThroughSeq: -1 });
+    client.push(sequence.next(samples()));
+    client.push(sequence.next(samples()));
+    sockets[0]!.message({ type: "ack", epoch: 7, throughSeq: 1 });
+    sockets[0]!.message({ type: "ack", epoch: 7, throughSeq: 0 });
+    expect(states.at(-1)).toBe("reconnecting");
     client.stop();
   });
   it.each([

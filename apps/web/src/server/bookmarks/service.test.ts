@@ -365,3 +365,72 @@ describe("owner-only bookmarks", () => {
     });
   });
 });
+
+describe("paragraph source revalidation", () => {
+  const anchor = {
+    kind: "paragraph",
+    segmentId: "segment-1",
+    segmentRevision: 2,
+    range: { startMs: 1000, endMs: 2000 },
+  } as const;
+  const paragraphOptions = () => ({
+    ...options(),
+    request: { ...request(), anchor },
+  });
+  const source = () => syntheticSegment({ sessionId, revision: 2 });
+  const serve = (sources: unknown[]) =>
+    fetchMock.mockImplementation(async (url) =>
+      Response.json(
+        syntheticSearchResponse(
+          String(url).includes("simon-says-segments") ? sources : [],
+        ),
+      ),
+    );
+
+  it("saves a current paragraph anchor through the existing mutation", async () => {
+    serve([source()]);
+    await putBookmark(paragraphOptions());
+    expect(bookmark.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        anchorKind: "paragraph",
+        segmentId: anchor.segmentId,
+        segmentRevision: 2,
+        requestedStartMs: 1000,
+        requestedEndMs: 2000,
+      }),
+    });
+    expect(membership.findUnique).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["missing", "stale", "expired", "outside-range", "other-session"])(
+    "does not save an invalid paragraph source: %s",
+    async (scenario) => {
+      const segment = source();
+      if (scenario === "stale") segment.revision = 3;
+      if (scenario === "expired")
+        segment.expiresAt = "2000-01-01T00:00:00.000Z";
+      if (scenario === "outside-range") segment.endMs = 1500;
+      if (scenario === "other-session") segment.sessionId = randomUUID();
+      serve(scenario === "missing" ? [] : [segment]);
+      await expect(putBookmark(paragraphOptions())).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(bookmark.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps paragraph saves retryable during source outages", async () => {
+    await expect(putBookmark(paragraphOptions())).rejects.toMatchObject({
+      message: "source_unavailable",
+    });
+    expect(bookmark.create).not.toHaveBeenCalled();
+  });
+
+  it("rechecks membership after source resolution before saving", async () => {
+    membership.findUnique
+      .mockResolvedValueOnce({ revokedAt: null, session: { status: "live" } })
+      .mockResolvedValueOnce(null);
+    await expect(putBookmark(options())).rejects.toMatchObject({ status: 404 });
+    expect(bookmark.create).not.toHaveBeenCalled();
+  });
+});
