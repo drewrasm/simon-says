@@ -8,6 +8,5 @@ resources:
   - postgres.yaml
 images:
   - name: app
-    # Operator must replace with an authorized immutable image/digest before use.
-    newName: example.invalid/simon-says/app
-    newTag: REPLACE_BEFORE_DEPLOY
+    newName: ghcr.io/drewrasm/simon-says
+    newTag: c97978f31ae1150f622bae09fe882f193f780bea

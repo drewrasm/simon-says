@@ -97,6 +97,10 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 - [Hackathon resources](https://www.wemakedevs.org/hackathons/cnh/resources), [rules](https://www.wemakedevs.org/hackathons/cnh/rules), [schedule](https://www.wemakedevs.org/hackathons/cnh/schedule).
 - [Plaud highlights](https://support.plaud.ai/hc/en-us/articles/63429919023385-Highlight-a-moment-while-recording-for-v4-0-x-or-later): marking recorded moments already exists. Simon Says emphasizes shared session capture with private, illustrated selections; uniqueness is not established.
 
+## C1a release tags
+
+GHCR publication runs in GitHub Actions after main checks, using full commit SHA tags and a mutable `main` alias. Deploy tags land through `deploy/<sha>` PRs, preserving CI/Gitar review and the prohibition on direct main commits. Auto-merge is currently disabled in the repository; an administrator can enable it, while operators may merge manually after review. The Application file enables automated sync, self-healing, and final-wave pruning of eligible stateless resources (`PruneLast=true`). Data-bearing resources carry `Prune=false,Delete=false` and require a manual, approved removal; applying it still requires explicit operator approval through Radar. See the [release flow](deployment.md#release-flow-c1a) for bootstrap and recovery. Publication and cluster deployment are pending live verification.
+
 ## C1b Elasticsearch storage setup
 
 Track 2 supplies strict `segments-v1` and `observations-v1` mappings behind write aliases, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).

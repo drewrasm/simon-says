@@ -37,7 +37,7 @@ pnpm build
 pnpm dev
 ```
 
-Open the local URL printed by Next.js. Run `pnpm services:down` to stop the local services. The Compose configuration uses PostgreSQL and a private SeaweedFS S3 bucket with local credentials. The root `.env` configures the database scripts; Next.js loads app-specific settings from `apps/web/.env.local` when needed. Do not use local credentials for deployed services.
+Open `http://localhost:8080` (the custom server's default `PORT`). The session and join API routes also need `DATABASE_URL` and `SESSION_SECRET` in the app environment and an up-to-date schema: export both from `.env.example` (or copy them into `apps/web/.env.local`) and run `pnpm --filter @simon-says/db migrate:deploy` before `pnpm dev`. Run `pnpm services:down` to stop the local services. The Compose configuration uses PostgreSQL and a private SeaweedFS S3 bucket with local credentials. The root `.env` configures the database scripts; Next.js loads app-specific settings from `apps/web/.env.local` when needed. Do not use local credentials for deployed services.
 
 To try session creation and joining locally, apply migrations with `pnpm --filter @simon-says/db migrate:deploy`, then start the server with the root `.env` exported (`set -a; . ./.env; set +a; pnpm dev`) so it has `DATABASE_URL` and `SESSION_SECRET`. Open `/host/new` in one window and the join link in a private window. Use `localhost`: the device cookie is `Secure` on any other host, so a phone on a LAN IP over HTTP cannot join; test phones against the deployed HTTPS URL.
 
@@ -137,3 +137,7 @@ export ELASTIC_MCP_AUTHORIZATION="ApiKey $(security find-generic-password -s ela
 Official `ai-sdk`, `vercel-react-best-practices`, and `elasticsearch-onboarding` skills are vendored in `.agents/skills/` for Codex, with relative `.claude/skills/` symlinks for Claude Code. They are available from a fresh clone without installing app dependencies. Start a new agent session after changing skills.
 
 See [agent skill provenance and updates](docs/agent-skills.md) for pinned sources, installation commands, and the retired Next.js best-practices skill. Live captions are confirmed as OpenAI `gpt-realtime-whisper` through server-only AI SDK streaming windows ([Plan B](docs/architecture.md#transcription-and-text-passes)); dependencies and runtime integration remain unimplemented and unverified.
+
+## Local capture sink
+
+Run `pnpm exec tsx scripts/capture-sink.ts` beside `pnpm dev` for a local-only WebSocket sink at `ws://127.0.0.1:8787`. Pass that URL to `HostCapture` in a host integration harness; Track 1's host controls are a separate integration. The sink acknowledges binary frames and prints only frame counts, arrival rate, last sequence/sample offset, and validation errors on disconnect. It has no authentication, persistence, or transcription and binds only to loopback.

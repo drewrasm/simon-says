@@ -4,25 +4,115 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Merging a deploy PR must not publish another image or open another PR.
+    paths-ignore: [infra/k8s/kustomization.yaml]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# Serialize releases, including the mutable main tag. PR checks can be cancelled.
 concurrency:
   group: check-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm build
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+      - name: Build image without publishing
+        run: docker build --platform linux/amd64 -t simon-says:ci .
+      - name: Check container transport locally
+        env:
+          PROBE_TOKEN: local-checkpoint-0a-probe-token-12345
+        run: |
+          trap 'docker logs simon-says-ci; docker rm -f simon-says-ci' EXIT
+          docker run -d --name simon-says-ci -p 127.0.0.1:8080:8080 \
+            -e PROBE_TOKEN -e DATABASE_URL=postgresql://dummy:dummy@127.0.0.1:5432/dummy simon-says:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/readyz; then break; fi
+            sleep 1
+          done
+          node scripts/probe.mjs
+          docker stop --time 20 simon-says-ci
+          test "$(docker inspect -f '{{.State.ExitCode}}' simon-says-ci)" = 0
+      - name: Render manifests offline
+        run: KUBECONFIG=/dev/null kubectl kustomize infra/k8s > /tmp/simon-says.yaml
+
+  publish:
+    needs: [check, container]
+    if: >-
+      github.repository == 'drewrasm/simon-says' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Skip superseded releases
+        id: current
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+            git fetch --unshallow origin main
+          fi
+          head=$(git rev-parse origin/main)
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            # Capture the diff separately so a Git failure cannot look like no changes.
+            source_changes=$(git diff --name-only "$GITHUB_SHA" "$head" -- . ':!infra/k8s/kustomization.yaml')
+            if [ -n "$source_changes" ]; then
+              message="Main advanced with source changes; skipping the deploy PR for $GITHUB_SHA."
+              echo "::warning::$message"
+              echo "$message" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            message="Main advanced only via kustomization; proposing $GITHUB_SHA on top of $head."
+            echo "::warning::$message"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo 'release=true' >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        if: steps.current.outputs.release == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish amd64 image
+        if: steps.current.outputs.release == 'true'
+        run: |
+          image=ghcr.io/drewrasm/simon-says
+          docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -t "$image:$GITHUB_SHA" -t "$image:main" .
+          docker push "$image:$GITHUB_SHA"
+          docker push "$image:main"
+      - name: Propose immutable deploy tag through a PR
+        if: steps.current.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/propose-deploy.sh

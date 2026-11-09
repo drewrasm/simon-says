@@ -20,7 +20,7 @@ See the [deployment plan](../docs/deployment.md) and [local commands](../README.
 KUBECONFIG=/dev/null kubectl kustomize infra/k8s
 ```
 
-Run from the repository root. Rendering does not contact a cluster or validate installed CRDs. Never apply against the machine's default context. The image `example.invalid/simon-says/app:REPLACE_BEFORE_DEPLOY` must be replaced by an operator with an authorized immutable reference. No registry publication or visibility change is configured. CI only checks and builds.
+Run from the repository root. Rendering does not contact a cluster or validate installed CRDs. Never apply against the machine's default context. The image points to `ghcr.io/drewrasm/simon-says:main` for bootstrap. Merge the first Actions-generated deploy PR to pin a successfully published full SHA before applying Argo CD. Main-only Actions publication and deploy PRs are described in the [release flow](../docs/deployment.md#release-flow-c1a). An operator must make the GHCR package public; no visibility change is automated.
 
 The starter says the host routes `simon-says.cnh.radarhq.io` to Service `app`, port 80. Its HTTPRoute is retained for convention but is inert inside the vcluster, which has no Gateway. Actual HTTPS, upgrade routing, and buffering remain unverified.
 
@@ -28,4 +28,4 @@ App + database steady-state requests total 350m CPU / 768Mi, limits 1.5 CPU / 15
 
 CloudNativePG is expected to create `db-rw:5432` and Secret `db-app` with `uri`. The app references that Secret for `DATABASE_URL`; provider and probe settings reference `app-credentials` by key name only. All are optional for the current shell. No Secret values are committed. A future persistence-backed app must make its required configuration explicit. The current image does not run migrations or contain the Prisma CLI.
 
-`k8s/migration-job.yaml.example` is a commented outline, excluded from rendering, awaiting Track 3 migrations and a dedicated image plus release serialization. `argocd/application.yaml` is a file only, outside kustomization, with automatic sync disabled. Do not apply it or enable GitOps without separate authorization. Private repository/image access, database/storage persistence, backups, migration execution, Dash0, rollout, and rollback remain pending. Preserve local Compose for development.
+`k8s/migration-job.yaml.example` is a commented outline, excluded from rendering, awaiting Track 3 migrations and a dedicated image plus release serialization. `argocd/application.yaml` is a file only, outside kustomization, with automated sync, pruning, and self-healing enabled. Do not apply it or activate GitOps without separate explicit authorization through Radar on cluster `kiTZ7VFRruo`. Private repository/image access, database/storage persistence, backups, migration execution, Dash0, rollout, and rollback remain pending. Preserve local Compose for development.
