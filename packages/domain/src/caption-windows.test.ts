@@ -68,6 +68,31 @@ describe("QuietDetector", () => {
   });
 });
 
+describe("QuietDetector noise floor", () => {
+  it("re-learns a louder room after digital silence", () => {
+    const detector = new QuietDetector({ sampleRate: RATE });
+    const silence = new Int16Array(RATE);
+    const hum = new Int16Array(RATE * 10).map((_, i) =>
+      Math.round(100 * Math.sin(i / 3)),
+    );
+    detector.push(0, silence);
+    const units = detector.push(RATE, hum);
+    // After the 5 s floor window turns over, the hum reads as quiet again.
+    expect(units.slice(-100).every((u) => u.quiet)).toBe(true);
+  });
+
+  it("does not learn continuous speech as the floor", () => {
+    const detector = new QuietDetector({ sampleRate: RATE });
+    const audio = synthesize([{ ms: 20_000, kind: "speech" }], RATE);
+    const units = [...frames(audio, FRAME)].flatMap((f) =>
+      detector.push(f.sampleOffset, f.samples),
+    );
+    const quietShare =
+      units.slice(250).filter((u) => u.quiet).length / (units.length - 250);
+    expect(quietShare).toBeLessThan(0.05);
+  });
+});
+
 describe("QuietDetector discontinuities", () => {
   it("restarts units at a sample-offset gap instead of spanning it", () => {
     const detector = new QuietDetector({ sampleRate: RATE });
@@ -146,6 +171,39 @@ describe("WindowPlanner", () => {
       expect(lengthMs).toBeGreaterThanOrEqual(15_000);
       expect(lengthMs).toBeLessThanOrEqual(27_000);
     }
+  });
+
+  it("prefers a breath-length pause after 20 s over cutting mid-speech", () => {
+    const spans: Span[] = [];
+    // 2 s phrases with 160 ms breaths: too short for a 300 ms pause cut.
+    for (let t = 0; t < 30_000; t += 2_160) {
+      spans.push({ ms: 2_000, kind: "speech" }, { ms: 160, kind: "quiet" });
+    }
+    const { cuts, cutMs } = run(spans);
+    expect(cuts[0]!.reason).toBe("short_pause");
+    expect(cutMs[0]).toBeGreaterThanOrEqual(20_000);
+    expect(cutMs[0]).toBeLessThan(25_000);
+  });
+
+  it("does not count a quiet run across an audio gap", () => {
+    const planner = new WindowPlanner({
+      ...DEFAULT_WINDOW_PLANNER_CONFIG,
+      sampleRate: RATE,
+    });
+    const unit = (start: number, quiet: boolean) => ({
+      startSample: start,
+      endSample: start + 480,
+      dbfs: quiet ? -70 : -15,
+      quiet,
+    });
+    // 16 s of speech, 200 ms quiet, a 1 s gap, 200 ms quiet: two short
+    // quiet runs that would only reach the 300 ms pause if joined across it.
+    const units = [];
+    for (let s = 0; s < 384_000; s += 480) units.push(unit(s, false));
+    for (let s = 384_000; s < 388_800; s += 480) units.push(unit(s, true));
+    for (let s = 412_800; s < 417_600; s += 480) units.push(unit(s, true));
+    const cuts = planner.push(units).filter((d) => d.kind === "cut");
+    expect(cuts).toEqual([]);
   });
 
   it("rejects invalid configs", () => {

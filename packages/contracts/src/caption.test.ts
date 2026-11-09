@@ -26,6 +26,38 @@ describe("caption contracts", () => {
     expect(segmentDocumentId({ ...segment, revision: 2 })).toBe("s1:2:w7-0:2");
   });
 
+  it("keeps document IDs unambiguous by forbidding the separator", () => {
+    expect(
+      transcriptSegmentSchema.safeParse({ ...segment, sessionId: "a:1:b" })
+        .success,
+    ).toBe(false);
+    expect(
+      transcriptSegmentSchema.safeParse({ ...segment, segmentId: "b:2:c" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("rejects final events carrying another window's segments", () => {
+    const final = {
+      cursor: "c1",
+      sessionId: "s1",
+      kind: "caption.final",
+      epoch: 2,
+      windowId: "w7",
+      segments: [segment],
+    };
+    expect(captionEventSchema.safeParse(final).success).toBe(true);
+    for (const foreign of [
+      { ...segment, sessionId: "s2" },
+      { ...segment, epoch: 3 },
+      { ...segment, windowId: "w8" },
+    ]) {
+      expect(
+        captionEventSchema.safeParse({ ...final, segments: [foreign] }).success,
+      ).toBe(false);
+    }
+  });
+
   it("rejects segments that end before they start", () => {
     expect(
       transcriptSegmentSchema.safeParse({ ...segment, endMs: 1 }).success,

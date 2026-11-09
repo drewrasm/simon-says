@@ -5,6 +5,10 @@
 
 export const ANALYSIS_UNIT_MS = 20;
 const SILENCE_DBFS = -100;
+/** 5 s of 20 ms units for the rolling noise-floor estimate. */
+const FLOOR_WINDOW_UNITS = 250;
+/** Keep the default floor until 0.5 s of audio has been seen. */
+const FLOOR_MIN_UNITS = 25;
 
 export type AnalysisUnit = {
   /** First sample of the unit on the session source clock. */
@@ -43,8 +47,10 @@ export function rmsDbfs(
 
 /**
  * Splits frames into 20 ms units and classifies each as quiet or speech.
- * The threshold adapts to a slow-moving noise floor so a room hum or a hot
- * mic preamp does not read as continuous speech.
+ * The noise floor is the 10th percentile of the last 5 s of unit levels, so
+ * it follows a room hum or hot preamp up and down without locking in after
+ * silence, and continuous speech (whose quietest tenth is still syllable
+ * troughs) does not become the floor.
  */
 export class QuietDetector {
   private readonly unitSamples: number;
@@ -52,6 +58,7 @@ export class QuietDetector {
   private readonly maxQuietDbfs: number;
   private readonly minQuietDbfs: number;
   private noiseFloorDbfs = -60;
+  private recentLevels: number[] = [];
   private pending: Int16Array;
   private pendingCount = 0;
   private pendingStartSample: number | null = null;
@@ -87,6 +94,8 @@ export class QuietDetector {
     if (expected !== sampleOffset) {
       this.pendingStartSample = sampleOffset;
       this.pendingCount = 0;
+      // Audio across a gap is not one room; relearn the floor.
+      if (expected !== null) this.recentLevels = [];
     }
     let index = 0;
     while (index < samples.length) {
@@ -112,11 +121,12 @@ export class QuietDetector {
     const startSample = this.pendingStartSample ?? 0;
     const dbfs = rmsDbfs(this.pending, 0, this.unitSamples);
     const quiet = dbfs <= this.thresholdDbfs;
-    // Track the floor quickly downward and slowly upward, only from quiet units.
-    if (dbfs < this.noiseFloorDbfs) {
-      this.noiseFloorDbfs += (dbfs - this.noiseFloorDbfs) * 0.3;
-    } else if (quiet) {
-      this.noiseFloorDbfs += (dbfs - this.noiseFloorDbfs) * 0.02;
+    this.recentLevels.push(dbfs);
+    if (this.recentLevels.length > FLOOR_WINDOW_UNITS)
+      this.recentLevels.shift();
+    if (this.recentLevels.length >= FLOOR_MIN_UNITS) {
+      const sorted = [...this.recentLevels].sort((a, b) => a - b);
+      this.noiseFloorDbfs = sorted[Math.floor(sorted.length * 0.1)]!;
     }
     this.pendingCount = 0;
     return {

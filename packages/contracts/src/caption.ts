@@ -5,7 +5,17 @@ import { z } from "zod";
  * All times are session-relative milliseconds on the host source clock.
  */
 
-const id = z.string().min(1).max(200);
+/**
+ * Identifiers that compose into document IDs. Letters, digits, `.`, `_` and
+ * `-` only, so the `:` separator in document IDs cannot be forged.
+ */
+const id = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9._-]+$/, "use letters, digits, '.', '_' or '-'");
+/** Opaque cursor; never composed into other IDs. */
+const cursor = z.string().min(1).max(200);
 const ms = z.number().nonnegative();
 const epoch = z.number().int().min(1);
 
@@ -57,7 +67,7 @@ export function segmentDocumentId(
 
 const eventBase = {
   /** Opaque, monotonically ordered replay cursor. */
-  cursor: id,
+  cursor,
   sessionId: id,
 };
 
@@ -78,13 +88,27 @@ export const captionInterimEventSchema = z
   });
 
 /** Final segments for a window; supersede that window's interim text. */
-export const captionFinalEventSchema = z.object({
-  ...eventBase,
-  kind: z.literal("caption.final"),
-  epoch,
-  windowId: id,
-  segments: z.array(transcriptSegmentSchema).max(500),
-});
+export const captionFinalEventSchema = z
+  .object({
+    ...eventBase,
+    kind: z.literal("caption.final"),
+    epoch,
+    windowId: id,
+    segments: z.array(transcriptSegmentSchema).max(500),
+  })
+  .refine(
+    (event) =>
+      event.segments.every(
+        (segment) =>
+          segment.sessionId === event.sessionId &&
+          segment.epoch === event.epoch &&
+          segment.windowId === event.windowId,
+      ),
+    {
+      message: "segments must belong to the event's session, epoch and window",
+      path: ["segments"],
+    },
+  );
 
 export const captionGapReasonSchema = z.enum([
   "transcription_failed",
