@@ -14,6 +14,7 @@ import { EventHub } from "./event-hub";
 import type { IngestAuthority } from "./ingest-authority";
 import type { CaptionDelay } from "./openai-window";
 import { InMemorySegmentSink, type SegmentSink } from "./segment-sink";
+import { SseSubscriber } from "./sse-subscriber";
 import { WindowManager } from "./window-manager";
 import type { CaptionTelemetry } from "./telemetry";
 
@@ -22,6 +23,8 @@ type Session = {
   epoch: number;
   manager: WindowManager | undefined;
   host: WebSocket | undefined;
+  reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  ended: boolean;
 };
 const route = /^\/api\/sessions\/([A-Za-z0-9._-]{1,200})\/(ingest|events)$/;
 
@@ -33,6 +36,7 @@ export class CaptionTransport {
     perMessageDeflate: false,
   });
   private readonly sessions = new Map<string, Session>();
+  private readonly retiredManagers = new Set<WindowManager>();
   private readonly streams = new Set<ServerResponse>();
   private stopping = false;
   private readonly heartbeat = setInterval(() => {
@@ -49,6 +53,8 @@ export class CaptionTransport {
       delay?: CaptionDelay;
       sink?: SegmentSink;
       telemetry?: CaptionTelemetry;
+      reconnectGraceMs?: number;
+      finishTimeoutMs?: number;
       managerConfig?: Pick<
         ConstructorParameters<typeof WindowManager>[0],
         "planner" | "timeoutMs"
@@ -65,6 +71,8 @@ export class CaptionTransport {
         epoch: 0,
         manager: undefined,
         host: undefined,
+        reconnectTimer: undefined,
+        ended: false,
       };
       this.sessions.set(id, session);
       if (!this.options.model)
@@ -112,26 +120,17 @@ export class CaptionTransport {
     res.flushHeaders();
     this.streams.add(res);
     const lastId = req.headers["last-event-id"];
-    const unsubscribe = session.hub.subscribe(
-      (event) => {
-        try {
-          if (
-            !res.write(
-              `id: ${event.cursor}\ndata: ${JSON.stringify(event)}\n\n`,
-            )
-          )
-            res.destroy();
-        } catch {
-          // A failed subscriber must not poison sink completion or other readers.
-          res.destroy();
-        }
-      },
+    const subscriber = new SseSubscriber(res);
+    const unsubscribe = session.hub.subscribeBatch(
+      (events) => subscriber.enqueue(events),
       typeof lastId === "string" ? lastId : undefined,
     );
+    if (res.destroyed) unsubscribe();
     // Bound idle/lost clients; EventSource reconnects with Last-Event-ID.
     const lifetime = setTimeout(() => res.end(), 30 * 60 * 1000);
     res.once("close", () => {
       clearTimeout(lifetime);
+      subscriber.close();
       unsubscribe();
       this.streams.delete(res);
     });
@@ -176,7 +175,7 @@ export class CaptionTransport {
     };
     const helloTimeout = setTimeout(() => reject("invalid_frame"), 5000);
     const lifetime = setTimeout(
-      () => ws.close(1000, "reconnect"),
+      () => ws.close(1012, "reconnect"),
       30 * 60 * 1000,
     );
     const ack = () => {
@@ -236,8 +235,21 @@ export class CaptionTransport {
           );
           session.host.close(1008, "stale_epoch");
         }
+        if (hello.data.epoch === session.epoch && session.ended) {
+          reject("session_ended");
+          return;
+        }
+        clearTimeout(session.reconnectTimer);
+        session.reconnectTimer = undefined;
         if (hello.data.epoch > session.epoch) {
-          session.manager?.cancel();
+          if (session.manager) {
+            const retired = session.manager;
+            this.retiredManagers.add(retired);
+            void retired.finish(this.options.finishTimeoutMs).then(() => {
+              this.retiredManagers.delete(retired);
+            });
+          }
+          session.ended = false;
           session.manager = undefined;
           session.epoch = hello.data.epoch;
           if (this.options.model)
@@ -317,29 +329,50 @@ export class CaptionTransport {
       received++;
       if (received >= 5) ack();
     });
-    ws.once("close", () => {
+    ws.once("close", (code) => {
       clearTimeout(helloTimeout);
       clearTimeout(lifetime);
       clearInterval(interval);
       if (session.host === ws) {
         session.host = undefined;
-        // Keep uncommitted audio/windows alive for same-epoch resend; provider deadlines bound them.
+        if (this.stopping) return;
+        const finish = () => {
+          session.reconnectTimer = undefined;
+          session.ended = true;
+          void session.manager?.finish(this.options.finishTimeoutMs);
+        };
+        if (code === 1000) finish();
+        else
+          session.reconnectTimer = setTimeout(
+            finish,
+            this.options.reconnectGraceMs ?? 10000,
+          );
         session.hub.publish({
           kind: "capture.state",
-          session: "degraded",
-          audio: "stalled",
+          session: code === 1000 ? "ended" : "degraded",
+          audio: code === 1000 ? "stopped" : "stalled",
           captionLagMs: null,
         });
       }
     });
   }
 
-  close() {
+  async close(drainMs = 5000) {
     this.stopping = true;
     clearInterval(this.heartbeat);
-    for (const session of this.sessions.values()) session.manager?.cancel();
-    for (const res of this.streams) res.end();
+    for (const session of this.sessions.values())
+      clearTimeout(session.reconnectTimer);
+    // Stop new input while keeping SSE open for tail finals/gaps.
     for (const ws of this.wss.clients) ws.terminate();
+    await Promise.all(
+      [
+        ...this.retiredManagers,
+        ...[...this.sessions.values()].flatMap((session) =>
+          session.manager ? [session.manager] : [],
+        ),
+      ].map((manager) => manager.finish(drainMs)),
+    );
+    for (const res of this.streams) res.end();
     this.wss.close();
   }
 }

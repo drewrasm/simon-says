@@ -34,3 +34,14 @@ describe("runtime environment boundary", () => {
     }
   });
 });
+
+it("validates the bounded caption reconnect grace", () => {
+  expect(readRuntimeEnv({}).captionReconnectGraceMs).toBe(10000);
+  expect(
+    readRuntimeEnv({ CAPTION_RECONNECT_GRACE_MS: "0" }).captionReconnectGraceMs,
+  ).toBe(0);
+  for (const value of ["-1", "60001", "NaN", "1.5"])
+    expect(() => readRuntimeEnv({ CAPTION_RECONNECT_GRACE_MS: value })).toThrow(
+      "CAPTION_RECONNECT_GRACE_MS",
+    );
+});

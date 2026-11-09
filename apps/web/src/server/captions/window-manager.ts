@@ -45,6 +45,7 @@ export class WindowManager {
   private nextSeq = 0;
   private lagMs = 800;
   private stopped = false;
+  private finishing: Promise<void> | undefined;
 
   constructor(
     private readonly options: {
@@ -126,8 +127,6 @@ export class WindowManager {
         );
         this.active = this.prewarmed ?? this.create(decision.cutSample);
         this.active.startSample = decision.cutSample;
-        this.options.telemetry?.(`window_cut_${decision.reason}`, 1);
-        this.active.endSample = decision.cutSample;
         this.prewarmed = undefined;
         this.active.cutAt = performance.now();
       }
@@ -324,7 +323,32 @@ export class WindowManager {
     }
   }
 
-  async finish(): Promise<void> {
+  finish(timeoutMs = 5000): Promise<void> {
+    return (this.finishing ??= this.finishWithin(timeoutMs));
+  }
+
+  private async finishWithin(timeoutMs: number): Promise<void> {
+    let expire!: () => void;
+    const expired = new Promise<void>((resolve) => {
+      expire = resolve;
+    });
+    const deadline = setTimeout(() => {
+      // Fence stalled provider/sink work before reporting every unresolved source range.
+      this.options.assembler.cancel();
+      for (const window of this.windows) {
+        if (!window.cancelled && window.endSample > window.startSample)
+          this.options.hub.publish({
+            kind: "caption.gap",
+            epoch: this.options.epoch,
+            startMs: sampleOffsetToMs(window.startSample),
+            endMs: sampleOffsetToMs(window.endSample),
+            reason: "transcription_failed",
+          });
+      }
+      this.cancel();
+      expire();
+    }, timeoutMs);
+
     this.stopped = true;
     if (this.prewarmed) {
       this.prewarmed.cancelled = true;
@@ -339,7 +363,11 @@ export class WindowManager {
       this.active.closed = true;
       this.active.wake?.();
     }
-    await Promise.all([...this.windows].map((window) => window.task));
+    await Promise.race([
+      Promise.all([...this.windows].map((window) => window.task)),
+      expired,
+    ]);
+    clearTimeout(deadline);
   }
 
   /** Epoch fencing/shutdown suppresses all late provider output. */

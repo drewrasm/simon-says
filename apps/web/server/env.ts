@@ -16,6 +16,17 @@ export function readRuntimeEnv(
   if (!/^[A-Za-z0-9._-]{1,200}$/.test(captionModel))
     throw new Error("CAPTION_MODEL is invalid.");
   const captionDelay = parseCaptionDelay(env.CAPTION_DELAY ?? "low");
+  const captionReconnectGraceMs = Number(
+    env.CAPTION_RECONNECT_GRACE_MS ?? "10000",
+  );
+  if (
+    !Number.isInteger(captionReconnectGraceMs) ||
+    captionReconnectGraceMs < 0 ||
+    captionReconnectGraceMs > 60000
+  )
+    throw new Error(
+      "CAPTION_RECONNECT_GRACE_MS must be an integer from 0 to 60000.",
+    );
   const captionsDevSession = env.CAPTIONS_DEV_SESSION;
   if (
     captionsDevSession !== undefined &&
@@ -30,6 +41,7 @@ export function readRuntimeEnv(
     probeToken,
     captionModel,
     captionDelay,
+    captionReconnectGraceMs,
     captionsDevSession,
     openaiApiKey,
   };

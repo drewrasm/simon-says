@@ -1,5 +1,5 @@
 import { createServer, IncomingMessage } from "node:http";
-import { once } from "node:events";
+import { EventEmitter, once } from "node:events";
 import { Socket } from "node:net";
 import { describe, expect, it, vi } from "vitest";
 import { MockTranscriptionModelV4 } from "ai/test";
@@ -14,6 +14,7 @@ import {
 } from "@simon-says/contracts/caption";
 import { serverIngestMessageSchema } from "@simon-says/contracts/ingest";
 import { CaptionAssembler, type WindowResult } from "./assembler";
+import { SseSubscriber } from "./sse-subscriber";
 import { EventHub } from "./event-hub";
 import { RingBuffer } from "./ring-buffer";
 import { InMemorySegmentSink, type SegmentSink } from "./segment-sink";
@@ -218,7 +219,11 @@ describe("offline live captions", () => {
       await tick();
     }
     await manager.finish();
-    expect(telemetry).toHaveBeenCalledWith("window_cut_short_pause", 1);
+    expect(
+      telemetry.mock.calls.filter(
+        ([name]) => name === "window_cut_short_pause",
+      ),
+    ).toEqual([["window_cut_short_pause", 1]]);
     const finals = events.filter((event) => event.kind === "caption.final");
     expect(finals).toHaveLength(2);
     for (const event of events)
@@ -425,6 +430,8 @@ describe("offline live captions", () => {
     expect(snapshot.map((e) => e.kind)).toEqual([
       "capture.state",
       "caption.final",
+      "clock.heartbeat",
+      "clock.heartbeat",
     ]);
     expect(snapshot[1]!.cursor > snapshot[0]!.cursor).toBe(true);
   });
@@ -482,12 +489,18 @@ function syntheticWavFrames(count: number) {
   );
 }
 
-async function socketServer(model = true) {
-  const fake = fakeModel();
+async function socketServer(
+  model = true,
+  fake = fakeModel(),
+  reconnectGraceMs = 10000,
+  sink?: SegmentSink,
+) {
   const transport = new CaptionTransport({
     authority: new DevIngestAuthority("dev.session_1-test"),
     ...(model ? { model: fake.model } : {}),
     managerConfig: { planner },
+    reconnectGraceMs,
+    ...(sink ? { sink } : {}),
   });
   const server = createServer((req, res) => {
     if (!transport.handleHttp(req, res)) res.writeHead(404).end();
@@ -502,11 +515,11 @@ async function socketServer(model = true) {
     throw new Error("missing_address");
   const base = `http://127.0.0.1:${address.port}`;
   const close = async () => {
-    transport.close();
+    await transport.close();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   };
-  return { base, close };
+  return { base, close, transport, fake };
 }
 
 it("real WebSocket hello, WAV frames, batched ack, ordered SSE finals and epoch fencing", async () => {
@@ -638,6 +651,380 @@ it("missing key exposes a clear degraded SSE state without crashing the server",
     ).toBe(403);
   } finally {
     abort.abort();
+    await server.close();
+  }
+});
+
+class SlowResponse extends EventEmitter {
+  writableLength = 0;
+  destroyed = false;
+  frames: string[] = [];
+  write(frame: string) {
+    this.frames.push(frame);
+    this.writableLength += Buffer.byteLength(frame);
+    return false;
+  }
+  destroy() {
+    this.destroyed = true;
+    this.emit("close");
+    return this;
+  }
+  drain() {
+    this.writableLength = 0;
+    this.emit("drain");
+  }
+  get events(): CaptionEvent[] {
+    return this.frames.map((frame) =>
+      captionEventSchema.parse(JSON.parse(frame.split("data: ")[1]!)),
+    );
+  }
+}
+function largeHistory() {
+  const hub = new EventHub("dev");
+  for (let i = 0; i < 500; i++) {
+    hub.publish({
+      kind: "caption.interim",
+      epoch: 1,
+      windowId: `1-${i}`,
+      text: "x".repeat(10000),
+      startMs: i,
+      estimatedEndMs: i + 1,
+    });
+    hub.publish({
+      kind: "caption.final",
+      epoch: 1,
+      windowId: `1-${i}`,
+      segments: [
+        {
+          sessionId: "dev",
+          epoch: 1,
+          windowId: `1-${i}`,
+          segmentId: `1-${i}-0`,
+          revision: 1,
+          text: "x".repeat(10000),
+          startMs: i,
+          endMs: i + 1,
+          provenance: "live",
+          timing: { kind: "estimated", uncertaintyMs: 1 },
+        },
+      ],
+    });
+  }
+  return hub;
+}
+function drainAll(socket: SlowResponse) {
+  for (let i = 0; i < 1100; i++) socket.drain();
+}
+
+it("delivers 500 large finals and retained interims in order through repeated backpressure", () => {
+  const hub = largeHistory();
+  const socket = new SlowResponse();
+  const subscriber = new SseSubscriber(socket);
+  const unsubscribe = hub.subscribeBatch((events) =>
+    subscriber.enqueue(events),
+  );
+  expect(socket.frames).toHaveLength(1);
+  expect(socket.destroyed).toBe(false);
+  drainAll(socket);
+  const finals = socket.events.filter(
+    (event) => event.kind === "caption.final",
+  );
+  expect(finals.map((event) => event.windowId)).toEqual(
+    Array.from({ length: 500 }, (_, i) => `1-${i}`),
+  );
+  expect(socket.events.map((event) => event.cursor)).toEqual(
+    socket.events.map((event) => event.cursor).sort(),
+  );
+  expect(socket.destroyed).toBe(false);
+  unsubscribe();
+  socket.destroy();
+  expect(socket.listenerCount("drain")).toBe(0);
+});
+
+it("resumes a partially delivered snapshot without repeating or skipping finals", () => {
+  const hub = largeHistory();
+  const first = new SlowResponse();
+  const subscriber = new SseSubscriber(first);
+  const unsubscribe = hub.subscribeBatch((events) =>
+    subscriber.enqueue(events),
+  );
+  for (let i = 0; i < 123; i++) first.drain();
+  const cursor = first.events.at(-1)!.cursor;
+  first.destroy();
+  unsubscribe();
+  const second = new SlowResponse();
+  const resumed = new SseSubscriber(second);
+  const stop = hub.subscribeBatch((events) => resumed.enqueue(events), cursor);
+  drainAll(second);
+  const events = [...first.events, ...second.events];
+  expect(
+    events
+      .filter((event) => event.kind === "caption.final")
+      .map((event) => event.windowId),
+  ).toEqual(Array.from({ length: 500 }, (_, i) => `1-${i}`));
+  expect(new Set(events.map((event) => event.cursor)).size).toBe(events.length);
+  stop();
+  second.destroy();
+});
+
+it("preflights oversized snapshots and disconnects live overflow without writing a partial event", () => {
+  const hub = largeHistory();
+  const socket = new SlowResponse();
+  const subscriber = new SseSubscriber(socket, 1024);
+  hub.subscribeBatch((events) => subscriber.enqueue(events))();
+  expect(socket.destroyed).toBe(true);
+  expect(socket.frames).toHaveLength(0);
+  const live = new SlowResponse();
+  const queue = new SseSubscriber(live, 512);
+  const event = new EventHub("dev").publish({
+    kind: "clock.heartbeat",
+    sourceMs: 0,
+  });
+  for (let i = 0; i < 10; i++) queue.enqueue([event]);
+  expect(live.destroyed).toBe(true);
+  expect(live.frames).toHaveLength(1);
+  expect(live.events).toEqual([event]);
+  live.drain();
+  expect(live.frames).toHaveLength(1);
+});
+
+async function observe(server: Awaited<ReturnType<typeof socketServer>>) {
+  const response = await fetch(
+    `${server.base}/api/sessions/dev.session_1-test/events`,
+  );
+  const reader = response.body!.getReader();
+  const events: CaptionEvent[] = [];
+  const reading = (async () => {
+    let pending = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += new TextDecoder().decode(value);
+      let boundary: number;
+      while ((boundary = pending.indexOf("\n\n")) >= 0) {
+        const message = pending.slice(0, boundary);
+        pending = pending.slice(boundary + 2);
+        const data = message
+          .split("\n")
+          .find((line) => line.startsWith("data: "));
+        if (data)
+          events.push(captionEventSchema.parse(JSON.parse(data.slice(6))));
+      }
+    }
+  })();
+  return {
+    events,
+    close: async () => {
+      await reader.cancel();
+      await reading;
+    },
+  };
+}
+async function host(
+  server: Awaited<ReturnType<typeof socketServer>>,
+  epoch = 1,
+) {
+  const ws = new WebSocket(
+    `${server.base.replace("http:", "ws:")}/api/sessions/dev.session_1-test/ingest`,
+  );
+  await once(ws, "open");
+  const ready = once(ws, "message");
+  ws.send(
+    JSON.stringify({
+      type: "hello",
+      epoch,
+      lastSentSeq: -1,
+      sampleRate: 24000,
+    }),
+  );
+  const [message] = await ready;
+  expect(JSON.parse(message.toString())).toMatchObject({
+    type: "ready",
+    epoch,
+  });
+  return ws;
+}
+
+it.each([0, 100])(
+  "commits tail audio on normal host stop, with provider failures=%i",
+  async (fail) => {
+    const server = await socketServer(true, fakeModel({ fail }));
+    const feed = await observe(server);
+    const ws = await host(server);
+    try {
+      ws.send(syntheticWavFrames(1)[0]!);
+      await vi.waitFor(() =>
+        expect(server.fake.calls[0]?.chunks).toHaveLength(2400),
+      );
+      ws.close(1000, "host stop");
+      await vi.waitFor(() =>
+        expect(
+          feed.events.some(
+            (event) => event.kind === (fail ? "caption.gap" : "caption.final"),
+          ),
+        ).toBe(true),
+      );
+      expect(server.fake.calls.filter((call) => call.committed)).toHaveLength(
+        fail ? 3 : 1,
+      );
+    } finally {
+      ws.terminate();
+      await feed.close();
+      await server.close();
+    }
+  },
+);
+
+it("resumes the same window within grace and commits only after abnormal reconnect grace expires", async () => {
+  const server = await socketServer(true, fakeModel(), 200);
+  const feed = await observe(server);
+  let ws = await host(server);
+  try {
+    ws.send(syntheticWavFrames(1)[0]!);
+    await vi.waitFor(() =>
+      expect(server.fake.calls[0]?.chunks).toHaveLength(2400),
+    );
+    ws.terminate();
+    await once(ws, "close");
+    expect(server.fake.calls[0]?.committed).toBe(false);
+    ws = await host(server);
+    ws.send(encodeAudioFrame(frame(1, 42)));
+    await vi.waitFor(() =>
+      expect(server.fake.calls[0]?.chunks).toHaveLength(4800),
+    );
+    // The small test planner rotates at 200 ms; use a single frame on the next window.
+    ws.send(encodeAudioFrame(frame(2, 42)));
+    await vi.waitFor(() =>
+      expect(
+        server.fake.calls.some(
+          (call) => !call.committed && call.chunks.length > 0,
+        ),
+      ).toBe(true),
+    );
+    ws.terminate();
+    await vi.waitFor(() =>
+      expect(
+        feed.events.filter((event) => event.kind === "caption.final"),
+      ).toHaveLength(2),
+    );
+    expect(
+      server.fake.calls
+        .filter((call) => call.committed)
+        .flatMap((call) => call.chunks),
+    ).toEqual([
+      ...frame(0).samples,
+      ...frame(1, 42).samples,
+      ...frame(2, 42).samples,
+    ]);
+  } finally {
+    ws.terminate();
+    await feed.close();
+    await server.close();
+  }
+});
+
+it("finishes the old epoch tail when a newer host replaces it", async () => {
+  const server = await socketServer();
+  const feed = await observe(server);
+  const ws = await host(server);
+  let replacement: WebSocket | undefined;
+  try {
+    ws.send(syntheticWavFrames(1)[0]!);
+    await vi.waitFor(() =>
+      expect(server.fake.calls[0]?.chunks).toHaveLength(2400),
+    );
+    replacement = await host(server, 2);
+    await vi.waitFor(() =>
+      expect(feed.events).toContainEqual(
+        expect.objectContaining({
+          kind: "caption.final",
+          epoch: 1,
+          windowId: "1-0",
+        }),
+      ),
+    );
+  } finally {
+    ws.terminate();
+    replacement?.terminate();
+    await feed.close();
+    await server.close();
+  }
+});
+
+it.each(["success", "provider timeout", "sink timeout"])(
+  "shutdown handles tail audio: %s",
+  async (mode) => {
+    let release: (() => void) | undefined;
+    const fake = fakeModel({
+      finalDelay: () => (mode === "provider timeout" ? 100 : 0),
+    });
+    const server = await socketServer(
+      true,
+      fake,
+      10000,
+      mode === "sink timeout"
+        ? {
+            writeSegments: () =>
+              new Promise<void>((resolve) => {
+                release = resolve;
+              }),
+          }
+        : undefined,
+    );
+    const feed = await observe(server);
+    const ws = await host(server);
+    try {
+      ws.send(syntheticWavFrames(1)[0]!);
+      await vi.waitFor(() => expect(fake.calls[0]?.chunks).toHaveLength(2400));
+      await server.transport.close(mode === "success" ? 500 : 20);
+      await vi.waitFor(() =>
+        expect(feed.events).toContainEqual(
+          expect.objectContaining({
+            kind: mode === "success" ? "caption.final" : "caption.gap",
+            epoch: 1,
+          }),
+        ),
+      );
+      if (mode !== "success") {
+        expect(
+          feed.events.filter((event) => event.kind === "caption.gap"),
+        ).toMatchObject([{ startMs: 0, endMs: 100 }]);
+        release?.();
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        expect(
+          feed.events.some((event) => event.kind === "caption.final"),
+        ).toBe(false);
+      }
+    } finally {
+      release?.();
+      ws.terminate();
+      await feed.close();
+      await server.close();
+    }
+  },
+);
+
+it("shutdown waits for a replaced epoch still committing its tail", async () => {
+  const server = await socketServer(true, fakeModel({ finalDelay: () => 100 }));
+  const feed = await observe(server);
+  const ws = await host(server);
+  let replacement: WebSocket | undefined;
+  try {
+    ws.send(syntheticWavFrames(1)[0]!);
+    await vi.waitFor(() =>
+      expect(server.fake.calls[0]?.chunks).toHaveLength(2400),
+    );
+    replacement = await host(server, 2);
+    await server.transport.close();
+    await vi.waitFor(() =>
+      expect(feed.events).toContainEqual(
+        expect.objectContaining({ kind: "caption.final", epoch: 1 }),
+      ),
+    );
+  } finally {
+    ws.terminate();
+    replacement?.terminate();
+    await feed.close();
     await server.close();
   }
 });

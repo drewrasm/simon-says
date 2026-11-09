@@ -112,3 +112,9 @@ GHCR publication runs in GitHub Actions after main checks, using full commit SHA
 Track 2 supplies strict `segments-v1` and `observations-v1` mappings behind write aliases, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).
 
 The `.jina-embeddings-v5-text-small` default is a proposal owned by Track 3, configurable through `ELASTICSEARCH_INFERENCE_ID`. Cost, processing settings, and cloud app-key behavior remain unverified. Local smoke uses `.multilingual-e5-small-elasticsearch`; automatic inference and semantic search passed with zero cluster privileges. The v9 client is pinned to available 9.5.1; cloud 9.7.0 remains an authorized operator verification gate.
+
+## PR #13 caption review decisions (November 9, 2026)
+
+Host WebSocket close code 1000 is end of input until an explicit stop message exists. Other disconnects retain the window for a configurable ten-second grace; an ended epoch requires a higher epoch to restart. Replacement epochs finish previously accepted tails rather than cancelling them. Finishing is bounded at five seconds, including provider and segment-sink completion, then publishes exact-range gaps and suppresses late finals. Shutdown performs that finish while SSE is open within the process drain budget.
+
+SSE snapshots reuse original event cursors and merge retained finals, state, and log in cursor order. Per-subscriber queues pause on drain and cap buffered bytes at 8 MiB, enough for the 500-large-final regression scenario. Overflow preflights whole batches and disconnects only that reader. Replay remains process-local and bounded, not durable history. Deployment caption settings are wired, but development authority is never enabled by the checked-in cluster manifests.

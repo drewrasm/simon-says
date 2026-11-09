@@ -14,17 +14,22 @@ export class EventHub {
   private cursor = 0;
   private log: CaptionEvent[] = [];
   private finals: CaptionEvent[] = [];
-  private state: CaptionPayload = {
-    kind: "capture.state",
-    session: "setup",
-    audio: "stopped",
-    captionLagMs: null,
-  };
-  private readonly listeners = new Set<(event: CaptionEvent) => void>();
+  private state: CaptionEvent;
+  private readonly listeners = new Set<
+    (events: readonly CaptionEvent[]) => void
+  >();
   constructor(
     readonly sessionId: string,
     private readonly capacity = 500,
-  ) {}
+  ) {
+    this.state = this.stamp({
+      kind: "capture.state",
+      session: "setup",
+      audio: "stopped",
+      captionLagMs: null,
+    });
+    this.log.push(this.state);
+  }
 
   private stamp(payload: CaptionPayload): CaptionEvent {
     return captionEventSchema.parse({
@@ -42,8 +47,8 @@ export class EventHub {
       this.finals.push(event);
       if (this.finals.length > this.capacity) this.finals.shift();
     }
-    if (event.kind === "capture.state") this.state = payload;
-    for (const listener of this.listeners) listener(event);
+    if (event.kind === "capture.state") this.state = event;
+    for (const listener of this.listeners) listener([event]);
     return event;
   }
 
@@ -51,20 +56,36 @@ export class EventHub {
     listener: (event: CaptionEvent) => void,
     lastEventId?: string,
   ): () => void {
+    return this.subscribeBatch(
+      (events) => events.forEach(listener),
+      lastEventId,
+    );
+  }
+
+  /** Snapshot entries keep their original cursors; merge retained history in cursor order. */
+  subscribeBatch(
+    listener: (events: readonly CaptionEvent[]) => void,
+    lastEventId?: string,
+  ): () => void {
     const cursor = lastEventId === undefined ? NaN : Number(lastEventId);
+    const valid =
+      Number.isSafeInteger(cursor) && cursor >= 0 && cursor <= this.cursor;
     const oldest = Number(this.log[0]?.cursor ?? this.cursor + 1);
-    const replayable =
-      Number.isSafeInteger(cursor) &&
-      cursor >= oldest - 1 &&
-      cursor <= this.cursor;
-    if (replayable) {
-      for (const event of this.log)
-        if (Number(event.cursor) > cursor) listener(event);
-    } else {
-      listener(this.stamp(this.state));
-      for (const event of this.finals) listener(this.stamp(event));
-    }
+    const replayable = valid && cursor >= oldest - 1;
+    const history = replayable
+      ? this.log
+      : [
+          ...new Map(
+            [...this.finals, ...this.log, this.state].map((event) => [
+              event.cursor,
+              event,
+            ]),
+          ).values(),
+        ].sort((a, b) => Number(a.cursor) - Number(b.cursor));
     this.listeners.add(listener);
+    listener(
+      history.filter((event) => !valid || Number(event.cursor) > cursor),
+    );
     return () => this.listeners.delete(listener);
   }
 }

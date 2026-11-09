@@ -17,6 +17,7 @@ const captions = new CaptionTransport({
     process.env.NODE_ENV === "production",
   ),
   delay: runtime.captionDelay,
+  reconnectGraceMs: runtime.captionReconnectGraceMs,
   ...(runtime.openaiApiKey &&
   runtime.captionsDevSession &&
   process.env.NODE_ENV !== "production"
@@ -183,10 +184,9 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 /** Fail readiness first, release streams, and bound even stalled HTTP clients. */
-function shutdown(exitCode: number) {
+async function shutdown(exitCode: number) {
   if (stopping) return;
   stopping = true;
-  captions.close();
   ready = false;
   console.log("shutdown: draining");
   const deadline = setTimeout(() => {
@@ -197,6 +197,7 @@ function shutdown(exitCode: number) {
   }, drainMs);
   for (const res of streams) res.end();
   for (const ws of wss.clients) ws.close(1012, "service restart");
+  await captions.close(5000);
   server.close(() => {
     wss.close(() => {
       void app
@@ -213,8 +214,8 @@ function shutdown(exitCode: number) {
     });
   });
 }
-process.on("SIGTERM", () => shutdown(0));
-process.on("SIGINT", () => shutdown(0));
+process.on("SIGTERM", () => void shutdown(0));
+process.on("SIGINT", () => void shutdown(0));
 server.listen(port, "0.0.0.0", () => console.log(`HTTP listening on ${port}`));
 try {
   await app.prepare();
@@ -222,5 +223,5 @@ try {
   console.log("Next prepared");
 } catch {
   console.error("Next preparation failed");
-  shutdown(1);
+  void shutdown(1);
 }
