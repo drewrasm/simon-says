@@ -12,7 +12,7 @@ Keep durable choices here. Mark proposals explicitly; add rationale and conseque
 - **Database tooling:** Prisma for PostgreSQL. Local development uses PostgreSQL and a private SeaweedFS S3 bucket; cluster Postgres and private storage provisioning remain unverified.
 - **Toolchain:** Node.js 22.22.0, pnpm 11.24.0, Next.js 16.4.5, React 19.3.1, TypeScript 5.9.3, Vitest 5.1, and Prisma 7.10.1.
 - **Workspace:** strict TypeScript, pnpm workspaces, and shared shadcn components. The foundation includes a shadcn Button from the official registry with manual setup.
-- **Workflow:** no direct commits to `main`. Every change, including docs and CI, goes through a branch and pull request that passes `pnpm check` CI and Gitar review before merge. Auto-apply, automatic pushes, and merges by tools stay disabled unless separately authorized.
+- **Workflow:** no direct commits to `main`. Every change, including docs and CI, goes through a branch and pull request that passes `pnpm check` CI and Gitar review before merge, except the guarded machine-generated deploy-tag PRs described below. Auto-apply, automatic pushes, and merges by tools stay disabled unless separately authorized.
 - **Agent entry point:** `AGENTS.md` only; no `agent.md` alias.
 - **Hackathon scope:** use technology from all four sponsor tracks: Radar, Dash0, Sonar/Gitar, and Elasticsearch. These are selected integrations, not completed setup. See [scope and evidence](hackathon.md).
 - **Team:** three builders, with UI and transcription interests. Proposed ownership is in the [implementation plan](implementation-plan.md#three-builder-tracks).
@@ -105,7 +105,11 @@ Final publication waits for the segment sink. Sink failure emits degraded state 
 
 ## C1a release tags
 
-GHCR publication runs in GitHub Actions after main checks, using full commit SHA tags and a mutable `main` alias. Deploy tags land through `deploy/<sha>` PRs, preserving CI/Gitar review and the prohibition on direct main commits. Auto-merge is currently disabled in the repository; an administrator can enable it, while operators may merge manually after review. The Application file enables automated sync, self-healing, and final-wave pruning of eligible stateless resources (`PruneLast=true`). Data-bearing resources carry `Prune=false,Delete=false` and require a manual, approved removal; applying it still requires explicit operator approval through Radar. See the [release flow](deployment.md#release-flow-c1a) for bootstrap and recovery. Publication and cluster deployment are pending live verification.
+GHCR publication runs after main checks using full SHA tags and a mutable `main` alias. Source merges now deploy automatically through publish → `deploy/<sha>` PR → immediate `gh pr merge --merge` → Argo CD sync once activated. Deploy-tag PRs are the only class merged without Gitar review or deploy-branch checks: they are machine-generated, single-value app `newTag` bumps. A git-tree guard verifies the one-file, one-value diff and exact published SHA; unexpected changes stay open. Freshness checks close superseded PRs; pinned-head merging rejects PR edits; reruns tolerate merged PRs. This explicitly authorizes workflow merges for this class only and supersedes manual deploy-PR merge guidance. No direct main commits, repository auto-merge setting changes, or PR comments are needed.
+
+Repository variable `AUTO_DEPLOY=false` pauses automatic tag merges (default enabled), leaving publication and Argo CD sync active. Pause before a reviewed rollback PR selecting an older published SHA or reverting the deploy-tag commit. See the [release flow](deployment.md#release-flow-c1a) for concurrency, recovery, race limits, and verification commands. Source PRs still require CI and Gitar review.
+
+The Application enables automated sync, self-healing, and final-wave pruning of eligible stateless resources (`PruneLast=true`). Data-bearing resources carry `Prune=false,Delete=false` and require manual, approved removal. Applying the Application requires explicit operator approval through Radar. This automation change performs no cluster operations; live automatic merging and rollout remain pending verification.
 
 ## C1b Elasticsearch storage setup
 
