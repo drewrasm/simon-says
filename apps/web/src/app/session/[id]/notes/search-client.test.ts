@@ -33,7 +33,7 @@ describe("searchSession", () => {
     ]);
   });
 
-  it("reports a failed or malformed response as an error", async () => {
+  it("reports a failed, malformed, or unreachable response as an error", async () => {
     const failing = (async () =>
       Response.json(
         { error: "internal_error" },
@@ -41,11 +41,17 @@ describe("searchSession", () => {
       )) as typeof fetch;
     const malformed = (async () =>
       Response.json({ results: "none" })) as typeof fetch;
+    const offline = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
 
     expect(await searchSession(sessionId, "latency", failing)).toEqual({
       kind: "error",
     });
     expect(await searchSession(sessionId, "latency", malformed)).toEqual({
+      kind: "error",
+    });
+    expect(await searchSession(sessionId, "latency", offline)).toEqual({
       kind: "error",
     });
   });

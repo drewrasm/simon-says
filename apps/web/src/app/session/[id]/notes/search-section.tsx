@@ -15,7 +15,7 @@ import { putBookmark } from "../bookmark-client";
 import { formatTalkTime } from "../talk-time";
 import { searchResultAnchor, searchSession } from "./search-client";
 
-type SearchState =
+export type SearchState =
   | { kind: "idle" }
   | { kind: "searching" }
   | { kind: "failed" }
@@ -58,6 +58,60 @@ const ResultCard = ({ result, saved, saving, onSave }: ResultCardProps) => (
       “{result.excerpt}”
     </blockquote>
   </li>
+);
+
+type SearchOutcomeProps = {
+  state: SearchState;
+  saved: ReadonlySet<string>;
+  savingId: string | undefined;
+  onSave: (result: SearchResult) => void;
+};
+
+/** Announces what a search came back with: progress, a failure, or passages. */
+export const SearchOutcome = ({
+  state,
+  saved,
+  savingId,
+  onSave,
+}: SearchOutcomeProps) => (
+  <div aria-live="polite" className="flex flex-col gap-3">
+    {state.kind === "searching" ? (
+      <p className="text-sm text-muted-foreground">Searching…</p>
+    ) : null}
+    {state.kind === "failed" ? (
+      <p className="text-sm text-muted-foreground">
+        Search didn&apos;t respond. Captions keep running; try again.
+      </p>
+    ) : null}
+    {state.kind === "done" ? (
+      <>
+        {INDEXING_NOTE[state.response.indexingState] ? (
+          <p className="text-sm text-muted-foreground">
+            {INDEXING_NOTE[state.response.indexingState]}
+          </p>
+        ) : null}
+        {state.response.results.length === 0 &&
+        state.response.indexingState !== "unavailable" ? (
+          <p className="text-sm text-muted-foreground">
+            No matching passages yet.
+          </p>
+        ) : null}
+        {state.response.results.length > 0 ? (
+          <ul className="flex flex-col gap-2">
+            {state.response.results.map((result) => (
+              <ResultCard
+                key={result.passageId}
+                result={result}
+                saved={saved.has(result.passageId)}
+                saving={savingId === result.passageId}
+                onSave={() => onSave(result)}
+              />
+            ))}
+          </ul>
+        ) : null}
+      </>
+    ) : null}
+  </div>
 );
 
 /** Finds an earlier passage by meaning and saves it as a private clip. */
@@ -145,44 +199,12 @@ export const SearchSection = ({ sessionId }: { sessionId: string }) => {
         </Button>
       </form>
 
-      <div aria-live="polite" className="flex flex-col gap-3">
-        {state.kind === "searching" ? (
-          <p className="text-sm text-muted-foreground">Searching…</p>
-        ) : null}
-        {state.kind === "failed" ? (
-          <p className="text-sm text-muted-foreground">
-            Search didn&apos;t respond. Captions keep running; try again.
-          </p>
-        ) : null}
-        {state.kind === "done" ? (
-          <>
-            {INDEXING_NOTE[state.response.indexingState] ? (
-              <p className="text-sm text-muted-foreground">
-                {INDEXING_NOTE[state.response.indexingState]}
-              </p>
-            ) : null}
-            {state.response.results.length === 0 &&
-            state.response.indexingState !== "unavailable" ? (
-              <p className="text-sm text-muted-foreground">
-                No matching passages yet.
-              </p>
-            ) : null}
-            {state.response.results.length > 0 ? (
-              <ul className="flex flex-col gap-2">
-                {state.response.results.map((result) => (
-                  <ResultCard
-                    key={result.passageId}
-                    result={result}
-                    saved={saved.has(result.passageId)}
-                    saving={savingId === result.passageId}
-                    onSave={() => void save(result)}
-                  />
-                ))}
-              </ul>
-            ) : null}
-          </>
-        ) : null}
-      </div>
+      <SearchOutcome
+        state={state}
+        saved={saved}
+        savingId={savingId}
+        onSave={(result) => void save(result)}
+      />
     </section>
   );
 };
