@@ -129,7 +129,7 @@ PR #10 was merged with `origin/main` (`7ea1c01`) locally on November 9, 2026, pr
 Owner: Logan. Milestones 1–4 stay open until their deployed gates pass.
 
 - Merged: Track 3 contracts for session, bookmark, search, and recap schemas (PR #11); Prisma models for principals, sessions, memberships, and bookmarks with the first migration (PR #12). The migration was applied to local Postgres; the cluster migration is pending.
-- In progress: device identity, session creation, invitation join, and the membership check (PR #18, open). A migration Job and CI Postgres change is being drafted for Track 2 review.
+- In progress: device identity, session creation, invitation join, and the membership check (PR #18, open). The migration Job and CI Postgres service merged with PR #24.
 
 ## Acceptance fixtures
 
@@ -162,3 +162,15 @@ If the core slice fails, cut voice, OCR, repair transcription, advanced search f
 - Before public access: identity mechanism, host access, invitation expiry, limits, revocation, redaction, and storage policy.
 - Before recap: OpenAI model through the AI SDK, structured output, data handling, budget, and durable job execution.
 - Before deployment: database and private object store, migrations, connection recovery, cleanup scheduling, rollback, and operator ownership. GitOps enablement, publication, and deployment require authorization; routine future pushes may deploy after GitOps is enabled.
+
+## Track 2 automatic deploy-tag merge verification
+
+Local verification on November 9, 2026: frozen-lockfile install and `pnpm check` passed (lint, formatting, strict typechecks, nine Vitest files / 68 tests). `actionlint`, `bash -n scripts/propose-deploy.sh`, and `shellcheck scripts/propose-deploy.sh` passed. The guard's scratch-repository fixtures accepted the tag-only diff and rejected another key, another file, an incorrect SHA, and a file-mode change. CI runs these guard fixtures too. A separate scratch-repository run with a mock GitHub CLI passed existing-PR merge, already-merged retry, closed-PR retry, pause, unsafe-diff skip, and superseded-source closure; this is local simulation, not live GitHub verification.
+
+The release flow now merges only guarded machine-generated tag PRs, with freshness checks, pinned-head merging, retry handling, and the default-enabled `AUTO_DEPLOY` pause variable. See [deployment](deployment.md#release-flow-c1a) and [decisions](decisions.md#c1a-release-tags). Live workflow merging and cluster rollout remain unverified; this work performs no cluster operations, repository setting changes, or PR comments.
+
+### C1a ruleset compatibility fix — local evidence
+
+November 9, 2026: `actionlint`, `bash -n scripts/propose-deploy.sh`, `shellcheck scripts/propose-deploy.sh`, `pnpm install --frozen-lockfile`, and `pnpm check` passed (nine Vitest files / 68 tests). Existing `python3 scripts/test-deploy-diff.py` fixtures still accept only the exact tag bump. New `python3 scripts/test-propose-deploy.py` runs the script with real scratch git history and a mocked GitHub CLI: refused admin merge emits `::error::` and exits 1, the current and newer deploy PRs stay open while the older ancestor PR closes without a comment, and `AUTO_DEPLOY=false` prevents merging. These are local control-flow checks, not a live bypass test.
+
+Observed publish for `4b2963f` opened #25 but the active `main` ruleset refused merging. Superseded #21 was closed without a comment; #25 remains open for recovery. Optional `DEPLOY_TOKEN` and a bypass-enabled actor require Drew's one-time setup in the deployment guide. Live merging and rollout remain unverified. No cluster operations, credential creation, repository setting changes, or PR comments were performed.

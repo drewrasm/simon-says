@@ -108,7 +108,7 @@ The next checkpoint is **0A: Kubernetes deployment foundation**, followed by liv
 | `dash0`         | Dash0 (AWS US West)   | Browser OAuth with your Dash0 team organization account.                                                                |
 | `elasticsearch` | Elastic Agent Builder | API key in `ELASTIC_MCP_AUTHORIZATION`, formatted as `ApiKey <encoded key>`.                                            |
 
-Gitar runs as a GitHub App and has no MCP server. Its review instructions live in `.gitar/review/`; CI is `.github/workflows/check.yml`. Never commit to `main`: open every change as a pull request so CI and Gitar review it.
+Gitar runs as a GitHub App and has no MCP server. Its review instructions live in `.gitar/review/`; CI is `.github/workflows/check.yml`. Never commit to `main`: open every change as a pull request so CI and Gitar review it, with the sole exception of [guarded machine-generated deploy-tag PRs](docs/decisions.md#c1a-release-tags).
 
 - **Claude Code:** start a session in this repository and approve the project servers. Run `/mcp`, pick `radar-cloud` and `dash0`, and choose **Authenticate**.
 - **Codex:** trust this project, then run `codex mcp login radar-cloud` and `codex mcp login dash0`.
