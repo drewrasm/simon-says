@@ -100,18 +100,19 @@ The next checkpoint is **0A: Kubernetes deployment foundation**, followed by liv
 
 ## Agent MCP servers
 
-`.mcp.json` (Claude Code) and `.codex/config.toml` (Codex) configure one MCP server per hackathon tool. They hold URLs and environment variable names only; never add tokens, because the repository is public.
+`.mcp.json` (Claude Code) and `.codex/config.toml` (Codex) configure one MCP server per hackathon tool, plus Shortcut for project tracking. They hold URLs and environment variable names only; never add tokens, because the repository is public.
 
 | Server          | Tool                  | Sign-in                                                                                                                 |
 | --------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `radar-cloud`   | Radar Cloud           | Browser OAuth. Accept the Radar Cloud invite first, then choose **Cloud Native Hackathon** under "Organization access". |
 | `dash0`         | Dash0 (AWS US West)   | Browser OAuth with your Dash0 team organization account.                                                                |
 | `elasticsearch` | Elastic Agent Builder | API key in `ELASTIC_MCP_AUTHORIZATION`, formatted as `ApiKey <encoded key>`.                                            |
+| `shortcut`      | Shortcut              | Browser OAuth with your Shortcut workspace account.                                                                     |
 
 Gitar runs as a GitHub App and has no MCP server. Its review instructions live in `.gitar/review/`; CI is `.github/workflows/check.yml`. Never commit to `main`: open every change as a pull request so CI and Gitar review it, with the sole exception of [guarded machine-generated deploy-tag PRs](docs/decisions.md#c1a-release-tags).
 
-- **Claude Code:** start a session in this repository and approve the project servers. Run `/mcp`, pick `radar-cloud` and `dash0`, and choose **Authenticate**.
-- **Codex:** trust this project, then run `codex mcp login radar-cloud` and `codex mcp login dash0`.
+- **Claude Code:** start a session in this repository and approve the project servers. Run `/mcp`, pick `radar-cloud`, `dash0`, and `shortcut`, and choose **Authenticate**.
+- **Codex:** trust this project, then run `codex mcp login radar-cloud`, `codex mcp login dash0`, and `codex mcp login shortcut`.
 
 ### Elastic access
 
@@ -142,18 +143,18 @@ See [agent skill provenance and updates](docs/agent-skills.md) for pinned source
 
 `pnpm exec vitest run apps/web/src/server/captions/pipeline.test.ts` exercises the real AI SDK with a fake transcription model plus local WebSocket/SSE clients. It needs no provider configuration or services. `pnpm check` checks the full workspace; `pnpm build` builds Next and bundles the custom Node server. `pnpm dev` rebuilds the server entry point before starting Next development mode; restart it after editing server modules.
 
-The caption transport is disabled unless a single `CAPTIONS_DEV_SESSION` is explicitly configured outside production. Missing provider configuration reports degraded state. Tests inject a model directly and never call OpenAI. The current segment sink, acknowledgments, epoch authority, and SSE replay are in-memory development implementations; production rejects caption access pending real authority and durability. See [S3 configuration](docs/deployment.md#s3-caption-configuration-server-only) and [pipeline architecture](docs/architecture.md#transcription-and-text-passes).
+The caption transport is disabled unless a single `CAPTIONS_DEV_SESSION` is explicitly configured outside production. Missing provider configuration reports degraded state. Tests inject a model directly and never call OpenAI. The segment sink uses Elasticsearch when configured, with an in-memory development fallback. Acknowledgments, epoch authority, and SSE replay remain in-memory development implementations; production rejects caption access pending real authority and durability. See [S3 configuration](docs/deployment.md#s3-caption-configuration-server-only) and [pipeline architecture](docs/architecture.md#transcription-and-text-passes).
 
 ## Local capture sink
 
 Run `pnpm exec tsx scripts/capture-sink.ts` beside `pnpm dev` for a local-only WebSocket sink at `ws://127.0.0.1:8787`. Pass that URL to `HostCapture` in a host integration harness; Track 1's host controls are a separate integration. The sink acknowledges binary frames and prints only frame counts, arrival rate, last sequence/sample offset, and validation errors on disconnect. It has no authentication, persistence, or transcription and binds only to loopback.
 
-## Content-free caption telemetry
+## Local Elasticsearch segment integration
 
-The custom Node server exports manual traces and metrics over OTLP HTTP/protobuf only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. See [Dash0 operator setup](docs/deployment.md#dash0-application-otlp-c2) for server-only endpoint/header settings and [exported metadata](docs/hackathon.md#data-and-failure-boundaries) for the allowlist. No log exporter or auto-instrumentation is enabled. Run the local, credential-free exporter and content-leak checks with:
+With Elastic start-local running at `http://localhost:9200` and its credentials in `~/simon-says-elastic-local/.env`, run:
 
 ```sh
-pnpm exec vitest run apps/web/src/server/telemetry/telemetry.test.ts
+pnpm es:test:local
 ```
 
-These tests use fake transcription, in-memory exporters, and a localhost OTLP HTTP receiver. They do not verify live Dash0 ingest or call OpenAI.
+This command refuses other origins, overrides ambient ES credentials with the local key, runs `pnpm es:setup` with `.multilingual-e5-small-elasticsearch`, then tests fake-model caption persistence, deterministic IDs, real 409 replay, and time-range overlap. Synthetic documents are removed afterward. An unreachable local server prints an explicit skip; start it with `cd ~/simon-says-elastic-local && ./start.sh`. Ordinary `pnpm test` skips this opt-in integration. No OpenAI request is made. For local app runtime persistence, supply server-only `ELASTICSEARCH_URL` / `ELASTICSEARCH_API_KEY` in the app environment; missing configuration visibly degrades the development feed.
