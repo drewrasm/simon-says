@@ -10,7 +10,7 @@ export interface SegmentSink {
   writeSegments(segments: readonly TranscriptSegment[]): Promise<void>;
 }
 
-/** Development only: M3 supplies the durable Elasticsearch implementation. */
+/** Development/test fallback; process-local and not durable. */
 export class InMemorySegmentSink implements SegmentSink {
   readonly segments = new Map<string, TranscriptSegment>();
   async writeSegments(segments: readonly TranscriptSegment[]): Promise<void> {

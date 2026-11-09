@@ -29,6 +29,7 @@ export class IngestClient {
   private attempt = 0;
   private acked = -1;
   private sentThrough = -1;
+  private sentOnSocket = -1;
   constructor(
     private readonly url: string,
     private readonly epoch: number,
@@ -85,7 +86,7 @@ export class IngestClient {
           JSON.stringify({
             type: "hello",
             epoch: this.epoch,
-            lastSentSeq: this.buffer.lastSentSeq,
+            lastSentSeq: this.buffer.newestSeq,
             sampleRate: CAPTION_SAMPLE_RATE,
           }),
         );
@@ -133,25 +134,24 @@ export class IngestClient {
     }
     const through =
       message.type === "ready" ? message.ackedThroughSeq : message.throughSeq;
-    // Never trim unsent audio or accept a cursor from another epoch.
+    // Never trim unsent audio or accept a cursor from another epoch; a lower ready cursor is allowed.
     if (
       message.epoch !== this.epoch ||
       through > this.sentThrough ||
-      through < this.acked ||
-      (message.type === "ack" && !this.ready)
+      (message.type === "ack" && (!this.ready || through < this.acked))
     ) {
       this.retry();
       return;
     }
-    this.acked = through;
-    this.buffer.acknowledge(through);
+    this.acked = Math.max(this.acked, through);
+    this.buffer.acknowledge(this.acked);
     if (message.type === "ready") {
       if (this.ready) {
         this.retry();
         return;
       }
       this.ready = true;
-      this.ackedOnSocket = through;
+      this.sentOnSocket = through;
       this.attempt = 0;
       clearTimeout(this.watchdog);
       this.flush();
@@ -166,16 +166,15 @@ export class IngestClient {
       return;
     }
     for (const frame of this.buffer.after(
-      Math.max(this.acked, this.ackedOnSocket),
+      Math.max(this.acked, this.sentOnSocket),
     )) {
-      if (!this.send(encodeAudioFrame(frame).slice().buffer)) return;
+      if (!this.send(encodeAudioFrame(frame).buffer)) return;
       this.sentThrough = Math.max(this.sentThrough, frame.seq);
-      this.ackedOnSocket = frame.seq;
+      this.sentOnSocket = frame.seq;
       if (this.socket && this.socket.bufferedAmount > 256_000) {
         this.retry();
         return;
       }
     }
   }
-  private ackedOnSocket = -1;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import type { SessionStatus } from "@simon-says/contracts/session";
+import type { SessionStatus } from "@simon-says/contracts/session-status";
 import { Button } from "@simon-says/ui/components/button";
 import {
   Card,

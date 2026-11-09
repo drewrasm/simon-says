@@ -1,6 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { Client, errors } from "@elastic/elasticsearch";
 import type { estypes } from "@elastic/elasticsearch";
+import { z } from "zod";
+
+const indexDefinition = z.object({
+  mappings: z.custom<estypes.MappingTypeMapping>(
+    (value) =>
+      typeof value === "object" && value !== null && !Array.isArray(value),
+  ),
+});
 
 export function elasticConfig() {
   const node = process.env.ELASTICSEARCH_URL;
@@ -40,21 +48,25 @@ export function elasticClient(config: ReturnType<typeof elasticConfig>) {
 export async function indexDefinitions(inferenceId: string) {
   return Promise.all(
     ["segments", "observations"].map(async (name) => {
-      // Repository-owned JSON, never user input; the client validates the mapping at creation.
-      const definition: estypes.IndicesCreateRequest = JSON.parse(
-        await readFile(
-          new URL(`../infra/elasticsearch/${name}-v1.json`, import.meta.url),
-          "utf8",
+      // Repository-owned JSON; Elasticsearch validates the full mapping at creation.
+      const definition = indexDefinition.safeParse(
+        JSON.parse(
+          await readFile(
+            new URL(`../infra/elasticsearch/${name}-v1.json`, import.meta.url),
+            "utf8",
+          ),
         ),
       );
-      if (!definition.mappings) throw new Error(`Missing mapping for ${name}`);
-      const semantic = definition.mappings.properties?.text_semantic;
+      if (!definition.success)
+        throw new Error(`Invalid index definition for ${name}`);
+      const { mappings } = definition.data;
+      const semantic = mappings.properties?.text_semantic;
       if (semantic && semantic.type === "semantic_text")
         semantic.inference_id = inferenceId;
       return {
         index: `${name}-v1`,
         alias: `simon-says-${name}`,
-        mappings: definition.mappings,
+        mappings,
       };
     }),
   );

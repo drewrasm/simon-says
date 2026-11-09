@@ -65,7 +65,7 @@ export class ResendBuffer {
   after(seq: number): readonly AudioFrame[] {
     return this.frames.filter((frame) => frame.seq > seq);
   }
-  get lastSentSeq(): number {
+  get newestSeq(): number {
     return this.frames.at(-1)?.seq ?? -1;
   }
   get unackedMs(): number {

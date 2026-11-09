@@ -10,9 +10,6 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@simon-says/contracts": "workspace:*"
-  },
   "devDependencies": {
     "typescript": "5.9.3"
   }

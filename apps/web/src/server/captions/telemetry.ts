@@ -14,10 +14,12 @@ export type CaptionMetadata = {
   error_code?: "transcription_failed" | "segment_sink_failed";
 };
 export type CaptionMetric =
+  | "es_write_latency_ms"
+  | "es_write_retries"
+  | "es_write_failures"
   | "lag_ms"
   | "rotation_gap_ms"
   | "window_duration_ms"
-  | "es_write_latency_ms"
   | "retries"
   | "errors"
   | "gaps"

@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import {
+  bookmarkEvidenceSchema,
   bookmarkResponseSchema,
   listBookmarksResponseSchema,
   revisionConflictErrorSchema,
@@ -11,7 +12,11 @@ import {
 import { getDatabase } from "../access/database";
 import { AccessError } from "../access/errors";
 import { requireMembership } from "../access/membership";
-import { requestedRange, resolveEvidence } from "../evidence/resolve";
+import {
+  requestedRange,
+  requireParagraphSource,
+  resolveEvidence,
+} from "../evidence/resolve";
 
 export type BookmarkRecord = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getDatabase>["bookmark"]["findUnique"]>>
@@ -87,7 +92,9 @@ const toResponse = (record: BookmarkRecord): BookmarkResponse =>
         : { startMs: record.actualStartMs, endMs: record.actualEndMs },
     clockUncertaintyMs: record.clockUncertaintyMs,
     completeness: record.completeness,
-    evidence: record.evidence ?? { segments: [], frames: [] },
+    evidence: bookmarkEvidenceSchema.parse(
+      record.evidence ?? { segments: [], frames: [] },
+    ),
     note: record.note,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -132,6 +139,13 @@ export const putBookmark = async ({ principalId, id, request }: PutOptions) => {
     sessionId: request.sessionId,
     range,
   });
+  if (!existing && request.anchor.kind === "paragraph") {
+    await requireParagraphSource({
+      sessionId: request.sessionId,
+      anchor: request.anchor,
+    });
+  }
+  await requireMembership({ principalId, sessionId: request.sessionId });
   const materialized =
     resolution.completeness === "pending"
       ? { completeness: "pending" as const }

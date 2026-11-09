@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionStatusSchema } from "@simon-says/contracts/session-status";
 
 /**
  * Transcript segments and the shared caption event feed (SSE).
@@ -133,7 +134,8 @@ export const captionGapEventSchema = z
 export const captureStateEventSchema = z.object({
   ...eventBase,
   kind: z.literal("capture.state"),
-  session: z.enum(["setup", "live", "degraded", "ended"]),
+  /** Expired sessions deny stream access, so the feed never reports `expired`. */
+  session: sessionStatusSchema.exclude(["expired"]),
   audio: z.enum(["receiving", "stalled", "stopped"]),
   /** Lag from audio receipt to final caption; null before the first final. */
   captionLagMs: ms.nullable(),
@@ -141,6 +143,7 @@ export const captureStateEventSchema = z.object({
   reason: z
     .enum([
       "missing_provider_key",
+      "missing_elasticsearch_config",
       "transcription_failed",
       "segment_sink_failed",
       "backlog_limit",

@@ -130,7 +130,7 @@ it("trims acks, merges consecutive overflow gaps, and retains gaps after ack", (
   buffer.acknowledge(2);
   expect(buffer.unackedMs).toBe(100);
   buffer.acknowledge(3);
-  expect(buffer.lastSentSeq).toBe(-1);
+  expect(buffer.newestSeq).toBe(-1);
   expect(buffer.localGaps).toHaveLength(1);
 });
 it("caps exponential backoff with equal jitter", () => {
@@ -171,6 +171,39 @@ describe("ingest protocol", () => {
         frame: { epoch: 7, seq: 2, sampleOffset: 4800, samples: samples() },
       },
     ]);
+    client.stop();
+  });
+  it("accepts a lower ready cursor and resends retained frames", () => {
+    vi.useFakeTimers();
+    const { client, sockets, states, sequence } = setup();
+    const first = sockets[0]!;
+    first.open();
+    first.message({ type: "ready", epoch: 7, ackedThroughSeq: -1 });
+    client.push(sequence.next(samples()));
+    client.push(sequence.next(samples()));
+    first.message({ type: "ack", epoch: 7, throughSeq: 0 });
+    first.disconnect();
+    vi.advanceTimersByTime(500);
+    const second = sockets[1]!;
+    second.open();
+    second.message({ type: "ready", epoch: 7, ackedThroughSeq: -1 });
+    expect(
+      second.frames().map((decoded) => decoded.ok && decoded.frame.seq),
+    ).toEqual([1]);
+    expect(states.at(-1)).toBe("open");
+    vi.advanceTimersByTime(60000);
+    expect(sockets).toHaveLength(2);
+    client.stop();
+  });
+  it("reconnects when an ack moves the cursor backwards", () => {
+    vi.useFakeTimers();
+    const { client, sockets, states, sequence } = setup();
+    sockets[0]!.message({ type: "ready", epoch: 7, ackedThroughSeq: -1 });
+    client.push(sequence.next(samples()));
+    client.push(sequence.next(samples()));
+    sockets[0]!.message({ type: "ack", epoch: 7, throughSeq: 1 });
+    sockets[0]!.message({ type: "ack", epoch: 7, throughSeq: 0 });
+    expect(states.at(-1)).toBe("reconnecting");
     client.stop();
   });
   it.each([
@@ -332,4 +365,56 @@ it("releases microphone and context when worklet loading fails", async () => {
   });
   expect(stop).toHaveBeenCalledOnce();
   expect(close).toHaveBeenCalledOnce();
+});
+
+it("maps screen time to the first worklet PCM quantum on the 24 kHz audio clock", async () => {
+  const contexts: Context[] = [];
+  const nodes: Worklet[] = [];
+  class Context {
+    state = "running";
+    currentTime = 12;
+    destination = {};
+    constructor() {
+      contexts.push(this);
+    }
+    resume = async () => {};
+    close = async () => {};
+    audioWorklet = { addModule: async () => {} };
+    createMediaStreamSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
+  }
+  class Worklet {
+    constructor() {
+      nodes.push(this);
+    }
+    port: {
+      onmessage: ((event: MessageEvent<unknown>) => void) | null;
+      close: () => void;
+    } = { onmessage: null, close: vi.fn() };
+    connect = vi.fn();
+    disconnect = vi.fn();
+  }
+  const track = { stop: vi.fn(), onended: null };
+  vi.stubGlobal("AudioContext", Context);
+  vi.stubGlobal("AudioWorkletNode", Worklet);
+  vi.stubGlobal("WebSocket", FakeSocket);
+  vi.stubGlobal("navigator", {
+    mediaDevices: {
+      getUserMedia: async () => ({
+        getTracks: () => [track],
+        getAudioTracks: () => [track],
+      }),
+    },
+  });
+  const capture = new HostCapture({ epoch: 1, ingestUrl: "ws://localhost" });
+  expect(capture.getCaptureSampleOffset()).toBeUndefined();
+  await capture.start();
+  expect(capture.getCaptureSampleOffset()).toBeUndefined();
+  nodes[0]?.port.onmessage?.(
+    new MessageEvent("message", { data: { clockStartTime: 10 } }),
+  );
+  expect(capture.getCaptureSampleOffset()).toBe(48000);
+  if (contexts[0]) contexts[0].state = "suspended";
+  expect(capture.getCaptureSampleOffset()).toBeUndefined();
+  await capture.stop();
+  expect(capture.getCaptureSampleOffset()).toBeUndefined();
 });

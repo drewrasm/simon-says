@@ -7,3 +7,6 @@ url = "https://api.us-west-2.aws.dash0.com/mcp"
 [mcp_servers.elasticsearch]
 url = "https://my-elasticsearch-project-fb0a5d.kb.us-west-2.aws.elastic.cloud/api/agent_builder/mcp"
 env_http_headers = { Authorization = "ELASTIC_MCP_AUTHORIZATION" }
+
+[mcp_servers.shortcut]
+url = "https://mcp.shortcut.com/mcp"

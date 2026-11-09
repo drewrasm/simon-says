@@ -135,8 +135,8 @@ it.each(["success", "provider failure", "rotation"])(
         },
       },
     });
-    const server = createServer((req, res) => {
-      if (!transport.handleHttp(req, res)) res.writeHead(404).end();
+    const server = createServer(async (req, res) => {
+      if (!(await transport.handleHttp(req, res))) res.writeHead(404).end();
     });
     server.on("upgrade", (req, socket, head) =>
       transport.handleUpgrade(req, socket, head),

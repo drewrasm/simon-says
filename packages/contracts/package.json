@@ -4,12 +4,14 @@
   "type": "module",
   "exports": {
     "./audio-frame": "./src/audio-frame.ts",
-    "./ingest": "./src/ingest.ts",
-    "./caption": "./src/caption.ts",
-    "./session": "./src/session.ts",
     "./bookmark": "./src/bookmark.ts",
+    "./caption": "./src/caption.ts",
+    "./ingest": "./src/ingest.ts",
+    "./recap": "./src/recap.ts",
+    "./screen": "./src/screen.ts",
     "./search": "./src/search.ts",
-    "./recap": "./src/recap.ts"
+    "./session": "./src/session.ts",
+    "./session-status": "./src/session-status.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
