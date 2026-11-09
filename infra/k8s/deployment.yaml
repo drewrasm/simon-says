@@ -57,6 +57,11 @@ spec:
               value: gpt-realtime-whisper
             - name: CAPTION_DELAY
               value: low
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: simon-says-session
+                  key: session-secret
             - name: PROBE_TOKEN
               valueFrom:
                 secretKeyRef:
