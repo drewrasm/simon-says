@@ -11,10 +11,10 @@ on:
 permissions:
   contents: read
 
-# Keep the newest main run; superseded releases stop before their deploy merge.
+# Cancel superseded PR runs without interrupting main builds or publishes.
 concurrency:
   group: check-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -110,7 +110,7 @@ jobs:
     timeout-minutes: 25
     concurrency:
       group: publish-deploy-main
-      cancel-in-progress: true
+      cancel-in-progress: false
     permissions:
       contents: write
       packages: write
@@ -166,4 +166,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DEPLOY_TOKEN || secrets.GITHUB_TOKEN }}
           AUTO_DEPLOY: ${{ vars.AUTO_DEPLOY }}
-        run: bash scripts/propose-deploy.sh
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            message="Main advanced; skipping the deploy PR for $GITHUB_SHA."
+            echo "::warning::$message"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          bash scripts/propose-deploy.sh
