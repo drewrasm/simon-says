@@ -47,6 +47,11 @@ spec:
                   name: db-app
                   key: uri
                   optional: true
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: simon-says-session
+                  key: session-secret
             - name: PROBE_TOKEN
               valueFrom:
                 secretKeyRef:
