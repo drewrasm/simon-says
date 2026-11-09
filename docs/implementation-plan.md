@@ -2,6 +2,8 @@
 
 Status: milestone 0 is complete with local verification. Checkpoint 0A is next, followed by milestone 1. The team selected all four hackathon tracks; the team cluster is provisioned and readable through Radar. These checkboxes describe outcomes, not permission to implement. Complete one vertical slice before expanding scope.
 
+Today's execution order, scope cut, and time-boxed checkpoints per track are in the [delivery plan](delivery-plan.md). Record milestone evidence here.
+
 ## Three builder tracks
 
 The [building tracks](building-tracks.md) detail ownership, ordered deliverables, dependencies, and integration checkpoints within the same Next.js app.

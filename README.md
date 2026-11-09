@@ -8,6 +8,7 @@ The host captures the speaker's microphone and screen once. Attendees join by QR
 
 ## Start here
 
+- [Delivery plan](docs/delivery-plan.md): **start here today** — deadline, cut, per-track checkpoints, working agreement, and status board.
 - [Product](docs/product.md): experience, MVP, and limits.
 - [Architecture](docs/architecture.md): monorepo ownership, data flow, and invariants.
 - [Contracts](docs/contracts.md): records, APIs, and event semantics.
