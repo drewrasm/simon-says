@@ -257,13 +257,6 @@ PR #18 merged while this slice was in progress; `feat/t2-caption-access` was reb
 
 Track 1 handoff: the host connects to WebSocket `/api/sessions/:id/ingest` after claiming its host link, with the signed principal cookie present, and sends the existing hello/PCM frames. Attendees subscribe with same-origin `EventSource` at `/api/sessions/:id/events`; the browser includes the principal cookie automatically. Membership must already exist; caption reads do not create a principal or join a session.
 
-## Track 1 host flow from design — local evidence
-
-November 9, 2026: restyled the public home, `/host/new`, and `/host/:id` from the design canvas, with no host accounts. `/host/new` keeps only the supported optional title plus a guest preview, and **Open lobby** creates the session. `/host/:id` is a lobby before capture: share card (QR, link, copy, and a large on-screen QR dialog), microphone pre-flight, and **Go live**, which is enabled only after a working mic test. Going live releases the test stream and starts Track 2's `HostCapture` with epoch `max(unix seconds, last + 1)` against `WS /api/sessions/:id/ingest`. The live console shows elapsed time, the input level, the caption feed from `EventSource /api/sessions/:id/events` (interim text, finals upserted by segment ID and highest revision, and gaps), and content-free capture health. **Stop captions** closes ingest with 1000. The session is not ended in Postgres because `POST /api/sessions/:id/end` does not exist, so the host can go live again under a higher epoch.
-
-- `pnpm check` passed (lint, format, typecheck, 36 files / 339 tests). Against local Postgres, the browser created a session, claimed host, and rendered the lobby with a scannable QR, and `/events` returned 200.
-- Not verified: Go live with a real microphone (the automated browser cannot grant mic permission), captions from a provider, and the deployed flow. Cut because they lack a backend: line corrections, pause, guest count, language picker, guest-setting toggles, transcript download, scheduling and drafts, and a typed join code (no short code in the contract yet).
-
 ## Track 2 C2 Elasticsearch segment sink — local evidence
 
 November 9, 2026: implemented create-only bulk segment persistence through `simon-says-segments`, exact stored-source checks on 409 replay, a three-second total retry/abort budget, numeric telemetry hooks, optional boot-validated configuration, and visible missing-configuration degradation. Strict mapping fields match C1b / PR #16. `expiresAt` remains absent until session end is known; retention deadline attachment and deletion remain lifecycle work.
