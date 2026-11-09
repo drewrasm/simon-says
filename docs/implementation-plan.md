@@ -73,12 +73,14 @@ Still unverified: actual cluster/architecture/quota/CRDs, registry access/public
 
 ### PR #4 rebase verification
 
+Main advanced during verification to `3e33f0b` (PR #6). Rebased again to retain its Gitar instructions and baseline CI. The container workflow uses a distinct concurrency group and job name so it cannot cancel the baseline `check` workflow. Repeated the local checks and container probes after this final rebase.
+
 Rebased onto main `b80e94915e71df5081e389588d4bf7f4421ad001` on November 9, 2026, retaining Elasticsearch core-store contracts, provisioned-environment notes, and the base-nova design system. Resolved README, runtime contracts/deployment guidance, and web/UI package conflicts. Restored main's lockfile and regenerated it with `pnpm install`; no lockfile conflict was hand-merged. The initial install used the host Node 26.4.0 and emitted an engine warning; all verification below used Node 22.22.0 / pnpm 11.24.0.
 
 - `pnpm install --frozen-lockfile`, `pnpm check` (lint, formatting, strict typechecks, two test files / three tests), and `pnpm build` passed.
-- `docker build -t simon-says:pr4-s0 .` passed for Linux arm64. Local image ID: `sha256:e93f8f4eccfe7e42171278521214c5a173cf2ffb11c17a824e8455f57c8cea49`; no image was pushed. Registry slow-download warnings recovered.
-- Ran the image with dummy database/probe settings on localhost 18084. After startup, `scripts/probe.mjs` confirmed 200 for health/readiness/home, unauthorized SSE rejection, incremental uncompressed/unbuffered SSE at 0/1001/2004ms, and WS ping → pong. The first readiness poll during startup returned `curl: (52) Empty reply from server`; the next poll and all probes passed. `/design-system` also returned 200. Runtime UID/GID was 1000, Node was v22.22.0, and no `.env*` files were found under `/app`.
-- With WS and SSE active, `docker stop --time 20 simon-says-pr4-s0` completed in 216ms: WS close 1012, clean SSE end, draining/complete logs, exit 0, no OOM.
+- `docker build -t simon-says:pr4-s0 .` passed for Linux arm64. Local image ID: `sha256:09d9b31b23c1c90bcb2f14c1710cbdf7ad7d71168e26e2b1f3a8323247dd60ac`; no image was pushed. Registry slow-download warnings recovered.
+- Ran the image with dummy database/probe settings on localhost 18084. After startup, `scripts/probe.mjs` confirmed 200 for health/readiness/home, unauthorized SSE rejection, incremental uncompressed/unbuffered SSE at 1/1000/2003ms, and WS ping → pong. The first readiness poll during startup returned `curl: (52) Empty reply from server`; the next poll and all probes passed. `/design-system` also returned 200. Runtime UID/GID was 1000, Node was v22.22.0, and no `.env*` files were found under `/app`.
+- With WS and SSE active, `docker stop --time 20 simon-says-pr4-s0` completed in 466ms: WS close 1012, clean SSE end, draining/complete logs, exit 0, no OOM.
 - `KUBECONFIG=/dev/null kubectl kustomize infra/k8s` rendered all four resources offline (154 lines). No cluster commands, image publication, visibility changes, GitOps activation, or deployment were performed in this rebase verification. No amd64 build/runtime or development HMR rerun was performed; the earlier evidence above remains historical. Checkpoint 0A remains open for deployed acceptance. Main's provisioned team environment is recorded in [deployment](deployment.md#team-environment); app admission/architecture compatibility, provider egress, and deployment acceptance remain unverified.
 
 ## Acceptance fixtures

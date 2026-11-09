@@ -5,10 +5,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: check-${{ github.ref }}
+  group: checkpoint-0a-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  check:
+  container:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
