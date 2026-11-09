@@ -317,4 +317,36 @@ describe("bookmarks with real local Postgres and synthetic ES HTTP", () => {
       actualRange: { startMs: 5000, endMs: 35_000 },
     });
   });
+
+  it("rotates the bounded retry budget so later pending bookmarks resolve across reads", async () => {
+    const ids = Array.from({ length: 6 }, () => randomUUID());
+    for (const [index, id] of ids.entries()) {
+      await putBookmark(createOptions(attendeeA, id));
+      const seededAt = new Date(Date.UTC(2026, 0, 1, 0, index));
+      await database.bookmark.update({
+        where: { id },
+        data: { createdAt: seededAt, updatedAt: seededAt },
+      });
+    }
+    const pendingIds = async () =>
+      (await listBookmarks({ principalId: attendeeA, sessionId })).bookmarks
+        .filter((b) => b.completeness === "pending")
+        .map((b) => b.id);
+
+    expect(await pendingIds()).toEqual(ids);
+    fetchMock.mockImplementation(async (url) =>
+      Response.json(
+        syntheticSearchResponse(
+          String(url).includes("simon-says-segments")
+            ? [syntheticSegment({ sessionId, endMs: 40_000 })]
+            : [],
+        ),
+      ),
+    );
+
+    const stillPending = await pendingIds();
+    expect(stillPending).toHaveLength(1);
+    expect(stillPending).not.toContain(ids[5]);
+    expect(await pendingIds()).toEqual([]);
+  });
 });

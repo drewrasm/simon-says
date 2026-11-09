@@ -201,9 +201,19 @@ export const listBookmarks = async ({
     where: { ownerPrincipalId: principalId, sessionId },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
+  // Least-recently-attempted first; each attempt touches updatedAt so the bounded retry budget rotates.
   const retryIds = new Set(
     records
-      .filter((r) => r.completeness === "pending")
+      .filter(
+        (r) =>
+          r.completeness === "pending" &&
+          r.requestedStartMs !== r.requestedEndMs,
+      )
+      .sort(
+        (a, b) =>
+          a.updatedAt.getTime() - b.updatedAt.getTime() ||
+          a.id.localeCompare(b.id),
+      )
       .slice(0, 5)
       .map((r) => r.id),
   );
@@ -217,15 +227,22 @@ export const listBookmarks = async ({
           endMs: record.requestedEndMs,
         },
       });
-      if (resolution.completeness === "pending") return toResponse(record);
+      const where = {
+        id: record.id,
+        ownerPrincipalId: principalId,
+        revision: record.revision,
+        completeness: "pending" as const,
+      };
+      if (resolution.completeness === "pending") {
+        const [attempted] = await database.bookmark.updateManyAndReturn({
+          where,
+          data: { updatedAt: new Date() },
+        });
+        return toResponse(attempted ?? record);
+      }
 
       const [updated] = await database.bookmark.updateManyAndReturn({
-        where: {
-          id: record.id,
-          ownerPrincipalId: principalId,
-          revision: record.revision,
-          completeness: "pending",
-        },
+        where,
         data: resolutionData(resolution),
       });
       if (updated) return toResponse(updated);
