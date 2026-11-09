@@ -98,6 +98,12 @@ Verified November 9, 2026 on Node 22.22.0 / pnpm 11.24.0, against existing Elast
 
 This completes only the C1b code/local-verification slice. C1 deployment, scoped cloud key and Secret, egress, Track 3 endpoint/cost/processing approval, runtime ingest, required-field validation, cross-store acknowledgment, and lifecycle cleanup remain open. Mappings include expiry dates but do not schedule deletion. See [operator steps](deployment.md#elasticsearch-setup-operator-approval-required).
 
+## S2 host capture merge verification
+
+PR #10 was merged with `origin/main` (`7ea1c01`) locally on November 9, 2026, preserving the host capture module, main's Elasticsearch tooling, and both README sections. The lockfile was regenerated with `pnpm install` from main's lockfile. Track 1 paths match main without additional edits.
+
+`pnpm install --frozen-lockfile`, `pnpm check` (61 tests in 8 files, plus lint, formatting, and strict type checking), and `pnpm build` passed with Node 22.22.0 and pnpm 11.24.0. This verifies merge compatibility locally; real microphone capture, live transcription, and deployed acceptance were not exercised.
+
 ## Acceptance fixtures
 
 Use authorized synthetic audio and screens with known timing. Include these checks:
