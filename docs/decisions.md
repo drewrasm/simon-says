@@ -85,3 +85,9 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 - [AI SDK `experimental_streamTranscribe`](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-transcribe): streaming API and OpenAI example. The caption adapter uses the protocol directly for the lifecycle reasons above.
 - [Hackathon resources](https://www.wemakedevs.org/hackathons/cnh/resources), [rules](https://www.wemakedevs.org/hackathons/cnh/rules), [schedule](https://www.wemakedevs.org/hackathons/cnh/schedule).
 - [Plaud highlights](https://support.plaud.ai/hc/en-us/articles/63429919023385-Highlight-a-moment-while-recording-for-v4-0-x-or-later): marking recorded moments already exists. Simon Says emphasizes shared session capture with private, illustrated selections; uniqueness is not established.
+
+## S4 local screen frame slice
+
+Track 2 implements one-second capture with checksum deduplication, 1600 px maximum width, WebP/JPEG, and frame timestamps derived from the first audio worklet input's AudioContext time at 24 kHz. Local heartbeat and stopped state do not add a caption SSE variant. A Node Route Handler uses `HostFrameAccess`, S3-compatible `FrameStore`, and `ObservationSink` interfaces. Host access is an explicitly opted-in loopback development stub, disabled in production; the sink and idempotency reservations are in memory pending the separate Elasticsearch/session integration.
+
+SeaweedFS with one 5 Gi PVC is a proposal pending Track 3 requirements/agreement at C1, not an approved deployment choice. It remains outside kustomization and has not been applied. See the [storage proposal](deployment.md#s4-private-frame-storage-proposal-not-applied). Production fencing, lifecycle propagation, retention, and durable observations remain open.

@@ -14,7 +14,7 @@ const conf = dev
   ? undefined
   : JSON.parse(await readFile(".next/required-server-files.json", "utf8"))
       .config;
-const app = next({ dev, ...(conf ? { conf } : {}) });
+const app = next({ dev, port, ...(conf ? { conf } : {}) });
 const handle = app.getRequestHandler();
 const maxConnections = 16;
 const durationMs = 30_000;

@@ -5,7 +5,8 @@
   "exports": {
     "./audio-frame": "./src/audio-frame.ts",
     "./ingest": "./src/ingest.ts",
-    "./caption": "./src/caption.ts"
+    "./caption": "./src/caption.ts",
+    "./screen": "./src/screen.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

@@ -333,3 +333,55 @@ it("releases microphone and context when worklet loading fails", async () => {
   expect(stop).toHaveBeenCalledOnce();
   expect(close).toHaveBeenCalledOnce();
 });
+
+it("maps screen time to the first worklet PCM quantum on the 24 kHz audio clock", async () => {
+  const contexts: Context[] = [];
+  const nodes: Worklet[] = [];
+  class Context {
+    state = "running";
+    currentTime = 12;
+    destination = {};
+    constructor() {
+      contexts.push(this);
+    }
+    resume = async () => {};
+    close = async () => {};
+    audioWorklet = { addModule: async () => {} };
+    createMediaStreamSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
+  }
+  class Worklet {
+    constructor() {
+      nodes.push(this);
+    }
+    port: {
+      onmessage: ((event: MessageEvent<unknown>) => void) | null;
+      close: () => void;
+    } = { onmessage: null, close: vi.fn() };
+    connect = vi.fn();
+    disconnect = vi.fn();
+  }
+  const track = { stop: vi.fn(), onended: null };
+  vi.stubGlobal("AudioContext", Context);
+  vi.stubGlobal("AudioWorkletNode", Worklet);
+  vi.stubGlobal("WebSocket", FakeSocket);
+  vi.stubGlobal("navigator", {
+    mediaDevices: {
+      getUserMedia: async () => ({
+        getTracks: () => [track],
+        getAudioTracks: () => [track],
+      }),
+    },
+  });
+  const capture = new HostCapture({ epoch: 1, ingestUrl: "ws://localhost" });
+  expect(capture.getCaptureSampleOffset()).toBeUndefined();
+  await capture.start();
+  expect(capture.getCaptureSampleOffset()).toBeUndefined();
+  nodes[0]?.port.onmessage?.(
+    new MessageEvent("message", { data: { clockStartTime: 10 } }),
+  );
+  expect(capture.getCaptureSampleOffset()).toBe(48000);
+  if (contexts[0]) contexts[0].state = "suspended";
+  expect(capture.getCaptureSampleOffset()).toBeUndefined();
+  await capture.stop();
+  expect(capture.getCaptureSampleOffset()).toBeUndefined();
+});

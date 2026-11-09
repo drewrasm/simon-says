@@ -117,3 +117,9 @@ See [agent skill provenance and updates](docs/agent-skills.md) for pinned source
 ## Local capture sink
 
 Run `pnpm exec tsx scripts/capture-sink.ts` beside `pnpm dev` for a local-only WebSocket sink at `ws://127.0.0.1:8787`. Pass that URL to `HostCapture` in a host integration harness; Track 1's host controls are a separate integration. The sink acknowledges binary frames and prints only frame counts, arrival rate, last sequence/sample offset, and validation errors on disconnect. It has no authentication, persistence, or transcription and binds only to loopback.
+
+## Local frame upload verification
+
+After `pnpm services:up`, run `pnpm exec vitest run apps/web/src/server/frames/s3.integration.test.ts --reporter=verbose`. This stores synthetic WebP bytes through the upload handler, reads the object back with a signed request, checks anonymous denial, and removes the test object. It skips explicitly when the loopback gateway is unavailable; a reachable misconfigured gateway fails the test. It never reads cloud credentials or contacts a cloud endpoint.
+
+For browser integration, supply the `.env.example` S3 settings and opt-in `CAPTIONS_DEV_SESSION` in `apps/web/.env.local`, then run `pnpm dev`. `ScreenCapture` is a passive module for the host UI: construct it with an epoch, `/api/sessions/<id>/frames`, and `hostCapture.getCaptureSampleOffset`; call `start()` from an explicit host gesture after audio starts and call `stop()` when the host stops. Use `subscribe`/`getSnapshot` for health. This PR does not add a host UI or production authorization.

@@ -90,7 +90,7 @@ Proposed milestone 2–3 work uses `ai` through `createOpenAICompatible` pointed
 
 Capture mic input separately from the selected screen. A venue needs an actual mixer/interface feed. Start with an authorized USB mic and a tested presentation laptop.
 
-Propose one screen observation per second. Deduplicate identical images but retain observation timestamps and capture health. Include the valid frame at selection start and changed frames within the interval. Preserve both slides across a transition. Display at most three representative images initially; retain access to the rest. A stopped capture invalidates later use of an old frame.
+The S4 capture module samples the selected screen every second, downsizes to at most 1600 px wide, and encodes WebP at quality 0.9 with JPEG fallback. Consecutive identical encoded checksums skip upload but update a bounded local heartbeat and capture health. Include the valid frame at selection start and changed frames within the interval. Preserve both slides across a transition. Display at most three representative images initially; retain access to the rest. A stopped capture invalidates later use of an old frame.
 
 Sampling can miss short visuals. Inspect code legibility before choosing compression and dimensions. Attaching screenshots is MVP; OCR or multimodal interpretation is optional and must cite the frame separately from spoken text.
 
@@ -117,3 +117,11 @@ The ingest client uses the shared binary encoder and validated JSON `hello`/`rea
 - Measure ingest lag, caption lag, transcription failures, source gaps, durable-save latency, and recap errors. Verify Dash0 telemetry with real requests and inspect exported payloads for content leaks.
 
 Use authenticated object access and short-lived image links. Exports embed selected images and sanitized text, with no access tokens. Source and provider text are untrusted data.
+
+### S4 frame path (local implementation)
+
+`ScreenCapture` in `apps/web/src/capture/screen-capture.ts` accepts the epoch, upload URL, and `HostCapture.getCaptureSampleOffset`. Start it from a host gesture after microphone start. It exposes `subscribe`/`getSnapshot` for the same external-store adapter pattern as audio. The worklet reports the AudioContext time of its first PCM input; the accessor computes `floor((currentTime - firstInputTime) * 24000)`. Each screen draw reads this clock before encoding, so permission delays, encoding, and network latency do not shift timestamps. A suspended or stopped audio clock is unavailable and stops screen capture. Sampling is approximate within the one-second interval and browser scheduling; this is not display-frame presentation timing.
+
+A single-flight queue holds at most three frames (including in-flight), retries three total attempts with 250/500 ms backoff, and times requests out after ten seconds. Overflow, oversized encodes, and failures are visible in health; failures reset deduplication so unchanged content can be retried. Screen-track end cancels pending uploads, releases media, and marks the last local observation stopped. Heartbeats and stopped state are local only in this slice: downstream consumers must not infer continuing screen availability from a stored live frame. Durable stop/heartbeat events require the later session lifecycle integration.
+
+The Node Route Handler `POST /api/sessions/:id/frames` writes signed S3 objects before awaiting `ObservationSink.put`. The current sink and idempotency reservations are bounded, in-memory prototypes; process restart loses them. Retries reuse deterministic object/document identity. Real host membership/lease checks, durable fencing, expiry, and the Elasticsearch sink remain follow-up work. No `frame.observed` SSE variant was added: this slice has no Track 1 consumer requiring it. Existing caption events remain unchanged.
