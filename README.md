@@ -63,7 +63,7 @@ unset ELASTICSEARCH_API_KEY ES_LOCAL_API_KEY ES_LOCAL_PASSWORD
 
 Setup creates `segments-v1` / `observations-v1` and their `simon-says-*` write aliases, verifies mappings on rerun, fails on drift, and repairs aliases atomically. `--dry-run` performs reads only. Smoke accepts only `http://localhost:9200` and the local E5 endpoint; it writes three synthetic finalized segments and an observation under reserved session `es-smoke-c1b`, checks overlap/semantic queries, duplicate IDs, create conflicts and strict fields, then deletes only those reserved documents. Do not use that session ID for application data or run the smoke concurrently. The first E5 inference may need a model download/deployment and adequate Docker memory; failures are reported, not replaced with fake vectors. No cloud connection is part of local verification.
 
-The mappings' inference endpoint is parameterized and defaults to proposed Jina; production endpoint selection remains Track 3's decision. See [storage contracts](docs/contracts.md#elasticsearch-v1-storage-boundary) and [approval-gated operator setup](docs/deployment.md#elasticsearch-setup-operator-approval-required).
+The mappings' inference endpoint is parameterized and defaults to `.jina-embeddings-v5-text-small`, which Track 3 [decided](docs/decisions.md#confirmed-by-the-track-3-owner); cost and processing settings remain to be confirmed. See [storage contracts](docs/contracts.md#elasticsearch-v1-storage-boundary) and [approval-gated operator setup](docs/deployment.md#elasticsearch-setup-operator-approval-required).
 
 ## Deployment and hackathon scope
 
@@ -94,24 +94,25 @@ Wait for `Next prepared` in container logs before probing readiness. The dummy d
 
 These are **transport probes**, not product capture APIs. Set server-only `PROBE_TOKEN` (32–128 URL-safe characters) to enable them; leave it unset to disable them. Use a fresh secret outside local development. SSE requires a Bearer header; WebSocket clients offer subprotocols `simon-probe` and `token.<PROBE_TOKEN>` (the server selects only `simon-probe`). Never put tokens in URLs or logs. Probes accept only fixed `ping` → `pong` and heartbeat messages, cap connections at 16 combined, and end after 30 seconds. SSE bypasses compression and sets `X-Accel-Buffering: no`. The Node 22 script checks unauthorized SSE and incremental delivery too.
 
-`pnpm dev` uses the custom entry point with Next HMR (default port 8080; override with `PORT`). Server TypeScript changes require restarting it. The Node-only build uses `apps/web/server/build.mjs` to bundle workspace TypeScript and the server-only guard; Next.js and runtime SDK dependencies stay external. `pnpm build` generates Prisma, builds Next, and bundles the server into `apps/web/dist`; `pnpm start` runs it without `tsx`. No standalone output is used. SIGTERM commits caption tail windows within five seconds (or emits gaps), then ends caption SSE; probes close with code 1012. The process drains for at most 10 seconds inside the manifest's 20-second grace period.
+`pnpm dev` uses the custom entry point with Next HMR (default port 8080; override with `PORT`). Server TypeScript changes require restarting it. `pnpm build` generates Prisma, builds Next, and compiles the server into `apps/web/dist`; `pnpm start` runs it without `tsx`. No standalone output is used. SIGTERM commits caption tail windows within five seconds (or emits gaps), then ends caption SSE; probes close with code 1012. The process drains for at most 10 seconds inside the manifest's 20-second grace period.
 
 The next checkpoint is **0A: Kubernetes deployment foundation**, followed by live captions in milestone 1. All four hackathon tracks are planned: Radar operations, Dash0 observability, Sonar/Gitar development review, and Elasticsearch as the core shared-content store and passage search layer. See the [deployment plan](docs/deployment.md) and [integration scope](docs/hackathon.md).
 
 ## Agent MCP servers
 
-`.mcp.json` (Claude Code) and `.codex/config.toml` (Codex) configure one MCP server per hackathon tool. They hold URLs and environment variable names only; never add tokens, because the repository is public.
+`.mcp.json` (Claude Code) and `.codex/config.toml` (Codex) configure one MCP server per hackathon tool, plus Shortcut for project tracking. They hold URLs and environment variable names only; never add tokens, because the repository is public.
 
 | Server          | Tool                  | Sign-in                                                                                                                 |
 | --------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `radar-cloud`   | Radar Cloud           | Browser OAuth. Accept the Radar Cloud invite first, then choose **Cloud Native Hackathon** under "Organization access". |
 | `dash0`         | Dash0 (AWS US West)   | Browser OAuth with your Dash0 team organization account.                                                                |
 | `elasticsearch` | Elastic Agent Builder | API key in `ELASTIC_MCP_AUTHORIZATION`, formatted as `ApiKey <encoded key>`.                                            |
+| `shortcut`      | Shortcut              | Browser OAuth with your Shortcut workspace account.                                                                     |
 
 Gitar runs as a GitHub App and has no MCP server. Its review instructions live in `.gitar/review/`; CI is `.github/workflows/check.yml`. Never commit to `main`: open every change as a pull request so CI and Gitar review it, with the sole exception of [guarded machine-generated deploy-tag PRs](docs/decisions.md#c1a-release-tags).
 
-- **Claude Code:** start a session in this repository and approve the project servers. Run `/mcp`, pick `radar-cloud` and `dash0`, and choose **Authenticate**.
-- **Codex:** trust this project, then run `codex mcp login radar-cloud` and `codex mcp login dash0`.
+- **Claude Code:** start a session in this repository and approve the project servers. Run `/mcp`, pick `radar-cloud`, `dash0`, and `shortcut`, and choose **Authenticate**.
+- **Codex:** trust this project, then run `codex mcp login radar-cloud`, `codex mcp login dash0`, and `codex mcp login shortcut`.
 
 ### Elastic access
 
@@ -136,20 +137,24 @@ export ELASTIC_MCP_AUTHORIZATION="ApiKey $(security find-generic-password -s ela
 
 Official `ai-sdk`, `vercel-react-best-practices`, and `elasticsearch-onboarding` skills are vendored in `.agents/skills/` for Codex, with relative `.claude/skills/` symlinks for Claude Code. They are available from a fresh clone without installing app dependencies. Start a new agent session after changing skills.
 
-See [agent skill provenance and updates](docs/agent-skills.md) for pinned sources, installation commands, and the retired Next.js best-practices skill. Live captions are confirmed as OpenAI `gpt-realtime-whisper` through server-only AI SDK streaming windows ([Plan B](docs/architecture.md#transcription-and-text-passes)); local runtime integration is implemented with offline-model verification; real provider behavior remains unverified.
+See [agent skill provenance and updates](docs/agent-skills.md) for pinned sources, installation commands, and the retired Next.js best-practices skill. Live captions are confirmed as OpenAI `gpt-realtime-whisper` through server-only AI SDK streaming windows ([Plan B](docs/architecture.md#transcription-and-text-passes)); dependencies and runtime integration remain unimplemented and unverified.
 
 ## S3 offline caption verification
 
 `pnpm exec vitest run apps/web/src/server/captions/pipeline.test.ts` exercises the real AI SDK with a fake transcription model plus local WebSocket/SSE clients. It needs no provider configuration or services. `pnpm check` checks the full workspace; `pnpm build` builds Next and bundles the custom Node server. `pnpm dev` rebuilds the server entry point before starting Next development mode; restart it after editing server modules.
 
-The caption transport is disabled unless a single `CAPTIONS_DEV_SESSION` is explicitly configured outside production. Missing provider configuration reports degraded state. Tests inject a model directly and never call OpenAI. The current segment sink, acknowledgments, epoch authority, and SSE replay are in-memory development implementations; production rejects caption access pending real authority and durability. See [S3 configuration](docs/deployment.md#s3-caption-configuration-server-only) and [pipeline architecture](docs/architecture.md#transcription-and-text-passes).
+The caption transport is disabled unless a single `CAPTIONS_DEV_SESSION` is explicitly configured outside production. Missing provider configuration reports degraded state. Tests inject a model directly and never call OpenAI. The segment sink uses Elasticsearch when configured, with an in-memory development fallback. Acknowledgments, epoch authority, and SSE replay remain in-memory development implementations; production rejects caption access pending real authority and durability. See [S3 configuration](docs/deployment.md#s3-caption-configuration-server-only) and [pipeline architecture](docs/architecture.md#transcription-and-text-passes).
 
 ## Local capture sink
 
 Run `pnpm exec tsx scripts/capture-sink.ts` beside `pnpm dev` for a local-only WebSocket sink at `ws://127.0.0.1:8787`. Pass that URL to `HostCapture` in a host integration harness; Track 1's host controls are a separate integration. The sink acknowledges binary frames and prints only frame counts, arrival rate, last sequence/sample offset, and validation errors on disconnect. It has no authentication, persistence, or transcription and binds only to loopback.
 
-## Local frame upload verification
+## Local Elasticsearch segment integration
 
-After `pnpm services:up`, run `pnpm exec vitest run apps/web/src/server/frames/s3.integration.test.ts --reporter=verbose`. This stores synthetic WebP bytes through the upload handler, reads the object back with a signed request, checks anonymous denial, and removes the test object. It skips explicitly when the loopback gateway is unavailable; a reachable misconfigured gateway fails the test. It never reads cloud credentials or contacts a cloud endpoint.
+With Elastic start-local running at `http://localhost:9200` and its credentials in `~/simon-says-elastic-local/.env`, run:
 
-For browser integration, supply the `.env.example` S3 settings and opt-in `CAPTIONS_DEV_SESSION` in the custom server process environment, then run `pnpm dev` and open `http://localhost:8080` (or the configured `PORT`). Development binds only to `127.0.0.1`; production keeps `0.0.0.0`. Frame access requires the socket peer to be `127.0.0.1`, `::1`, or `::ffff:127.0.0.1`, and requires `Origin: http://localhost:<PORT>` exactly. Local scripts must send that Origin too; Host and forwarding headers never establish loopback access. The custom Node server owns the frame route ahead of Next.js; production always returns 404, even with development opt-in set. `ScreenCapture` is a passive module for the host UI: construct it with an epoch, `/api/sessions/<id>/frames`, and `hostCapture.getCaptureSampleOffset`; call `start()` from an explicit host gesture after audio starts and call `stop()` when the host stops. Use `subscribe`/`getSnapshot` for health. This PR does not add a host UI or production authorization.
+```sh
+pnpm es:test:local
+```
+
+This command refuses other origins, overrides ambient ES credentials with the local key, runs `pnpm es:setup` with `.multilingual-e5-small-elasticsearch`, then tests fake-model caption persistence, deterministic IDs, real 409 replay, and time-range overlap. Synthetic documents are removed afterward. An unreachable local server prints an explicit skip; start it with `cd ~/simon-says-elastic-local && ./start.sh`. Ordinary `pnpm test` skips this opt-in integration. No OpenAI request is made. For local app runtime persistence, supply server-only `ELASTICSEARCH_URL` / `ELASTICSEARCH_API_KEY` in the app environment; missing configuration visibly degrades the development feed.

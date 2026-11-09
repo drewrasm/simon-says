@@ -45,3 +45,30 @@ it("validates the bounded caption reconnect grace", () => {
       "CAPTION_RECONNECT_GRACE_MS",
     );
 });
+
+it("validates optional Elasticsearch settings without echoing credentials", () => {
+  expect(readRuntimeEnv({}).elasticsearch).toBeUndefined();
+  expect(
+    readRuntimeEnv({ ELASTICSEARCH_URL: "http://localhost:9200" })
+      .elasticsearch,
+  ).toBeUndefined();
+  expect(
+    readRuntimeEnv({
+      ELASTICSEARCH_URL: "http://localhost:9200",
+      ELASTICSEARCH_API_KEY: "local-key",
+    }).elasticsearch,
+  ).toEqual({ node: "http://localhost:9200", apiKey: "local-key" });
+  for (const url of [
+    "private",
+    "ftp://localhost",
+    "https://user:secret@localhost",
+    "https://localhost/index",
+    "https://localhost/?secret=value",
+  ])
+    expect(() => readRuntimeEnv({ ELASTICSEARCH_URL: url })).toThrow(
+      "ELASTICSEARCH_URL must be an HTTP(S) origin without credentials.",
+    );
+  expect(() => readRuntimeEnv({ ELASTICSEARCH_API_KEY: " " })).toThrow(
+    "ELASTICSEARCH_API_KEY must be nonempty",
+  );
+});

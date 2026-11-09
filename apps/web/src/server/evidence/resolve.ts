@@ -8,6 +8,7 @@ import type {
   SourceRange,
 } from "@simon-says/contracts/bookmark";
 import { searchSources } from "./elasticsearch";
+import { AccessError } from "../access/errors";
 
 const expiresAt = z.iso.datetime({ offset: true }).nullable().optional();
 const segmentSchema = transcriptSegmentSchema.safeExtend({ expiresAt });
@@ -194,5 +195,48 @@ export const resolveEvidence = async ({
     };
   } catch {
     return pending;
+  }
+};
+
+export class SourceUnavailable extends Error {}
+
+export const requireParagraphSource = async ({
+  sessionId,
+  anchor,
+}: {
+  sessionId: string;
+  anchor: Extract<BookmarkAnchor, { kind: "paragraph" }>;
+}) => {
+  let sources: z.infer<typeof segmentSchema>[];
+  try {
+    sources = await searchSources({
+      index: "simon-says-segments",
+      schema: segmentSchema,
+      signal: AbortSignal.timeout(2000),
+      latestOnly: true,
+      query: {
+        bool: {
+          filter: [
+            { term: { sessionId } },
+            { term: { segmentId: anchor.segmentId } },
+          ],
+        },
+      },
+      sort: [{ revision: "desc" }],
+    });
+  } catch {
+    throw new SourceUnavailable("source_unavailable");
+  }
+  const source = sources[0];
+  if (
+    !source ||
+    source.sessionId !== sessionId ||
+    source.segmentId !== anchor.segmentId ||
+    source.revision !== anchor.segmentRevision ||
+    !unexpired(source, Date.now()) ||
+    anchor.range.startMs < source.startMs ||
+    anchor.range.endMs > source.endMs
+  ) {
+    throw new AccessError(404, "not_found");
   }
 };

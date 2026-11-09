@@ -36,7 +36,37 @@ export function readRuntimeEnv(
   const openaiApiKey = env.OPENAI_API_KEY;
   if (openaiApiKey !== undefined && !openaiApiKey.trim())
     throw new Error("OPENAI_API_KEY must be nonempty when supplied.");
+  const elasticsearchUrl = env.ELASTICSEARCH_URL;
+  const elasticsearchApiKey = env.ELASTICSEARCH_API_KEY;
+  if (elasticsearchUrl !== undefined) {
+    let url: URL;
+    try {
+      url = new URL(elasticsearchUrl);
+    } catch {
+      throw new Error(
+        "ELASTICSEARCH_URL must be an HTTP(S) origin without credentials.",
+      );
+    }
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      url.pathname !== "/"
+    )
+      throw new Error(
+        "ELASTICSEARCH_URL must be an HTTP(S) origin without credentials.",
+      );
+  }
+  if (elasticsearchApiKey !== undefined && !elasticsearchApiKey.trim())
+    throw new Error("ELASTICSEARCH_API_KEY must be nonempty when supplied.");
+  const elasticsearch =
+    elasticsearchUrl && elasticsearchApiKey
+      ? { node: elasticsearchUrl, apiKey: elasticsearchApiKey }
+      : undefined;
   return {
+    elasticsearch,
     port,
     probeToken,
     captionModel,

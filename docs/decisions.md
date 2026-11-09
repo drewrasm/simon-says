@@ -50,13 +50,22 @@ Dylan confirmed this data split on November 9, 2026. Provisioning and runtime be
 
 The team cluster budget (2 CPU / 4 GiB requests, 4 CPU / 8 GiB limits total) cannot fit Elasticsearch alongside the app and Postgres. Elastic Cloud keeps it outside that budget. The Elastic track requires Elasticsearch as the core data layer.
 
-Track 2 writes segments and frame observations during ingest from milestone 1. Track 3 resolves bookmarks by fixed session-clock ranges and implements keyword plus `semantic_text` search; track 1 builds the search UI. Captions come first, but search is core work alongside private highlights, not a later integration. Confirm the inference endpoint in the project before choosing a model such as Jina.
+Track 2 writes segments and frame observations during ingest from milestone 1. Track 3 resolves bookmarks by fixed session-clock ranges and implements keyword plus `semantic_text` search; track 1 builds the search UI. Captions come first, but search is core work alongside private highlights, not a later integration. The Track 3 owner chose the embedding endpoint; see [Track 3 decisions](#confirmed-by-the-track-3-owner).
 
 Private data never enters Elasticsearch. Every source read checks current membership and access in Postgres first, including replay and resolution after revocation. Expiry, redaction, and deletion require durable, resumable Elasticsearch cleanup; materialize selected evidence before shared-source expiry. Elasticsearch outages visibly degrade captions and cannot silently discard source content. Milestone 1 must settle cross-store write ordering and durable acknowledgment before acceptance.
 
+## Confirmed by the Track 3 owner
+
+Logan confirmed these on November 9, 2026. Neither decision proves a live integration.
+
+- **Embedding endpoint:** `.jina-embeddings-v5-text-small`, configured through `ELASTICSEARCH_INFERENCE_ID`. Confirm cost and processing settings in the Elastic project before real content is indexed; operator setup is in progress.
+- **Recap model:** OpenAI through the AI SDK, reusing `OPENAI_API_KEY` from Secret `app-credentials`. The model id is configurable through server-only `RECAP_MODEL`. Recaps send only the owner's selected passages.
+
 ## Proposed implementation defaults
 
-- **LLM workflows (proposal):** use OpenAI through the Vercel AI SDK (`ai`) for server-owned recap workflows. Specific recap model, Agent/tool-loop APIs, and durable job execution remain implementation choices; vendoring guidance does not install or validate an integration.
+- **Approximate note clock (Track 1, November 9):** notes pin `markedAtMs` to time since session creation until Track 2 supplies a capture-aligned session clock; see [contracts](contracts.md#track-3-payloads). Notes use Track 3's bookmark API.
+
+- **LLM workflows:** recaps use OpenAI through the Vercel AI SDK (`ai`), as [decided](#confirmed-by-the-track-3-owner). Proposal: Agent/tool-loop APIs and durable job execution remain implementation choices; vendoring guidance does not install or validate an integration.
 
 - Next.js Route Handlers with a custom Node WebSocket entry point, reconnectable SSE, and the confirmed server-only caption adapter. Prove packaging in checkpoint 0A and cross-pod recovery in milestone 1. Propose a durable Postgres event log with bounded polling; leases and replay cannot depend on pod memory.
 - Use CloudNativePG for PostgreSQL; propose private S3-compatible storage, a Postgres-backed job worker, and Kubernetes CronJobs for cleanup. Storage location, job library, capacity, and post-hackathon hosting remain open. Isolate provider adapters from domain rules.
@@ -101,13 +110,7 @@ Reviewed November 9, 2026. Recheck implementation-specific APIs and versions whe
 
 November 9, 2026: S3 implements the Plan B direction above as a development pipeline. Use AI SDK `experimental_streamTranscribe` with `@ai-sdk/openai`, default `gpt-realtime-whisper`, in consecutive 24 kHz windows. Input close commits each window; prewarm the next call before rotation. SDK versions are pinned in the lockfile; real OpenAI behavior remains unverified. The SDK supplies `MockTranscriptionModelV4`; tests adapt its optional method typing to this repository's `exactOptionalPropertyTypes` setting by exposing only defined methods.
 
-Final publication waits for the segment sink. Sink failure emits degraded state and an exact-range gap, then permits later windows; no final is emitted for failed persistence. The in-memory sink and receipt/replay state are explicitly development-only. Production access is disabled until Track 3/M3 supply authority and durability; the dev flag cannot override this. No provider key or service call is needed for tests. This preserves the shared-content ownership decision above and leaves milestone 1 acceptance open.
-
-## S4 local screen frame slice
-
-Track 2 implements one-second capture with checksum deduplication, 1600 px maximum width, WebP/JPEG, and frame timestamps derived from the first audio worklet input's AudioContext time at 24 kHz. Local heartbeat and stopped state do not add a caption SSE variant. The custom Node server routes uploads ahead of Next.js to `apps/web/src/server/frames/transport.ts`, which uses `HostFrameAccess`, S3-compatible `FrameStore`, and `ObservationSink` interfaces. Host access is an explicitly opted-in loopback development stub, disabled in production; the sink and idempotency reservations are in memory pending the separate Elasticsearch/session integration.
-
-SeaweedFS with one 5 Gi PVC is a proposal pending Track 3 requirements/agreement at C1, not an approved deployment choice. It remains outside kustomization and has not been applied. See the [storage proposal](deployment.md#s4-private-frame-storage-proposal-not-applied). Production fencing, lifecycle propagation, retention, and durable observations remain open.
+Final publication waits for the segment sink. Sink failure emits degraded state and an exact-range gap, then permits later windows; no final is emitted for failed persistence. The in-memory sink and receipt/replay state are explicitly development-only. The C2 runtime selects Elasticsearch when configured and otherwise visibly degrades the development fallback; see [sink wiring](architecture.md#c2-elasticsearch-segment-sink). Production access is disabled until real authority and deployed durability are verified; the dev flag cannot override this. No provider key or service call is needed for tests. This preserves the shared-content ownership decision above and leaves milestone 1 acceptance open.
 
 ## C1a release tags
 
@@ -127,7 +130,7 @@ Use optional `DEPLOY_TOKEN` for a fine-grained PAT or dedicated installed GitHub
 
 Track 2 supplies strict `segments-v1` and `observations-v1` mappings behind write aliases, deterministic IDs, and drift-detecting setup. Segment `text` uses `copy_to` to `text_semantic`, preserving the PR #9 application source shape and avoiding duplicate writer fields. Only final revisions are stored. See [contracts](contracts.md#elasticsearch-v1-storage-boundary).
 
-The `.jina-embeddings-v5-text-small` default is a proposal owned by Track 3, configurable through `ELASTICSEARCH_INFERENCE_ID`. Cost, processing settings, and cloud app-key behavior remain unverified. Local smoke uses `.multilingual-e5-small-elasticsearch`; automatic inference and semantic search passed with zero cluster privileges. The v9 client is pinned to available 9.5.1; cloud 9.7.0 remains an authorized operator verification gate.
+The `.jina-embeddings-v5-text-small` default is [decided by Track 3](#confirmed-by-the-track-3-owner), configurable through `ELASTICSEARCH_INFERENCE_ID`. Cost, processing settings, and cloud app-key behavior remain unverified. Local smoke uses `.multilingual-e5-small-elasticsearch`; automatic inference and semantic search passed with zero cluster privileges. The v9 client is pinned to available 9.5.1; cloud 9.7.0 remains an authorized operator verification gate.
 
 ## PR #13 caption review decisions (November 9, 2026)
 

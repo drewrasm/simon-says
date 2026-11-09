@@ -59,6 +59,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1164.0
         version: 3.1164.0
+      '@elastic/elasticsearch':
+        specifier: 9.5.1
+        version: 9.5.1(supports-color@7.2.0)
       '@simon-says/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
