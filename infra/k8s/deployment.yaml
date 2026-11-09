@@ -47,6 +47,16 @@ spec:
                   name: db-app
                   key: uri
                   optional: true
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-credentials
+                  key: OPENAI_API_KEY
+                  optional: true
+            - name: CAPTION_MODEL
+              value: gpt-realtime-whisper
+            - name: CAPTION_DELAY
+              value: low
             - name: SESSION_SECRET
               valueFrom:
                 secretKeyRef:

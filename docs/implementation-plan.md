@@ -174,3 +174,48 @@ The release flow now merges only guarded machine-generated tag PRs, with freshne
 November 9, 2026: `actionlint`, `bash -n scripts/propose-deploy.sh`, `shellcheck scripts/propose-deploy.sh`, `pnpm install --frozen-lockfile`, and `pnpm check` passed (nine Vitest files / 68 tests). Existing `python3 scripts/test-deploy-diff.py` fixtures still accept only the exact tag bump. New `python3 scripts/test-propose-deploy.py` runs the script with real scratch git history and a mocked GitHub CLI: refused admin merge emits `::error::` and exits 1, the current and newer deploy PRs stay open while the older ancestor PR closes without a comment, and `AUTO_DEPLOY=false` prevents merging. These are local control-flow checks, not a live bypass test.
 
 Observed publish for `4b2963f` opened #25 but the active `main` ruleset refused merging. Superseded #21 was closed without a comment; #25 remains open for recovery. Optional `DEPLOY_TOKEN` and a bypass-enabled actor require Drew's one-time setup in the deployment guide. Live merging and rollout remain unverified. No cluster operations, credential creation, repository setting changes, or PR comments were performed.
+
+## Milestone 1 S3 evidence (development pipeline)
+
+S3 implements `apps/web/src/server/captions` and mounts product ingest/SSE on the checkpoint 0A server. Verification uses only AI SDK `MockTranscriptionModelV4`, including an in-process random-port HTTP server with real WebSocket and SSE clients and synthetic PCM WAV frames. It covers prewarm/commit handoff, sample partitioning, final order, retry replay, three-attempt gaps, duplicate conflicts, sink-before-final ordering, sink failure visibility, epoch fencing, bounded event replay/snapshots, and missing-provider degradation. No API keys are accessed by these tests and no OpenAI call is made.
+
+Verified locally November 9, 2026 with Node 22.22.0 and pnpm 11.24.0, after rebuilding on PR #9's `14b577f` (including the `eb1eec7` review fixes and `main` at `707313e`):
+
+- `pnpm install` regenerated the lockfile; `pnpm install --frozen-lockfile` passed.
+- `pnpm check` passed lint, formatting, strict workspace/server typechecks, and **7 test files / 55 tests**. The caption suite contributes 15 fake-model and local-transport tests, including short-pause rotation telemetry, compliant dotted IDs, schema-valid events, and finals scoped to their own window. Boot validation rejects malformed dev session IDs.
+- `pnpm build` passed the Next.js production build and custom Node bundle (including workspace contracts/domain and their Zod dependency).
+- `docker build -t simon-says:caption-pr13-final .` passed locally; no image was published. Image ID: `sha256:2fb69242c56273a3de149d13668a136b53e3fe255d61ae1af0456302e1bdff35`.
+- The packaged runtime, with `NODE_ENV=development` and `CAPTIONS_DEV_SESSION=dev.session_1-test`, served `/`, `/healthz`, and `/readyz` with 200, upgraded caption ingest with 101, replied to `hello` with `ready` (epoch 1, acknowledgment -1), and streamed caption SSE with `missing_provider_key`. No audio or provider request was sent. Production served the same health routes and rejected caption SSE with 403 despite the dev flag. Runtime UID was 1000; both containers exited 0 after stop and were removed.
+
+No API keys, OpenAI calls, kubectl, helm, cluster operations, or telemetry/search-backend writes were used. This verifies offline models and packaged transport only.
+
+Milestone 1 remains unchecked: Elasticsearch sink (M3), Postgres auth/leases/audio receipt and finalized offsets (Track 3), shared durable event delivery, real host/attendee capture, real provider latency/accuracy/retention, Dash0 export, gateway and cluster behavior are unverified. Development ack/sink/replay state is process-local and does not survive restart. Production caption access fails closed.
+
+### PR #13 main-merge verification
+
+Merged `origin/main` at `b21e880` (including PR #15) into the caption pipeline on November 9, 2026. Preserved the S3 development decisions alongside C1a GHCR/deploy-tag PRs, release freshness/skip behavior, and `Prune=false,Delete=false` data protection. Reviewed architecture, contracts, deployment, and this plan for duplicate sections and conflicting guidance; deployment retains both the release flow and server-only caption configuration. The lockfile merged without conflict and required no regeneration.
+
+With Node 22.22.0 / pnpm 11.24.0, `pnpm install --frozen-lockfile`, `pnpm check` (lint, formatting, strict typechecks, **8 test files / 57 tests**), and `pnpm build` passed. Tests use offline models and local transports. No API keys, OpenAI calls, cluster/cloud operations, or PR comments were used; production caption durability and deployed acceptance remain pending as described above.
+
+### PR #13 review fixes and Deployment wiring
+
+Merged `origin/main` through `dd10111` on November 9, 2026 (host capture and Track 3 contracts included). Regenerated the lockfile with `pnpm install`, preserving both dependency sets; no lockfile conflict was hand-merged. Review fixes add original-cursor snapshots, per-reader backpressure queues with an 8 MiB cap, host stop/grace/replacement/shutdown tail commits, bounded finalization gaps, and one telemetry count per cut. The Deployment wires optional `app-credentials` / `OPENAI_API_KEY` and plain `CAPTION_MODEL` / `CAPTION_DELAY`; it does not enable development authority.
+
+- `pnpm install --frozen-lockfile`, `pnpm check` (lint, formatting, strict typechecks, **10 test files / 96 tests**, including **26 caption tests**), and `pnpm build` passed.
+- Slow-socket tests deliver 500 finals with 10 KB text plus retained 10 KB interims, pause/resume on drain, reconnect mid-snapshot without duplicate/skipped finals, and preflight overflow without partial output. Fake-model/local-socket tests commit tails on normal stop, grace expiry, same-epoch reconnect, newer epochs, and shutdown; provider/sink deadline failures emit exact-range gaps and suppress late finals. Shutdown also awaits replaced epochs still committing.
+- `KUBECONFIG=/dev/null kubectl kustomize infra/k8s` passed offline; rendered caption settings were checked and the dev-session flag is absent. No cluster configuration was read and no cluster command was sent.
+- `docker build -t simon-says:pr13-review-fixes .` passed for code revision `e56311d`. Local image ID: `sha256:7ada4de202424e271f618c95bfc9a8a562e186d240700e07aae0b476350aa2a2`. With `NODE_ENV=development` and the explicit dotted dev-session flag, the packaged container served `/healthz`, `/readyz`, and `/` with 200, completed WebSocket hello/ready (101, epoch 1, acknowledgment -1), and streamed SSE 200 with `missing_provider_key`. With the default production environment and the same dev flag, caption SSE and ingest both returned 403. No audio was sent. Both containers ran as UID 1000, exited 0 after SIGTERM, and were removed.
+
+The end-of-input signal is host close code 1000. Abnormal disconnect grace defaults to ten seconds, configured by `CAPTION_RECONNECT_GRACE_MS`; each finish is bounded at five seconds inside the ten-second process drain. Production access and process-local durability limits remain unchanged. No API keys, OpenAI calls, cluster writes, telemetry/search writes, PR comments, or image publication are part of this verification.
+
+### PR #13 merge of Track 3 status and deploy automation
+
+Merged `origin/main` at `4b2963f` (PR #20 Track 3 ownership/status and PR #22 guarded deploy-tag merges) on November 9, 2026. Preserved main's implementation-plan text exactly and retained all S3 pipeline evidence once. Architecture, contracts, decisions, and deployment retain the development-only caption boundaries alongside the current publish → guarded deploy PR merge → Argo CD sync release flow. The lockfile had no conflict and required no regeneration.
+
+With Node 22.22.0 / pnpm 11.24.0, `pnpm install --frozen-lockfile`, `pnpm check` (lint, formatting, strict typechecks, **10 test files / 96 tests**), and `pnpm build` passed. All five scratch-repository deploy-diff guard cases passed. `KUBECONFIG=/dev/null kubectl kustomize infra/k8s` rendered offline. No API keys, OpenAI calls, cluster/cloud operations, or PR comments were used; milestone acceptance remains open.
+
+### PR #13 merge of Track 3 migration delivery
+
+Merged `origin/main` at `2ea6eaa` (PR #24) into the caption pipeline on November 9, 2026. Preserved main's Deployment exactly apart from adding `OPENAI_API_KEY`, `CAPTION_MODEL`, and `CAPTION_DELAY` once to the app container. Existing environment definitions, including `SESSION_SECRET` and `PROBE_TOKEN`, are unchanged. Deployment documentation retains both the migration flow and caption/demo-session configuration, with the runtime description covering the existing esbuild bundle and the new migration closure. Ran `pnpm install` to reconcile the automatically merged lockfile; no manual lockfile edits were made.
+
+With Node 22.22.0 / pnpm 11.24.0, `pnpm install --frozen-lockfile`, `pnpm check` (lint, formatting, strict typechecks, **10 test files / 96 tests**), and `pnpm build` passed. `KUBECONFIG=/dev/null kubectl kustomize infra/k8s` rendered offline; parsed output confirms database wave -2, migration Sync hook wave -1, and app wave 0, matching app/migration images, all caption variables, and no duplicate environment names. The migration, database, kustomization, and CI manifests match main. No API keys, OpenAI calls, cluster operations, or PR comments were used; deployed migration and live-provider acceptance remain unverified.

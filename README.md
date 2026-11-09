@@ -94,7 +94,7 @@ Wait for `Next prepared` in container logs before probing readiness. The dummy d
 
 These are **transport probes**, not product capture APIs. Set server-only `PROBE_TOKEN` (32–128 URL-safe characters) to enable them; leave it unset to disable them. Use a fresh secret outside local development. SSE requires a Bearer header; WebSocket clients offer subprotocols `simon-probe` and `token.<PROBE_TOKEN>` (the server selects only `simon-probe`). Never put tokens in URLs or logs. Probes accept only fixed `ping` → `pong` and heartbeat messages, cap connections at 16 combined, and end after 30 seconds. SSE bypasses compression and sets `X-Accel-Buffering: no`. The Node 22 script checks unauthorized SSE and incremental delivery too.
 
-`pnpm dev` uses the custom entry point with Next HMR (default port 8080; override with `PORT`). Server TypeScript changes require restarting it. `pnpm build` generates Prisma, builds Next, and compiles the server into `apps/web/dist`; `pnpm start` runs it without `tsx`. No standalone output is used. SIGTERM ends SSE, closes WebSockets with code 1012, and drains for at most 10 seconds inside the manifest's 20-second grace period.
+`pnpm dev` uses the custom entry point with Next HMR (default port 8080; override with `PORT`). Server TypeScript changes require restarting it. `pnpm build` generates Prisma, builds Next, and compiles the server into `apps/web/dist`; `pnpm start` runs it without `tsx`. No standalone output is used. SIGTERM commits caption tail windows within five seconds (or emits gaps), then ends caption SSE; probes close with code 1012. The process drains for at most 10 seconds inside the manifest's 20-second grace period.
 
 The next checkpoint is **0A: Kubernetes deployment foundation**, followed by live captions in milestone 1. All four hackathon tracks are planned: Radar operations, Dash0 observability, Sonar/Gitar development review, and Elasticsearch as the core shared-content store and passage search layer. See the [deployment plan](docs/deployment.md) and [integration scope](docs/hackathon.md).
 
@@ -137,6 +137,12 @@ export ELASTIC_MCP_AUTHORIZATION="ApiKey $(security find-generic-password -s ela
 Official `ai-sdk`, `vercel-react-best-practices`, and `elasticsearch-onboarding` skills are vendored in `.agents/skills/` for Codex, with relative `.claude/skills/` symlinks for Claude Code. They are available from a fresh clone without installing app dependencies. Start a new agent session after changing skills.
 
 See [agent skill provenance and updates](docs/agent-skills.md) for pinned sources, installation commands, and the retired Next.js best-practices skill. Live captions are confirmed as OpenAI `gpt-realtime-whisper` through server-only AI SDK streaming windows ([Plan B](docs/architecture.md#transcription-and-text-passes)); dependencies and runtime integration remain unimplemented and unverified.
+
+## S3 offline caption verification
+
+`pnpm exec vitest run apps/web/src/server/captions/pipeline.test.ts` exercises the real AI SDK with a fake transcription model plus local WebSocket/SSE clients. It needs no provider configuration or services. `pnpm check` checks the full workspace; `pnpm build` builds Next and bundles the custom Node server. `pnpm dev` rebuilds the server entry point before starting Next development mode; restart it after editing server modules.
+
+The caption transport is disabled unless a single `CAPTIONS_DEV_SESSION` is explicitly configured outside production. Missing provider configuration reports degraded state. Tests inject a model directly and never call OpenAI. The current segment sink, acknowledgments, epoch authority, and SSE replay are in-memory development implementations; production rejects caption access pending real authority and durability. See [S3 configuration](docs/deployment.md#s3-caption-configuration-server-only) and [pipeline architecture](docs/architecture.md#transcription-and-text-passes).
 
 ## Local capture sink
 
