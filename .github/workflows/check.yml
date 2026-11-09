@@ -44,6 +44,8 @@ jobs:
       - run: pnpm --filter @simon-says/db migrate:deploy
       - run: pnpm db:generate
       - run: pnpm db:check
+      - name: Track 3 Postgres integration tests
+        run: sh apps/web/src/server/bookmarks/test-integration.sh
       - run: pnpm check
       - name: Test deploy-tag diff guard offline
         run: |
