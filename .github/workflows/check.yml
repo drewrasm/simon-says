@@ -47,6 +47,7 @@ jobs:
       - name: Track 3 Postgres integration tests
         run: |
           sh apps/web/src/server/bookmarks/test-integration.sh
+          sh apps/web/src/server/search/test-integration.sh
           sh apps/web/src/server/recaps/test-integration.sh
       - run: pnpm check
       - name: Test deploy-tag diff guard offline
