@@ -1,5 +1,19 @@
 {
   "name": "@simon-says/domain",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "./audio-level": "./src/audio-level.ts",
+    "./caption-windows": "./src/caption-windows.ts",
+    "./caption-timing": "./src/caption-timing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@simon-says/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
 }

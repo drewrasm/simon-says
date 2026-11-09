@@ -1,5 +1,23 @@
 {
   "name": "@simon-says/contracts",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "./audio-frame": "./src/audio-frame.ts",
+    "./ingest": "./src/ingest.ts",
+    "./caption": "./src/caption.ts",
+    "./session": "./src/session.ts",
+    "./bookmark": "./src/bookmark.ts",
+    "./search": "./src/search.ts",
+    "./recap": "./src/recap.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
 }
