@@ -18,6 +18,7 @@ export const handleAsk = async (request: Request, sessionId: string) => {
       sessionId,
       principalId: principal.id,
       question: body.question,
+      history: body.history,
       signal: request.signal,
     });
   } catch (error) {

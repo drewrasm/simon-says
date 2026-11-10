@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
 import { askEventSchema } from "@simon-says/contracts/ask";
 import { AccessError } from "../access/errors";
-import { askSession } from "./service";
+import { askSession, searchQueryFor } from "./service";
 import { streamAnswer } from "./model";
 
 const { openai, doStream } = vi.hoisted(() => ({
@@ -25,6 +25,7 @@ const options = () => ({
   sessionId: "s1",
   principalId: "p1",
   question,
+  history: [],
   signal: new AbortController().signal,
 });
 const deps = () => ({
@@ -338,4 +339,16 @@ it("bounds a stalled membership read by the overall fifteen-second deadline", as
   } finally {
     timeout.mockRestore();
   }
+});
+
+it("searches with the previous question too when both fit the query limit", () => {
+  const history = [
+    { role: "user" as const, text: "What is the main idea?" },
+    { role: "assistant" as const, text: "Ship small." },
+  ];
+  expect(searchQueryFor("Why?", history)).toBe("What is the main idea? Why?");
+  expect(searchQueryFor("Why?", [])).toBe("Why?");
+  expect(
+    searchQueryFor("Why?", [{ role: "user", text: "x".repeat(500) }]),
+  ).toBe("Why?");
 });
