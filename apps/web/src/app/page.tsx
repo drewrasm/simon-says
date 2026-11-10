@@ -1,18 +1,14 @@
-import { buttonVariants } from "@simon-says/ui/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@simon-says/ui/components/card";
+import { Button, buttonVariants } from "@simon-says/ui/components/button";
+import { Input } from "@simon-says/ui/components/input";
+import { cn } from "cn";
+import { ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
 import { BrandMark } from "../components/brand-mark";
 
 const POINTS = [
   {
-    title: "Share with a QR code",
-    body: "Put the code on screen. Guests are reading along in seconds, on their own phones.",
+    title: "Share with a code",
+    body: "Put the join code or QR on screen. Guests are reading along in seconds.",
   },
   {
     title: "Read at your own pace",
@@ -25,71 +21,91 @@ const POINTS = [
 ] as const;
 
 const HomePage = () => (
-  <div className="flex min-h-screen flex-col">
-    <header className="border-b">
-      <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <BrandMark />
-        <Link href="/host/new" className={buttonVariants()}>
-          Host a session
-        </Link>
-      </div>
+  <div className="flex min-h-screen flex-col bg-sidebar">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-background px-6 py-3">
+      <BrandMark />
+      <Link href="/host/new" className={buttonVariants({ className: "px-3" })}>
+        Host a session
+      </Link>
     </header>
 
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-12 px-4 py-12 sm:px-6 sm:py-16">
-      <div className="flex max-w-2xl flex-col gap-4">
-        <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+    <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-14 px-6 pt-12 pb-12 sm:pt-18">
+      <div className="flex max-w-[720px] flex-col gap-4">
+        <h1 className="text-4xl leading-[1.08] font-bold tracking-[-0.01em] text-balance sm:text-[52px]">
           Every word of your talk, on every phone in the room.
         </h1>
-        <p className="text-lg text-muted-foreground">
-          Simon Says transcribes you live. Your audience scans a code, reads
-          along on their own screen, and keeps private notes on the moments that
-          matter.
+        <p className="text-lg leading-[1.6] text-chart-3">
+          Simon Says transcribes you live. Your audience scans a code and reads
+          along at their own text size, then clips the moments they want to
+          keep.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <section aria-labelledby="join-heading">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle id="join-heading">Join a session</CardTitle>
-              <CardDescription>
-                No account needed. Scan the QR code on the host&apos;s screen,
-                or open the link they share.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link
-                href="/join"
-                className={buttonVariants({ variant: "outline" })}
-              >
-                Join with a code
-              </Link>
-            </CardContent>
-          </Card>
+      <div className="flex flex-wrap gap-4">
+        <section
+          aria-labelledby="join-heading"
+          className="flex flex-[1_1_360px] flex-col gap-3.5 rounded-xl border bg-card p-6 text-card-foreground shadow-xs"
+        >
+          <h2 id="join-heading" className="text-lg font-semibold">
+            Join a session
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            No account needed. Just the code from the screen.
+          </p>
+          <form action="/join" className="flex gap-2">
+            <label htmlFor="home-code" className="sr-only">
+              Session code
+            </label>
+            <Input
+              id="home-code"
+              name="code"
+              placeholder="KQ742M"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              maxLength={7}
+              className="h-10 min-w-0 grow px-3 text-base font-semibold tracking-[0.08em] shadow-xs md:text-base"
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              className="h-10 px-4 shadow-xs"
+            >
+              Join
+            </Button>
+          </form>
         </section>
-        <section aria-labelledby="host-heading">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle id="host-heading">Host a session</CardTitle>
-              <CardDescription>
-                No account needed. Name your talk, test your microphone, and go
-                live from this browser.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href="/host/new" className={buttonVariants()}>
-                Start hosting
-              </Link>
-            </CardContent>
-          </Card>
+        <section
+          aria-labelledby="host-heading"
+          className="flex flex-[1_1_360px] flex-col gap-3.5 rounded-xl bg-primary p-6 text-primary-foreground"
+        >
+          <h2 id="host-heading" className="text-lg font-semibold">
+            Host a session
+          </h2>
+          <p className="text-sm text-chart-1">
+            No account needed. Name your talk, test your microphone, and go live
+            from this browser.
+          </p>
+          <Link
+            href="/host/new"
+            className={cn(
+              buttonVariants(),
+              "h-10 self-start bg-primary-foreground px-4 font-semibold text-primary hover:bg-primary-foreground/90",
+            )}
+          >
+            Start hosting
+            <ArrowRightIcon aria-hidden="true" className="size-[15px]" />
+          </Link>
         </section>
       </div>
 
-      <ul className="grid gap-6 border-t pt-10 sm:grid-cols-3">
+      <ul className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-6">
         {POINTS.map((point) => (
-          <li key={point.title} className="flex flex-col gap-1">
-            <h2 className="font-semibold">{point.title}</h2>
-            <p className="text-sm text-muted-foreground">{point.body}</p>
+          <li key={point.title} className="flex flex-col gap-1.5">
+            <h2 className="text-[15px] font-semibold">{point.title}</h2>
+            <p className="text-sm leading-[1.6] text-muted-foreground">
+              {point.body}
+            </p>
           </li>
         ))}
       </ul>

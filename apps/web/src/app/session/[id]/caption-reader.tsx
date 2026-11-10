@@ -14,10 +14,8 @@ import {
   AArrowUpIcon,
   ArrowDownToLineIcon,
   CircleCheckIcon,
-  NotebookTextIcon,
-  MessageCircleQuestionIcon,
-  PanelRightCloseIcon,
-  PanelRightOpenIcon,
+  NotebookTabsIcon,
+  SparklesIcon,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -86,7 +84,7 @@ const CountBadge = ({ count }: { count: number }) =>
   count > 0 ? (
     <span
       aria-hidden="true"
-      className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground tabular-nums"
+      className="absolute top-[5px] right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground tabular-nums"
     >
       {count}
     </span>
@@ -100,12 +98,12 @@ const toneFor = (distanceFromLatest: number): TranscriptTone =>
 
 const TextSizeControl = ({ compact }: { compact?: boolean }) => {
   const { step, setStep } = useCaptionSize();
-  const size = compact ? "h-7 w-8" : "h-11 w-12";
+  const size = compact ? "h-7 w-8" : "h-11 w-12 [&_svg]:size-5";
   return (
     <div
       role="group"
       aria-label="Caption text size"
-      className="flex gap-0.5 rounded-[10px] bg-secondary p-0.5"
+      className="flex gap-0.5 rounded-[10px] bg-muted p-0.5"
     >
       <Button
         variant="ghost"
@@ -344,10 +342,10 @@ export const CaptionReader = ({
               aria-hidden="true"
               className="mx-1 hidden h-5 w-px bg-border lg:block"
             />
-            <div className="flex min-w-0 flex-1 flex-col gap-1.5 lg:flex-row lg:items-center lg:gap-2.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5 lg:basis-[260px] lg:flex-row lg:items-center lg:gap-2.5">
               <div className="flex items-center gap-2">
                 {shownStatus === "live" ? (
-                  <LiveBadge className="h-5 text-[11px] tracking-wider uppercase" />
+                  <LiveBadge className="h-5 bg-live/16 text-[11px] tracking-[0.04em] uppercase" />
                 ) : (
                   <SessionStatusBadge status={shownStatus} />
                 )}
@@ -356,27 +354,33 @@ export const CaptionReader = ({
                 {title ?? "Live session"}
               </h1>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 lg:flex-wrap">
+              <div className="hidden lg:block">
+                <TextSizeControl compact />
+              </div>
               {toolbarActions}
               {notesPanel ? (
                 <Button
                   ref={askTrigger}
                   variant="ghost"
+                  aria-label="Ask about this talk"
                   className={
-                    panelTab === "ask" && notesOpen ? "hidden" : "h-11"
+                    panelTab === "ask" && notesOpen
+                      ? "hidden"
+                      : "size-11 lg:h-8 lg:w-auto lg:border-input lg:bg-input/30 lg:px-2.5"
                   }
                   onClick={() => {
                     setPanelTab("ask");
                     setNotesOpen(true);
                   }}
                 >
-                  <MessageCircleQuestionIcon aria-hidden="true" />
-                  Ask
+                  <SparklesIcon
+                    aria-hidden="true"
+                    className="size-5 lg:size-[15px]"
+                  />
+                  <span className="max-lg:sr-only">Ask</span>
                 </Button>
               ) : null}
-              <div className="hidden lg:block">
-                <TextSizeControl compact />
-              </div>
               <Link
                 href={`/session/${sessionId}/notes`}
                 aria-label={`My notes, ${noteCount} saved`}
@@ -388,7 +392,7 @@ export const CaptionReader = ({
                     : "relative size-11",
                 })}
               >
-                <NotebookTextIcon aria-hidden="true" />
+                <NotebookTabsIcon aria-hidden="true" className="size-5" />
                 <CountBadge count={noteCount} />
               </Link>
               {notesPanel ? (
@@ -397,14 +401,24 @@ export const CaptionReader = ({
                   className="hidden lg:inline-flex"
                   aria-expanded={notesOpen}
                   aria-controls={NOTES_PANEL_ID}
+                  aria-label={`My notes, ${noteCount} saved`}
                   onClick={() => setNotesOpen((open) => !open)}
                 >
-                  {notesOpen ? (
-                    <PanelRightCloseIcon data-icon="inline-start" />
-                  ) : (
-                    <PanelRightOpenIcon data-icon="inline-start" />
-                  )}
-                  {notesOpen ? "Close panel" : `Show notes (${noteCount})`}
+                  <NotebookTabsIcon data-icon="inline-start" />
+                  My notes
+                  {noteCount > 0 ? (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] text-[11px] font-semibold tabular-nums",
+                        notesOpen
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-primary-foreground text-primary",
+                      )}
+                    >
+                      {noteCount}
+                    </span>
+                  ) : null}
                 </Button>
               ) : null}
             </div>
@@ -515,7 +529,7 @@ export const CaptionReader = ({
 
           <div
             className={cn(
-              "flex flex-wrap items-center gap-2.5 border-t bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:justify-center lg:border-t-0 lg:bg-transparent lg:px-6 lg:pb-6",
+              "flex flex-wrap items-center gap-2.5 border-t bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:justify-center lg:gap-3 lg:border-t-0 lg:bg-transparent lg:px-6 lg:pt-0 lg:pb-6",
             )}
           >
             <div className="lg:hidden">
@@ -538,13 +552,7 @@ export const CaptionReader = ({
                 !following && "opacity-50",
               )}
             >
-              <CircleCheckIcon
-                aria-hidden="true"
-                className={cn(
-                  "size-4",
-                  following ? "text-success" : "text-muted-foreground",
-                )}
-              />
+              <CircleCheckIcon aria-hidden="true" className="size-4" />
               <span className="sr-only lg:not-sr-only">
                 {following ? "Following live" : "Paused"}
               </span>

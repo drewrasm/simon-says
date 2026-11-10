@@ -9,25 +9,22 @@ type NotesPanelProps = {
   sessionId: string;
   title: string;
   bookmarks: BookmarkResponse[];
-  /** Panel-level actions, such as Clip last 30s. */
-  actions?: ReactNode;
   /** The inline note form, rendered above the list. */
   form: ReactNode;
 };
 
-/** Desktop side panel: heading, export, clip and note controls, the list. */
+/** Desktop side panel: heading, export, note form, the list. */
 export const NotesPanel = ({
   sessionId,
   title,
   bookmarks,
-  actions,
   form,
 }: NotesPanelProps) => (
-  <div className="flex flex-col gap-5 p-5">
+  <div className="flex flex-col gap-4 p-5">
     <div className="flex items-start gap-3">
       <div className="flex grow flex-col gap-0.5">
-        <h2 className="text-lg font-bold">My notes</h2>
-        <p className="text-sm text-muted-foreground">
+        <h2 className="text-base leading-tight font-semibold">My notes</h2>
+        <p className="text-[13px] text-muted-foreground">
           {bookmarks.length === 1 ? "1 saved" : `${bookmarks.length} saved`}{" "}
           from {title}
         </p>
@@ -36,10 +33,9 @@ export const NotesPanel = ({
     <NotesExportActions title={title} bookmarks={bookmarks} />
     <RecapSection sessionId={sessionId} bookmarks={bookmarks} />
     <SearchSection sessionId={sessionId} />
-    {actions}
     {form}
     <NotesList bookmarks={bookmarks} />
-    <p className="text-xs text-muted-foreground">
+    <p className="text-xs leading-normal text-muted-foreground">
       Private to you on this device.
     </p>
   </div>

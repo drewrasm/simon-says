@@ -9,6 +9,7 @@ describe("host lobby", () => {
       title="Opening keynote"
       status="setup"
       joinPath="/join/abc"
+      joinCode="7KM2QX"
     />,
   );
 
@@ -17,6 +18,7 @@ describe("host lobby", () => {
     expect(html).toContain("Share with the room");
     expect(html).toContain("Pre-flight check");
     expect(html).toContain("Test microphone");
+    expect(html).toContain("Lobby open · not live");
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>.*Go live/);
   });
 
@@ -31,6 +33,7 @@ describe("host lobby", () => {
         title={null}
         status="ended"
         joinPath="/join/abc"
+        joinCode={null}
       />,
     );
     expect(ended).toContain("This session has ended");

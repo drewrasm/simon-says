@@ -45,7 +45,7 @@ const NotesPage = async ({ params }: NotesPageProps) => {
         <header className="flex items-center gap-1">
           <Link
             href={`/session/${id}`}
-            aria-label="Back to captions"
+            aria-label="Back to transcript"
             className={buttonVariants({
               variant: "ghost",
               size: "icon-lg",
@@ -62,6 +62,23 @@ const NotesPage = async ({ params }: NotesPageProps) => {
           </div>
         </header>
 
+        {session.status === "live" ? (
+          <Link
+            href={`/session/${id}`}
+            className="flex min-h-11 items-center gap-2 rounded-lg bg-live/12 px-3 text-sm font-medium"
+          >
+            <span
+              aria-hidden="true"
+              className="size-[7px] shrink-0 animate-pulse rounded-full bg-live"
+            />
+            <span className="grow">Session is still live</span>
+            <span className="flex items-center font-semibold text-live-foreground">
+              Return
+              <ChevronRightIcon aria-hidden="true" className="size-4" />
+            </span>
+          </Link>
+        ) : null}
+
         <NotesExportActions
           title={session.title ?? "Live session"}
           bookmarks={bookmarks}
@@ -69,23 +86,6 @@ const NotesPage = async ({ params }: NotesPageProps) => {
 
         <RecapSection sessionId={id} bookmarks={bookmarks} />
         <SearchSection sessionId={id} />
-
-        {session.status === "live" ? (
-          <Link
-            href={`/session/${id}`}
-            className="flex min-h-11 items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm"
-          >
-            <span
-              aria-hidden="true"
-              className="size-2 shrink-0 animate-pulse rounded-full bg-destructive"
-            />
-            <span className="grow font-semibold">Session is still live</span>
-            <span className="flex items-center gap-0.5 text-muted-foreground">
-              Return
-              <ChevronRightIcon aria-hidden="true" className="size-4" />
-            </span>
-          </Link>
-        ) : null}
 
         <div className="flex-1">
           <NotesList bookmarks={bookmarks} showJump />
@@ -96,11 +96,11 @@ const NotesPage = async ({ params }: NotesPageProps) => {
           Private to you on this device.
         </p>
 
-        <div className="sticky bottom-0 -mx-4 border-t bg-background px-4 py-3 sm:-mx-6 sm:px-6">
+        <div className="sticky bottom-0 -mx-4 border-t bg-card px-4 pt-3 pb-7 sm:-mx-6 sm:px-6">
           <NoteComposer
             sessionId={id}
             triggerLabel="New note"
-            triggerClassName="h-11 w-full"
+            triggerClassName="h-12 w-full gap-2 bg-primary text-[15px] font-semibold text-primary-foreground hover:bg-primary/80"
             afterSave="refresh"
           />
         </div>

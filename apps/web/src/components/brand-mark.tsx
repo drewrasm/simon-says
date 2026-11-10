@@ -38,12 +38,17 @@ type BrandMarkProps = { className?: string; showName?: boolean };
 
 /** Simon Says logo tile and wordmark used in every app header. */
 export const BrandMark = ({ className, showName = true }: BrandMarkProps) => (
-  <span className={cn("inline-flex items-center gap-2.5 font-bold", className)}>
+  <span
+    className={cn(
+      "inline-flex items-center gap-2 text-base font-bold",
+      className,
+    )}
+  >
     <span
       aria-hidden="true"
-      className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+      className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"
     >
-      <MeerkatGlyph className="size-8" />
+      <MeerkatGlyph className="size-[22px]" />
     </span>
     {showName ? <span>Simon Says</span> : null}
   </span>

@@ -8,9 +8,14 @@ const formatCode = (code: string) =>
 
 /** Join code block shown to hosts: label, large code, and the short join link. */
 export const JoinCode = ({ code, href, className }: JoinCodeProps) => (
-  <div className={cn("flex min-w-0 flex-col gap-1", className)}>
-    <span className="text-xs font-medium text-muted-foreground">Join code</span>
-    <span className="text-3xl font-bold tracking-[0.06em]" aria-label={code}>
+  <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+    <span className="text-[13px] font-medium text-muted-foreground">
+      Join code
+    </span>
+    <span
+      className="text-[40px] leading-[1.1] font-bold tracking-[0.06em]"
+      aria-label={code}
+    >
       {formatCode(code)}
     </span>
     <a href={href} className="text-sm underline underline-offset-3">

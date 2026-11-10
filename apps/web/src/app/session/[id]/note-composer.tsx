@@ -16,9 +16,9 @@ import { Field, FieldLabel } from "@simon-says/ui/components/field";
 import { Label } from "@simon-says/ui/components/label";
 import { Switch } from "@simon-says/ui/components/switch";
 import { Textarea } from "@simon-says/ui/components/textarea";
-import { ClockIcon, SquarePenIcon } from "lucide-react";
+import { ClockIcon, SquarePenIcon, XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useClipState } from "./clip-context";
 import { lastLine } from "./clip-line";
@@ -46,6 +46,7 @@ export const NoteComposer = ({
 }: NoteComposerProps) => {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const noteField = useRef<HTMLTextAreaElement>(null);
   const { lines, talkMs } = useClipState();
   const latest = lastLine(lines);
   const {
@@ -97,28 +98,51 @@ export const NoteComposer = ({
         <SquarePenIcon data-icon="inline-start" />
         {triggerLabel}
       </DrawerTrigger>
-      <DrawerContent className="dark shadow-[0_-8px_24px_rgb(0_0_0/0.12)]">
+      <DrawerContent
+        initialFocus={noteField}
+        className="dark shadow-[0_-8px_24px_rgb(0_0_0/0.12)] data-[swipe-direction=down]:rounded-t-[20px]"
+      >
         <form
-          className="mx-auto flex w-full max-w-lg flex-col gap-4 p-4"
+          className="mx-auto flex w-full max-w-lg flex-col gap-4 px-5 pt-2.5 pb-8"
           onSubmit={(event) => {
             event.preventDefault();
             void save();
           }}
         >
-          <DrawerHeader className="p-0 text-left">
-            <DrawerTitle>New note</DrawerTitle>
-            <DrawerDescription className="flex items-center gap-1.5 tabular-nums">
-              <ClockIcon aria-hidden="true" className="size-3.5" />
-              {pinnedAtMs === null
-                ? "Saved with the time you add it. Pinning to a moment in the talk arrives with live captions."
-                : `Pinned to ${formatTalkTime(pinnedAtMs)} in the talk`}
-            </DrawerDescription>
+          <div
+            aria-hidden="true"
+            className="mx-auto h-1 w-10 shrink-0 rounded-full bg-foreground/20"
+          />
+          <DrawerHeader className="flex-row items-start gap-3 p-0 text-left">
+            <div className="flex grow flex-col gap-1">
+              <DrawerTitle className="text-lg font-bold">New note</DrawerTitle>
+              <DrawerDescription className="flex items-center gap-1.5 text-[13px] tabular-nums">
+                <ClockIcon aria-hidden="true" className="size-3.5 shrink-0" />
+                {pinnedAtMs === null
+                  ? "Saved with the time you add it. Pinning to a moment in the talk arrives with live captions."
+                  : `Pinned to ${formatTalkTime(pinnedAtMs)} in the talk`}
+              </DrawerDescription>
+            </div>
+            <DrawerClose
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-lg"
+                  className="-mt-2 -mr-2 size-11"
+                  aria-label="Close"
+                />
+              }
+            >
+              <XIcon aria-hidden="true" />
+            </DrawerClose>
           </DrawerHeader>
 
           <Field>
             <FieldLabel htmlFor="note-text">Your note</FieldLabel>
             <Textarea
               id="note-text"
+              ref={noteField}
               rows={5}
               value={note}
               maxLength={NOTE_MAX_LENGTH}
@@ -128,7 +152,7 @@ export const NoteComposer = ({
             />
           </Field>
 
-          <div className="flex flex-col gap-3 rounded-lg bg-muted p-3">
+          <div className="flex flex-col gap-3 rounded-lg bg-muted px-3.5 py-3">
             <div className="flex items-center gap-3">
               <div className="flex grow flex-col gap-0.5">
                 <Label htmlFor="attach-quote">Attach what was just said</Label>
@@ -137,7 +161,7 @@ export const NoteComposer = ({
                   className="text-xs text-muted-foreground"
                 >
                   {latest
-                    ? "Adds the last line as a quote under your note."
+                    ? "Adds the last line as a quote under your note"
                     : "Available once live captions start."}
                 </span>
               </div>
@@ -153,7 +177,7 @@ export const NoteComposer = ({
               />
             </div>
             {attached ? (
-              <blockquote className="border-l-2 border-primary pl-3 text-sm leading-relaxed text-muted-foreground">
+              <blockquote className="border-l-2 border-primary pl-3 text-sm leading-relaxed text-chart-1">
                 “{attached.text}”
               </blockquote>
             ) : null}
@@ -165,13 +189,25 @@ export const NoteComposer = ({
             </Alert>
           ) : null}
 
-          <DrawerFooter className="grid grid-cols-2 gap-2.5 p-0">
+          <DrawerFooter className="mt-1 grid grid-cols-2 gap-2.5 p-0">
             <DrawerClose
-              render={<Button type="button" variant="outline" size="lg" />}
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="h-12 text-[15px]"
+                />
+              }
             >
               Cancel
             </DrawerClose>
-            <Button type="submit" size="lg" disabled={!canSubmit}>
+            <Button
+              type="submit"
+              size="lg"
+              className="h-12 text-[15px] font-semibold"
+              disabled={!canSubmit}
+            >
               {saving ? "Saving…" : "Save note"}
             </Button>
           </DrawerFooter>

@@ -7,11 +7,10 @@ import { Button } from "@simon-says/ui/components/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@simon-says/ui/components/card";
-import { CheckCircle2Icon, CircleAlertIcon, SquareIcon } from "lucide-react";
+import { CircleAlertIcon, MicIcon, SquareIcon } from "lucide-react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { BrandMark } from "../../../components/brand-mark";
 import { LevelMeter } from "../../../components/level-meter";
@@ -68,6 +67,7 @@ type HostSessionProps = {
   title: string | null;
   status: SessionStatus;
   joinPath: string;
+  joinCode: string | null;
 };
 
 /**
@@ -79,6 +79,7 @@ export const HostSession = ({
   title,
   status,
   joinPath,
+  joinCode,
 }: HostSessionProps) => {
   // The QR must encode the origin attendees reach, which only the browser knows.
   const origin = useSyncExternalStore(subscribeNever, readOrigin, readNoOrigin);
@@ -124,62 +125,98 @@ export const HostSession = ({
   };
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="border-b">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
-          <BrandMark showName={false} />
-          <span className="min-w-0 flex-1 truncate font-semibold">
+    <div className="flex min-h-screen flex-col bg-sidebar">
+      <header className="border-b bg-card">
+        <div className="flex w-full flex-wrap items-center gap-3 px-5 py-2.5">
+          <BrandMark />
+          <span aria-hidden="true" className="mx-1 h-5 w-px bg-border" />
+          <span className="min-w-0 flex-[1_1_240px] truncate text-sm font-semibold">
             {heading}
           </span>
           {live ? (
             <>
-              {elapsed ? <LiveBadge elapsed={elapsed} /> : <LiveBadge />}
-              <Button variant="destructive" onClick={() => void endCapture()}>
+              {elapsed ? (
+                <LiveBadge elapsed={elapsed} className="h-[22px]" />
+              ) : (
+                <LiveBadge className="h-[22px]" />
+              )}
+              <Button onClick={() => void endCapture()}>
                 <SquareIcon data-icon="inline-start" />
                 Stop captions
               </Button>
             </>
-          ) : (
+          ) : closed ? (
             <SessionStatusBadge status={status} />
+          ) : (
+            <span className="inline-flex h-[22px] items-center gap-1.5 rounded-full bg-muted px-2.5 text-xs font-semibold">
+              <span
+                aria-hidden="true"
+                className="size-1.5 rounded-full bg-ring"
+              />
+              Lobby open · not live
+            </span>
           )}
         </div>
       </header>
 
       {live ? (
-        <main className="mx-auto grid w-full max-w-6xl flex-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <main className="mx-auto flex w-full max-w-[1440px] flex-1 flex-wrap content-start items-start gap-4 p-5">
           <h1 className="sr-only">{heading}: live</h1>
-          <section aria-labelledby="transcript-heading" className="min-w-0">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h2 id="transcript-heading" className="text-lg font-semibold">
-                Live transcript
-              </h2>
-              <span className="flex items-center gap-2 rounded-md border px-2.5 py-1 text-sm">
-                <LevelMeter
-                  level={toBars(capture.health.level)}
-                  label={`Input level ${toBars(capture.health.level)} of 5`}
-                />
-                {deviceLabel}
-              </span>
-            </div>
-            <LiveTranscript lines={lines} live />
+          <section
+            aria-labelledby="transcript-heading"
+            className="min-w-0 flex-[999_1_560px]"
+          >
+            <Card className="gap-0 py-0">
+              <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3.5">
+                <div className="flex flex-[1_1_200px] flex-col gap-0.5">
+                  <h2
+                    id="transcript-heading"
+                    className="text-base leading-[1.3] font-semibold"
+                  >
+                    Live transcript
+                  </h2>
+                  <p className="text-[13px] text-muted-foreground">
+                    Captions appear on every guest&apos;s screen as you speak.
+                  </p>
+                </div>
+                <span className="flex h-8 min-w-0 items-center gap-2 rounded-lg border bg-background px-2.5 text-[13px] font-medium shadow-xs">
+                  <MicIcon
+                    aria-hidden="true"
+                    className="size-[15px] shrink-0"
+                  />
+                  <span className="truncate">{deviceLabel}</span>
+                  <LevelMeter
+                    level={toBars(capture.health.level)}
+                    label={`Input level ${toBars(capture.health.level)} of 5`}
+                  />
+                </span>
+              </div>
+              <LiveTranscript lines={lines} live />
+            </Card>
           </section>
-          <aside className="flex flex-col gap-6">
+          <aside className="flex min-w-0 flex-[1_1_320px] flex-col gap-4">
             <ShareCard
               joinUrl={joinUrl}
+              joinCode={joinCode}
               headingId="invite-heading"
               title="Invite your audience"
-              description="Guests join with the QR code or link."
+              description={
+                joinCode
+                  ? "Guests join with this code or the QR code."
+                  : "Guests join with the QR code or link."
+              }
+              compact
             />
             <CaptureHealthCard health={capture.health} state={feed.capture} />
           </aside>
         </main>
       ) : (
-        <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6">
+        <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 sm:px-6">
           <div className="flex flex-col gap-1">
-            <h1 className="text-3xl font-semibold tracking-tight">
+            <h1 className="text-[26px] leading-[1.2] font-bold">
               {closed ? "This session has ended" : "Get ready to go live"}
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {closed
                 ? "Guests can still read the captions they saw."
                 : "Guests can join now. Their captions start when you go live."}
@@ -207,27 +244,33 @@ export const HostSession = ({
             </Alert>
           ) : null}
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="flex flex-wrap items-stretch gap-4">
             <ShareCard
               joinUrl={joinUrl}
+              joinCode={joinCode}
               headingId="share-heading"
               title="Share with the room"
-              description="Put this on screen so guests can join."
             />
             {closed ? null : (
-              <section aria-labelledby="preflight-heading">
-                <Card className="h-full">
+              <section
+                aria-labelledby="preflight-heading"
+                className="min-w-0 flex-[1_1_380px]"
+              >
+                <Card className="h-full shadow-xs [--card-spacing:--spacing(6)]">
                   <CardHeader>
-                    <CardTitle id="preflight-heading">
+                    <CardTitle
+                      id="preflight-heading"
+                      className="text-base font-semibold"
+                    >
                       Pre-flight check
                     </CardTitle>
-                    <CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-3">
+                    <MicrophonePicker microphone={mic} />
+                    <p className="text-xs text-muted-foreground">
                       Only this device captures audio. The test stays in your
                       browser until you go live.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <MicrophonePicker microphone={mic} />
+                    </p>
                   </CardContent>
                 </Card>
               </section>
@@ -237,33 +280,20 @@ export const HostSession = ({
           {closed ? null : (
             <section
               aria-labelledby="golive-heading"
-              className="flex flex-col items-start justify-between gap-4 rounded-xl border bg-muted/50 p-5 sm:flex-row sm:items-center"
+              className="flex flex-col items-start justify-between gap-4 rounded-xl bg-primary px-6 py-5 text-primary-foreground sm:flex-row sm:items-center"
             >
-              <div className="flex items-start gap-3">
-                {mic.status === "active" ? (
-                  <CheckCircle2Icon
-                    aria-hidden="true"
-                    className="mt-0.5 size-5 text-success-foreground"
-                  />
-                ) : (
-                  <CircleAlertIcon
-                    aria-hidden="true"
-                    className="mt-0.5 size-5 text-muted-foreground"
-                  />
-                )}
-                <div>
-                  <h2 id="golive-heading" className="font-semibold">
-                    {mic.status === "active"
-                      ? "Everything looks good"
-                      : "Test your microphone first"}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Transcription starts the moment you go live.
-                  </p>
-                </div>
+              <div>
+                <h2 id="golive-heading" className="text-base font-semibold">
+                  {mic.status === "active"
+                    ? "Everything looks good"
+                    : "Test your microphone first"}
+                </h2>
+                <p className="text-sm text-chart-1">
+                  Transcription starts the moment you go live.
+                </p>
               </div>
               <Button
-                size="lg"
+                className="h-11 rounded-[10px] bg-primary-foreground px-5 text-[15px] font-semibold text-primary hover:bg-primary-foreground/90"
                 disabled={mic.status !== "active"}
                 onClick={goLive}
               >

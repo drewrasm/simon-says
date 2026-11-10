@@ -7,22 +7,15 @@ import {
 import { Alert, AlertDescription } from "@simon-says/ui/components/alert";
 import { Button, buttonVariants } from "@simon-says/ui/components/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@simon-says/ui/components/card";
-import {
   Field,
   FieldDescription,
   FieldLabel,
 } from "@simon-says/ui/components/field";
 import { Input } from "@simon-says/ui/components/input";
+import { ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { BrandMark } from "../../../components/brand-mark";
-import { SessionStatusBadge } from "../../../components/session-status-badge";
 
 const TITLE_MAX_LENGTH = 120;
 
@@ -60,22 +53,18 @@ export const HostSetup = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="border-b">
-        <div className="mx-auto flex w-full max-w-5xl items-center px-4 py-3 sm:px-6">
-          <Link href="/" className="rounded-md">
-            <BrandMark />
-          </Link>
-        </div>
+    <div className="flex min-h-screen flex-col bg-sidebar">
+      <header className="flex items-center border-b bg-background px-6 py-3">
+        <Link href="/" className="rounded-md">
+          <BrandMark />
+        </Link>
       </header>
 
-      <main className="mx-auto grid w-full max-w-5xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-3xl font-semibold tracking-tight">
-              New session
-            </h1>
-            <p className="text-muted-foreground">
+      <main className="mx-auto flex w-full max-w-[1200px] flex-wrap items-start gap-6 px-6 pt-7 pb-10">
+        <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
+          <div className="mb-1 flex flex-col gap-1">
+            <h1 className="text-[26px] leading-[1.2] font-bold">New session</h1>
+            <p className="text-sm text-muted-foreground">
               Name the talk, then open the lobby. You&apos;ll test the
               microphone there before going live.
             </p>
@@ -83,34 +72,32 @@ export const HostSetup = () => {
 
           <form
             onSubmit={(event) => void submit(event)}
-            className="flex flex-col gap-6"
+            className="flex flex-col gap-4"
           >
-            <section aria-labelledby="details-heading">
-              <Card>
-                <CardHeader>
-                  <CardTitle id="details-heading">Details</CardTitle>
-                  <CardDescription>
-                    Guests see this when they join.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Field>
-                    <FieldLabel htmlFor="session-title">
-                      Session title (optional)
-                    </FieldLabel>
-                    <Input
-                      id="session-title"
-                      value={title}
-                      maxLength={TITLE_MAX_LENGTH}
-                      placeholder="e.g. Scaling caption pipelines"
-                      onChange={(event) => setTitle(event.target.value)}
-                    />
-                    <FieldDescription>
-                      Up to {TITLE_MAX_LENGTH} characters.
-                    </FieldDescription>
-                  </Field>
-                </CardContent>
-              </Card>
+            <section
+              aria-labelledby="details-heading"
+              className="flex flex-col gap-4 rounded-xl border bg-card p-5 text-card-foreground shadow-xs"
+            >
+              <h2 id="details-heading" className="text-base font-semibold">
+                Details
+              </h2>
+              <Field>
+                <FieldLabel htmlFor="session-title">
+                  Session title (optional)
+                </FieldLabel>
+                <Input
+                  id="session-title"
+                  value={title}
+                  maxLength={TITLE_MAX_LENGTH}
+                  placeholder="e.g. Opening Keynote"
+                  className="h-9 shadow-xs"
+                  onChange={(event) => setTitle(event.target.value)}
+                />
+                <FieldDescription>
+                  Guests see this when they join. Up to {TITLE_MAX_LENGTH}{" "}
+                  characters.
+                </FieldDescription>
+              </Field>
             </section>
 
             {createFailed ? (
@@ -123,11 +110,24 @@ export const HostSetup = () => {
             ) : null}
 
             <div className="flex flex-wrap justify-end gap-2">
-              <Link href="/" className={buttonVariants({ variant: "ghost" })}>
+              <Link
+                href="/"
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "lg",
+                  className: "px-3.5",
+                })}
+              >
                 Cancel
               </Link>
-              <Button type="submit" size="lg" disabled={creating}>
-                {creating ? "Opening lobby…" : "Open lobby"}
+              <Button
+                type="submit"
+                size="lg"
+                className="px-3.5"
+                disabled={creating}
+              >
+                {creating ? "Opening lobby…" : "Create & open lobby"}
+                <ArrowRightIcon aria-hidden="true" className="size-[15px]" />
               </Button>
             </div>
           </form>
@@ -135,27 +135,32 @@ export const HostSetup = () => {
 
         <aside
           aria-labelledby="preview-heading"
-          className="flex flex-col gap-3"
+          className="flex flex-[1_1_320px] flex-col gap-3.5 rounded-xl border bg-card p-5 text-card-foreground shadow-xs lg:sticky lg:top-6"
         >
-          <div className="flex items-baseline justify-between gap-2">
-            <h2 id="preview-heading" className="text-sm font-semibold">
+          <div className="flex flex-col gap-1">
+            <h2 id="preview-heading" className="text-base font-semibold">
               What guests will see
             </h2>
-            <span className="text-xs text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               Updates as you type
-            </span>
+            </p>
           </div>
-          <div className="flex flex-col gap-3 rounded-xl border bg-muted/40 p-5">
-            <div className="flex items-center justify-between gap-2">
-              <BrandMark className="text-sm" />
-              <SessionStatusBadge status="setup" />
-            </div>
-            <p className="text-xl font-semibold tracking-tight break-words">
+          <div className="dark mx-auto flex h-[300px] w-[220px] flex-col gap-2.5 overflow-hidden rounded-3xl border-[6px] border-muted bg-background px-3.5 py-[18px] text-foreground">
+            <span className="inline-flex h-4 items-center gap-1 self-start rounded-full bg-live/16 px-1.5 text-[9px] font-semibold tracking-[0.04em] text-live-foreground">
+              <span
+                aria-hidden="true"
+                className="size-[5px] rounded-full bg-current"
+              />
+              STARTING SOON
+            </span>
+            <p className="text-sm leading-tight font-bold break-words">
               {title.trim() || "Your session"}
             </p>
-            <p className="text-sm text-muted-foreground">
-              Captions appear here once you go live.
-            </p>
+            <div aria-hidden="true" className="mt-auto flex flex-col gap-1.5">
+              <span className="h-2 w-[90%] rounded bg-white/12" />
+              <span className="h-2 w-3/4 rounded bg-white/12" />
+              <span className="h-2.5 w-[95%] rounded bg-white/30" />
+            </div>
           </div>
         </aside>
       </main>

@@ -6,8 +6,8 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@simon-says/ui/components/empty";
+import { cn } from "cn";
 import { useLayoutEffect, useRef } from "react";
-import { TranscriptLine } from "../../../components/transcript-line";
 import { formatClock, type FeedLine } from "./caption-feed";
 
 type LiveTranscriptProps = { lines: readonly FeedLine[]; live: boolean };
@@ -30,7 +30,7 @@ export const LiveTranscript = ({ lines, live }: LiveTranscriptProps) => {
 
   if (lines.length === 0)
     return (
-      <Empty className="min-h-64 border">
+      <Empty className={live ? "h-[580px]" : "min-h-64 border"}>
         <EmptyHeader>
           <EmptyTitle>{live ? "Listening…" : "No captions yet"}</EmptyTitle>
           <EmptyDescription>
@@ -55,25 +55,61 @@ export const LiveTranscript = ({ lines, live }: LiveTranscriptProps) => {
           element.scrollHeight - element.scrollTop - element.clientHeight <
           FOLLOW_SLACK;
       }}
-      className="max-h-[60vh] min-h-64 overflow-y-auto rounded-lg border p-2 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      className={cn(
+        "overflow-y-auto p-1.5 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+        // The console card clips overflow, so the focus ring must sit inside.
+        live
+          ? "h-[580px] focus-visible:ring-inset"
+          : "max-h-[60vh] min-h-64 rounded-lg border",
+      )}
     >
       {lines.map((line) =>
         line.kind === "gap" ? (
           <p
             key={line.key}
-            className="px-2.5 py-2 text-sm text-muted-foreground italic"
+            className="px-2.5 py-[9px] text-[13px] text-muted-foreground italic"
           >
             {formatClock(line.startMs)} · {line.text}
           </p>
         ) : (
-          <TranscriptLine
-            key={line.key}
-            time={line.kind === "interim" ? "Now" : formatClock(line.startMs)}
-            text={line.text}
-            interim={line.kind === "interim"}
-          />
+          <TranscriptRow key={line.key} line={line} />
         ),
       )}
+    </div>
+  );
+};
+
+type TranscriptRowProps = { line: FeedLine };
+
+const TranscriptRow = ({ line }: TranscriptRowProps) => {
+  const interim = line.kind === "interim";
+
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[68px_minmax(0,1fr)] gap-3 rounded-lg px-2.5 py-[9px]",
+        interim && "bg-muted",
+      )}
+    >
+      <span
+        className={cn(
+          "pt-1 text-xs tabular-nums",
+          interim ? "font-semibold" : "text-muted-foreground",
+        )}
+      >
+        {interim ? "Now" : formatClock(line.startMs)}
+      </span>
+      <span
+        className={cn("text-base leading-[1.6]", interim && "text-chart-3")}
+      >
+        {line.text}
+        {interim ? (
+          <span
+            aria-hidden="true"
+            className="ml-[3px] inline-block h-[17px] w-0.5 animate-pulse bg-primary align-[-3px] motion-reduce:animate-none"
+          />
+        ) : null}
+      </span>
     </div>
   );
 };

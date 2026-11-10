@@ -37,6 +37,7 @@ const HostPage = async ({ params }: HostPageProps) => {
       title={session.title}
       status={session.status}
       joinPath={`/join/${session.inviteCode}`}
+      joinCode={session.joinCode}
     />
   );
 };

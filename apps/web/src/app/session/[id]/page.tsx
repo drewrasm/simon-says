@@ -48,22 +48,28 @@ const SessionPage = async ({ params }: SessionPageProps) => {
         title={session.title}
         status={session.status}
         noteCount={notes.length}
+        toolbarActions={
+          <KeepThatButton
+            sessionId={id}
+            variant="outline"
+            className="hidden lg:inline-flex"
+          />
+        }
         notesPanel={
           <NotesPanel
             sessionId={id}
             title={title}
             bookmarks={notes}
-            actions={<KeepThatButton sessionId={id} className="w-full" />}
             form={<NoteForm sessionId={id} />}
           />
         }
         actions={
           <>
-            <KeepThatButton sessionId={id} className="h-11 grow" />
+            <KeepThatButton sessionId={id} short className="h-11 px-3" />
             <NoteComposer
               sessionId={id}
               triggerLabel="Note"
-              triggerClassName="h-11 grow"
+              triggerClassName="h-11 px-3"
               afterSave="open-notes"
             />
           </>
