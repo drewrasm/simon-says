@@ -85,7 +85,7 @@ describe("attendee caption reader", () => {
     expect(html).toMatch(/<div class="[^"]*lg:hidden[^"]*"><button[^>]*>Note/);
     // Wide screens get the panel, open by default, and a labelled toggle.
     expect(html).toMatch(
-      /<button[^>]*aria-expanded="true"[^>]*aria-controls="notes-panel"[^>]*>.*Close panel/,
+      /<button[^>]*aria-expanded="true"[^>]*aria-controls="notes-panel"[^>]*>.*My notes/,
     );
     expect(html).toMatch(
       /<aside id="notes-panel" aria-label="Notes and Ask"[^>]*>/,

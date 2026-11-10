@@ -28,8 +28,7 @@ import {
 import { NOTE_MAX_LENGTH } from "./use-note-draft";
 import { useClipSave } from "./use-clip-save";
 
-const clippedMessage = (count: number) =>
-  count === 1 ? "Clipped to My notes" : `Clipped ${count} lines to My notes`;
+const CLIPPED_MESSAGE = "Clipped to My notes";
 
 type ClipSheetProps = {
   sessionId: string;
@@ -64,7 +63,7 @@ const ClipSheet = ({ sessionId, open, onOpenChange }: ClipSheetProps) => {
     setNote("");
     clearSelection();
     onOpenChange(false);
-    toast.success(clippedMessage(count));
+    toast.success(CLIPPED_MESSAGE);
     router.refresh();
   };
 
@@ -75,18 +74,24 @@ const ClipSheet = ({ sessionId, open, onOpenChange }: ClipSheetProps) => {
       modal="trap-focus"
       disablePointerDismissal
     >
-      <DrawerContent className="dark shadow-[0_-8px_24px_rgb(0_0_0/0.12)]">
+      <DrawerContent className="dark shadow-[0_-8px_24px_rgb(0_0_0/0.12)] data-[swipe-direction=down]:rounded-t-[20px]">
         <form
-          className="mx-auto flex w-full max-w-lg flex-col gap-4 p-4"
+          className="mx-auto flex w-full max-w-lg flex-col gap-4 px-5 pt-2.5 pb-8"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
           }}
         >
+          <div
+            aria-hidden="true"
+            className="mx-auto h-1 w-10 shrink-0 rounded-full bg-foreground/20"
+          />
           <DrawerHeader className="flex-row items-start gap-3 p-0 text-left">
-            <div className="flex grow flex-col gap-0.5">
-              <DrawerTitle>Clip to notes</DrawerTitle>
-              <DrawerDescription className="tabular-nums">
+            <div className="flex grow flex-col gap-1">
+              <DrawerTitle className="text-lg font-bold">
+                Clip to notes
+              </DrawerTitle>
+              <DrawerDescription className="text-[13px] tabular-nums">
                 {clipLabel(clip)}
               </DrawerDescription>
             </div>
@@ -105,18 +110,18 @@ const ClipSheet = ({ sessionId, open, onOpenChange }: ClipSheetProps) => {
             </DrawerClose>
           </DrawerHeader>
 
-          <blockquote className="max-h-40 overflow-y-auto rounded-lg border-l-2 border-primary bg-muted p-3 text-[15px] leading-relaxed">
+          <blockquote className="max-h-40 overflow-y-auto rounded-lg bg-muted px-3.5 py-3 text-[15px] leading-[1.55] text-chart-1">
             “{clipQuote(clip)}”
           </blockquote>
 
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="flex flex-wrap gap-2">
             {(["before", "after"] as const).map((side) => (
               <Button
                 key={side}
                 type="button"
                 variant="outline"
                 size="lg"
-                className="h-11"
+                className="rounded-full bg-transparent px-3 text-[13px] dark:bg-transparent"
                 disabled={!canGrow(side)}
                 onClick={() =>
                   setSelectedIds(extendSelection(lines, selectedIds, side))
@@ -153,15 +158,23 @@ const ClipSheet = ({ sessionId, open, onOpenChange }: ClipSheetProps) => {
             </Alert>
           ) : null}
 
-          <DrawerFooter className="grid grid-cols-2 gap-2.5 p-0">
+          <DrawerFooter className="mt-1 grid grid-cols-2 gap-2.5 p-0">
             <DrawerClose
-              render={<Button type="button" variant="outline" size="lg" />}
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="h-12 text-[15px]"
+                />
+              }
             >
               Cancel
             </DrawerClose>
             <Button
               type="submit"
               size="lg"
+              className="h-12 text-[15px] font-semibold"
               disabled={saving || clip.length === 0}
             >
               <ScissorsIcon data-icon="inline-start" />
@@ -201,7 +214,7 @@ export const ClipControls = ({ sessionId }: { sessionId: string }) => {
     const count = await save(selection, "", { finishLocked: false });
     if (count === null) return;
     clearSelection();
-    toast.success(clippedMessage(count));
+    toast.success(CLIPPED_MESSAGE);
     router.refresh();
   };
 
@@ -216,32 +229,32 @@ export const ClipControls = ({ sessionId }: { sessionId: string }) => {
         <div
           role="toolbar"
           aria-label="Selected lines"
-          className="dark fixed inset-x-4 bottom-24 z-40 mx-auto flex max-w-xl flex-col gap-2 lg:bottom-6"
+          className="dark fixed inset-x-4 bottom-24 z-40 mx-auto flex max-w-xl flex-col gap-2 lg:bottom-6 lg:w-fit"
         >
           {failureMessage ? (
             <Alert variant="destructive" className="hidden lg:grid">
               <AlertDescription>{failureMessage}</AlertDescription>
             </Alert>
           ) : null}
-          <div className="flex items-center gap-1.5 rounded-xl border bg-popover p-2 pl-4 text-popover-foreground shadow-lg">
+          <div className="flex items-center gap-1.5 rounded-[14px] border bg-muted py-1.5 pr-1.5 pl-4 text-foreground shadow-[0_12px_32px_rgb(0_0_0/0.45)]">
             <span
               aria-live="polite"
-              className="grow text-sm font-semibold tabular-nums"
+              className="mr-2 grow text-sm font-medium whitespace-nowrap tabular-nums"
             >
               {label}
             </span>
             <Button
               type="button"
               variant="ghost"
-              className="h-11 lg:h-9"
+              className="h-11 text-primary lg:h-8"
               onClick={clearSelection}
             >
               Clear
             </Button>
             <Button
               type="button"
-              variant="ghost"
-              className="h-11 lg:h-9"
+              variant="outline"
+              className="h-11 bg-transparent lg:h-8 dark:bg-transparent"
               onClick={() => void copy()}
             >
               <CopyIcon data-icon="inline-start" />
@@ -249,7 +262,7 @@ export const ClipControls = ({ sessionId }: { sessionId: string }) => {
             </Button>
             <Button
               type="button"
-              className="h-11 lg:hidden"
+              className="h-11 px-3 font-semibold lg:hidden"
               onClick={() => setSheetOpen(true)}
             >
               <ScissorsIcon data-icon="inline-start" />
@@ -257,7 +270,7 @@ export const ClipControls = ({ sessionId }: { sessionId: string }) => {
             </Button>
             <Button
               type="button"
-              className="hidden lg:inline-flex"
+              className="hidden px-3 font-semibold lg:inline-flex"
               disabled={saving}
               onClick={() => void clipNow()}
             >

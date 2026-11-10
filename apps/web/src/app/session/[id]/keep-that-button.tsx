@@ -2,7 +2,7 @@
 
 import type { PutBookmarkRequest } from "@simon-says/contracts/bookmark";
 import { Button } from "@simon-says/ui/components/button";
-import { HistoryIcon } from "lucide-react";
+import { ScissorsIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { toast } from "sonner";
@@ -11,6 +11,9 @@ import { useClipState } from "./clip-context";
 
 type KeepThatButtonProps = {
   sessionId: string;
+  variant?: "secondary" | "outline";
+  /** Phone toolbar label: "Clip", with the duration kept for screen readers. */
+  short?: boolean;
   className?: string;
 };
 
@@ -22,6 +25,8 @@ type KeepThatButtonProps = {
  */
 export const KeepThatButton = ({
   sessionId,
+  variant = "secondary",
+  short = false,
   className,
 }: KeepThatButtonProps) => {
   const router = useRouter();
@@ -69,15 +74,23 @@ export const KeepThatButton = ({
     <>
       <Button
         type="button"
-        variant="secondary"
-        size="lg"
+        variant={variant}
+        size={variant === "outline" ? "default" : "lg"}
         className={className}
         disabled={waiting || saving}
         aria-describedby={waiting ? hintId : undefined}
         onClick={keep}
       >
-        <HistoryIcon data-icon="inline-start" />
-        {saving ? "Clipping…" : "Clip last 30s"}
+        <ScissorsIcon data-icon="inline-start" />
+        {saving ? (
+          "Clipping…"
+        ) : short ? (
+          <>
+            Clip<span className="sr-only"> last 30s</span>
+          </>
+        ) : (
+          "Clip last 30s"
+        )}
       </Button>
       {waiting ? (
         <span id={hintId} className="sr-only">

@@ -8,7 +8,8 @@ describe("home page", () => {
   it("links to hosting and joining a session", () => {
     expect(html).toContain("<h1");
     expect(html).toMatch(/<a[^>]*href="\/host\/new"[^>]*>Host a session/);
-    expect(html).toMatch(/<a[^>]*href="\/join"[^>]*>Join with a code/);
+    expect(html).toMatch(/<form[^>]*action="\/join"/);
+    expect(html).toMatch(/<input[^>]*name="code"/);
   });
 
   it("offers no host accounts", () => {

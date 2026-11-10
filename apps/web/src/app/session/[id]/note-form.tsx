@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from "@simon-says/ui/components/alert";
 import { Button } from "@simon-says/ui/components/button";
 import { Label } from "@simon-says/ui/components/label";
 import { Textarea } from "@simon-says/ui/components/textarea";
-import { ClockIcon } from "lucide-react";
+import { ClockIcon, SquarePenIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useClipState } from "./clip-context";
@@ -38,13 +38,19 @@ export const NoteForm = ({ sessionId }: NoteFormProps) => {
 
   return (
     <form
-      className="flex flex-col gap-2"
+      className="flex flex-col gap-2 rounded-[14px] border border-input bg-background/60 p-3 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
       onSubmit={(event) => {
         event.preventDefault();
         void save();
       }}
     >
-      <Label htmlFor="panel-note">New note</Label>
+      <Label
+        htmlFor="panel-note"
+        className="gap-1.5 text-xs font-medium text-muted-foreground"
+      >
+        <SquarePenIcon aria-hidden="true" className="size-[13px]" />
+        New note
+      </Label>
       <Textarea
         id="panel-note"
         rows={3}
@@ -63,19 +69,23 @@ export const NoteForm = ({ sessionId }: NoteFormProps) => {
             void save();
           }
         }}
-        className="resize-none"
+        className="resize-none rounded-none border-0 bg-transparent p-0 text-sm leading-normal focus-visible:ring-0 dark:bg-transparent"
       />
       <div className="flex items-center gap-2">
         <span
           id="panel-note-pin"
           className="flex grow items-center gap-1.5 text-xs text-muted-foreground tabular-nums"
         >
-          <ClockIcon aria-hidden="true" className="size-3.5" />
+          <ClockIcon aria-hidden="true" className="size-3" />
           {pinnedAtMs === null
             ? "Saved with the time you add it"
             : `At ${formatTalkTime(pinnedAtMs)}`}
         </span>
-        <Button type="submit" size="sm" disabled={!canSubmit}>
+        <Button
+          type="submit"
+          className="px-3 text-[13px] font-semibold"
+          disabled={!canSubmit}
+        >
           {saving ? "Adding…" : "Add note"}
         </Button>
       </div>

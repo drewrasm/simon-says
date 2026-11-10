@@ -12,7 +12,7 @@ The reference page at `/design-system` renders on the server.
 
 ## Scope
 
-This is the design system only. The design canvas is the reference for product screens (host console, guest views, sign-in).
+This is the design system only. The design canvas is the reference for product screens (host console, guest views, sign-in). [Lobby and join designs](lobby-and-join-designs.md) records the host lobby and guest join screens.
 
 ## Components
 

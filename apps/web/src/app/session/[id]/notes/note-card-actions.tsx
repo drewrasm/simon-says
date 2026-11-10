@@ -38,7 +38,7 @@ export const RemoveCardButton = ({
       type="button"
       variant="ghost"
       size="icon-lg"
-      className="-my-2 -mr-2 size-11 text-muted-foreground"
+      className="-my-2 -mr-2 size-11 text-muted-foreground lg:m-0 lg:size-7 lg:[&_svg]:size-3.5"
       aria-label={label}
       disabled={removing}
       onClick={() => void remove()}
@@ -94,7 +94,10 @@ export const AddNoteInline = ({ bookmark }: AddNoteInlineProps) => {
         void save();
       }}
     >
-      <label htmlFor={inputId} className="text-xs text-muted-foreground">
+      <label
+        htmlFor={inputId}
+        className="text-xs font-medium text-muted-foreground"
+      >
         Add a note
       </label>
       <div className="flex gap-2">
@@ -104,12 +107,12 @@ export const AddNoteInline = ({ bookmark }: AddNoteInlineProps) => {
           maxLength={NOTE_MAX_LENGTH}
           placeholder="Why this matters to you…"
           onChange={(event) => setNote(event.target.value)}
-          className="h-11 lg:h-9"
+          className="h-11 lg:h-8"
         />
         <Button
           type="submit"
           variant="secondary"
-          className="h-11 lg:h-9"
+          className="h-11 lg:h-8"
           disabled={!note.trim() || saving}
         >
           {saving ? "Saving…" : "Save"}

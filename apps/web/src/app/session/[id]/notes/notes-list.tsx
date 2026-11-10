@@ -12,7 +12,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@simon-says/ui/components/tabs";
-import { ClockIcon, ScissorsIcon, SquarePenIcon } from "lucide-react";
+import {
+  ClockIcon,
+  PencilIcon,
+  ScissorsIcon,
+  SquarePenIcon,
+} from "lucide-react";
+import { cn } from "cn";
 import Link from "next/link";
 import { isUnpinned } from "../talk-time";
 import { AddNoteInline, RemoveCardButton } from "./note-card-actions";
@@ -72,9 +78,18 @@ const NoteCard = ({ bookmark, showJump }: NoteCardProps) => {
   const quote = quoteText(bookmark);
   const unpinned = isUnpinned(bookmark);
   return (
-    <article className="flex flex-col gap-2.5 rounded-xl border bg-card p-4">
+    <article
+      className={cn(
+        "flex flex-col gap-2.5 rounded-[14px] border p-3.5",
+        // The page sits on the background; the desktop panel is already a card.
+        showJump ? "bg-card" : "bg-background/60",
+      )}
+    >
       <div className="flex items-center gap-2">
-        <Badge variant="secondary" className="gap-1.5 tabular-nums">
+        <Badge
+          variant="secondary"
+          className="h-6 gap-1.5 px-2 text-primary tabular-nums lg:h-[22px]"
+        >
           {clip ? (
             <ScissorsIcon aria-hidden="true" />
           ) : (
@@ -97,19 +112,21 @@ const NoteCard = ({ bookmark, showJump }: NoteCardProps) => {
         />
       </div>
       {quote ? (
-        <blockquote className="text-[15px] leading-relaxed text-muted-foreground">
+        <blockquote className="text-[15px] leading-[1.55] text-foreground/80 lg:text-sm lg:leading-[1.6]">
           “{quote}”
         </blockquote>
       ) : null}
       {clip ? <EvidenceState bookmark={bookmark} /> : null}
-      {bookmark.note ? (
-        <p
-          className={
-            clip
-              ? "border-t pt-2.5 text-[15px] leading-relaxed whitespace-pre-wrap"
-              : "text-base leading-relaxed whitespace-pre-wrap"
-          }
-        >
+      {bookmark.note && clip ? (
+        <p className="flex gap-2 border-t pt-2.5 text-[15px] leading-normal lg:text-sm">
+          <PencilIcon
+            aria-hidden="true"
+            className="mt-1 size-3.5 shrink-0 text-muted-foreground"
+          />
+          <span className="min-w-0 whitespace-pre-line">{bookmark.note}</span>
+        </p>
+      ) : bookmark.note ? (
+        <p className="text-base leading-normal whitespace-pre-line lg:text-[15px] lg:leading-[1.55]">
           {bookmark.note}
         </p>
       ) : canAddNote(bookmark) ? (
@@ -118,7 +135,7 @@ const NoteCard = ({ bookmark, showJump }: NoteCardProps) => {
       {showJump && !unpinned ? (
         <Link
           href={momentHref(bookmark)}
-          className="flex min-h-11 items-center gap-1.5 self-start text-sm font-semibold underline-offset-4 hover:underline"
+          className="-mb-2 flex min-h-9 items-center gap-1.5 self-start text-[13px] font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
         >
           <ClockIcon aria-hidden="true" className="size-3.5" />
           Jump to this moment
@@ -127,6 +144,9 @@ const NoteCard = ({ bookmark, showJump }: NoteCardProps) => {
     </article>
   );
 };
+
+const TAB_CLASS =
+  "h-full rounded-md data-active:font-semibold dark:data-active:border-transparent dark:data-active:bg-background";
 
 const EMPTY = {
   all: [
@@ -152,9 +172,9 @@ const List = ({
   if (bookmarks.length === 0) {
     const [title, description] = EMPTY[filter];
     return (
-      <Empty className="border">
+      <Empty className="rounded-[14px] border">
         <EmptyHeader>
-          <EmptyTitle>{title}</EmptyTitle>
+          <EmptyTitle className="font-semibold">{title}</EmptyTitle>
           <EmptyDescription>{description}</EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -183,10 +203,16 @@ export const NotesList = ({
   const notes = bookmarks.filter((bookmark) => !isClip(bookmark));
   return (
     <Tabs defaultValue="all" className="flex flex-col gap-3">
-      <TabsList className="grid w-full grid-cols-3">
-        <TabsTrigger value="all">All {bookmarks.length}</TabsTrigger>
-        <TabsTrigger value="clips">Clips {clips.length}</TabsTrigger>
-        <TabsTrigger value="notes">Notes {notes.length}</TabsTrigger>
+      <TabsList className="grid w-full grid-cols-3 gap-0.5 group-data-horizontal/tabs:h-11">
+        <TabsTrigger value="all" className={TAB_CLASS}>
+          All {bookmarks.length}
+        </TabsTrigger>
+        <TabsTrigger value="clips" className={TAB_CLASS}>
+          Clips {clips.length}
+        </TabsTrigger>
+        <TabsTrigger value="notes" className={TAB_CLASS}>
+          Notes {notes.length}
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="all">
         <List bookmarks={bookmarks} filter="all" showJump={showJump} />

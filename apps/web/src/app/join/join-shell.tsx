@@ -22,12 +22,12 @@ export const JoinShell = ({
     </header>
     <section
       aria-labelledby="join-heading"
-      className="mt-12 flex flex-col gap-5 rounded-2xl border bg-card p-5 text-card-foreground shadow-xs sm:mt-16"
+      className="mt-16 flex flex-col gap-5 rounded-xl border bg-card p-5 text-card-foreground shadow-xs"
     >
       <div className="flex flex-col gap-1.5">
         <h1
           id="join-heading"
-          className="text-2xl leading-tight font-bold tracking-tight"
+          className="text-2xl leading-[1.2] font-bold tracking-tight"
         >
           {title}
         </h1>

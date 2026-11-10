@@ -1,10 +1,20 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import JoinByLinkPage from "./[inviteCode]/page";
 import JoinPage from "./page";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
+const renderJoinPage = async (code?: string) =>
+  renderToStaticMarkup(
+    await JoinPage({ searchParams: Promise.resolve({ code }) }),
+  );
+
 describe("join by code page", () => {
-  const html = renderToStaticMarkup(<JoinPage />);
+  let html = "";
+  beforeAll(async () => {
+    html = await renderJoinPage();
+  });
 
   it("shows the attendee disclosure before joining", () => {
     expect(html).toContain("Before you join");
@@ -17,9 +27,24 @@ describe("join by code page", () => {
     expect(html).toContain("No account or app download needed.");
   });
 
-  it("keeps typed codes visibly unavailable until the contract supports them", () => {
-    expect(html).toContain("Typed codes are coming soon");
+  it("accepts a typed code and holds Join until the code is complete", () => {
+    expect(html).not.toContain("coming soon");
+    expect(html).toMatch(/<input(?![^>]*disabled="")[^>]*id="join-code"/);
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
+  });
+});
+
+describe("join page prefill", () => {
+  it("prefills a code passed from the home page, normalized", async () => {
+    expect(await renderJoinPage(" kq742m ")).toMatch(
+      /<input[^>]*id="join-code"[^>]*value="KQ742M"/,
+    );
+  });
+
+  it("ignores a malformed code instead of prefilling it", async () => {
+    expect(await renderJoinPage("KQ7I2M")).toMatch(
+      /<input[^>]*id="join-code"[^>]*value=""/,
+    );
   });
 });
 

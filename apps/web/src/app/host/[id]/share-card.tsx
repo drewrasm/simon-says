@@ -17,16 +17,22 @@ import {
   DialogTrigger,
 } from "@simon-says/ui/components/dialog";
 import { Skeleton } from "@simon-says/ui/components/skeleton";
-import { CopyIcon, MonitorIcon } from "lucide-react";
+import { CopyIcon, PresentationIcon } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { cn } from "cn";
 import { toast } from "sonner";
+import { JoinCode } from "@/components/join-code";
 
 type ShareCardProps = {
   /** Absolute join URL; null until the browser knows its origin. */
   joinUrl: string | null;
+  /** Typed alternative to the link; null for sessions created before join codes. */
+  joinCode: string | null;
   title: string;
-  description: string;
+  description?: string;
   headingId: string;
+  /** Live-console sizing: smaller QR and code, with Show on screen as the primary action. */
+  compact?: boolean;
 };
 
 const shortUrl = (url: string) => url.replace(/^https?:\/\//, "");
@@ -34,10 +40,21 @@ const shortUrl = (url: string) => url.replace(/^https?:\/\//, "");
 /** Invitation QR and link, with copy and a large on-screen QR for projectors. */
 export const ShareCard = ({
   joinUrl,
+  joinCode,
   title,
   description,
   headingId,
+  compact = false,
 }: ShareCardProps) => {
+  const typedCode =
+    joinUrl && joinCode ? (
+      <JoinCode code={joinCode} href={new URL("/join", joinUrl).href} />
+    ) : null;
+  const buttonClass = cn(
+    "text-sm font-medium shadow-xs",
+    compact ? "h-8" : "h-9",
+  );
+
   const copyJoinLink = async () => {
     if (!joinUrl) return;
     try {
@@ -49,50 +66,75 @@ export const ShareCard = ({
   };
 
   return (
-    <section aria-labelledby={headingId}>
-      <Card>
+    <section
+      aria-labelledby={headingId}
+      className={cn("min-w-0", !compact && "flex-[1_1_380px]")}
+    >
+      <Card
+        className={cn("shadow-xs", !compact && "[--card-spacing:--spacing(6)]")}
+      >
         <CardHeader>
-          <CardTitle id={headingId}>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
+          <CardTitle id={headingId} className="text-base font-semibold">
+            {title}
+          </CardTitle>
+          {description ? (
+            <CardDescription>{description}</CardDescription>
+          ) : null}
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-            <div className="shrink-0 rounded-lg border bg-white p-2.5">
+          <div
+            className={cn(
+              "flex flex-wrap items-center",
+              compact
+                ? "gap-3.5 [&_span[aria-label]]:text-[30px] [&_a]:text-[13px]"
+                : "gap-5",
+            )}
+          >
+            <div
+              className={cn(
+                "shrink-0 border bg-white",
+                compact
+                  ? "size-26 rounded-[10px] p-1.5"
+                  : "size-40 rounded-xl p-2.5",
+              )}
+            >
               {joinUrl ? (
                 <QRCodeSVG
                   value={joinUrl}
-                  size={128}
+                  size={160}
                   marginSize={0}
                   role="img"
                   aria-label="QR code for the join link"
+                  className="size-full"
                 />
               ) : (
-                <Skeleton className="size-32" />
+                <Skeleton className="size-full" />
               )}
             </div>
             <div className="flex min-w-0 flex-col gap-1">
-              <span className="text-xs font-medium text-muted-foreground">
-                Join link
-              </span>
-              {joinUrl ? (
-                <a
-                  href={joinUrl}
-                  className="text-sm break-all underline underline-offset-3"
-                >
-                  {shortUrl(joinUrl)}
-                </a>
-              ) : (
-                <Skeleton className="h-5 w-56" />
+              {typedCode ?? (
+                <>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Join link
+                  </span>
+                  {joinUrl ? (
+                    <a
+                      href={joinUrl}
+                      className="truncate text-sm underline underline-offset-3"
+                    >
+                      {shortUrl(joinUrl)}
+                    </a>
+                  ) : (
+                    <Skeleton className="h-5 w-56" />
+                  )}
+                </>
               )}
-              <p className="text-sm text-muted-foreground">
-                Guests scan the code or open the link. No account or microphone
-                needed.
-              </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"
+              className={buttonClass}
               disabled={!joinUrl}
               onClick={() => void copyJoinLink()}
             >
@@ -101,9 +143,15 @@ export const ShareCard = ({
             </Button>
             <Dialog>
               <DialogTrigger
-                render={<Button variant="outline" disabled={!joinUrl} />}
+                render={
+                  <Button
+                    variant={compact ? "default" : "outline"}
+                    className={buttonClass}
+                    disabled={!joinUrl}
+                  />
+                }
               >
-                <MonitorIcon data-icon="inline-start" />
+                <PresentationIcon data-icon="inline-start" />
                 Show on screen
               </DialogTrigger>
               <DialogContent className="sm:max-w-xl">
@@ -125,9 +173,13 @@ export const ShareCard = ({
                         className="h-auto max-w-full"
                       />
                     </div>
-                    <p className="text-center text-lg font-semibold break-all">
-                      {shortUrl(joinUrl)}
-                    </p>
+                    {typedCode ? (
+                      <div className="text-center">{typedCode}</div>
+                    ) : (
+                      <p className="text-center text-lg font-semibold break-all">
+                        {shortUrl(joinUrl)}
+                      </p>
+                    )}
                   </div>
                 ) : null}
               </DialogContent>

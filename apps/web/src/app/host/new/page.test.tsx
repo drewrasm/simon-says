@@ -12,8 +12,12 @@ describe("host setup page", () => {
 
   it("opens the lobby without requiring a microphone test first", () => {
     expect(html).toContain("New session");
-    expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Open lobby/);
-    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Open lobby/);
+    expect(html).toMatch(
+      /<button[^>]*type="submit"[^>]*>Create &amp; open lobby/,
+    );
+    expect(html).not.toMatch(
+      /<button[^>]*disabled=""[^>]*>Create &amp; open lobby/,
+    );
   });
 
   it("previews what guests will see without unsupported settings", () => {
