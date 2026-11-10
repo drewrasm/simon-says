@@ -211,7 +211,7 @@ describe("Ask in the session panel", () => {
     expect(fetcher).toHaveBeenCalledWith(
       "/api/sessions/s1/ask",
       expect.objectContaining({
-        body: JSON.stringify({ question: "What was the idea?" }),
+        body: JSON.stringify({ question: "What was the idea?", history: [] }),
       }),
     );
     expect(input.value).toBe("");

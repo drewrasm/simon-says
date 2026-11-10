@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { AskEvent } from "@simon-says/contracts/ask";
+import type { AskEvent, AskTurn } from "@simon-says/contracts/ask";
 import { requireMembership } from "../access/membership";
 import { searchSession } from "../search/service";
 import { streamAnswer } from "./model";
@@ -11,6 +11,7 @@ type AskOptions = {
   sessionId: string;
   principalId: string;
   question: string;
+  history: AskTurn[];
   signal: AbortSignal;
 };
 const dependencies = {
@@ -38,6 +39,16 @@ async function withinBudget<T>(operation: Promise<T>, signal: AbortSignal) {
   }
 }
 
+/** Follow-ups often lean on the previous question ("what did he say after
+ * that?"), so the search also sees it when both fit the query limit. */
+export const searchQueryFor = (question: string, history: AskTurn[]) => {
+  const previous = [...history]
+    .reverse()
+    .find((turn) => turn.role === "user")?.text;
+  const combined = previous ? `${previous} ${question}` : question;
+  return combined.length <= 500 ? combined : question;
+};
+
 export async function askSession(options: AskOptions, deps = dependencies) {
   const finish = deps.startAskSpan(options.sessionId);
   const cancellation = new AbortController();
@@ -58,7 +69,10 @@ export async function askSession(options: AskOptions, deps = dependencies) {
         deps.searchSession({
           sessionId: options.sessionId,
           principalId: options.principalId,
-          request: { query: options.question, limit: 8 },
+          request: {
+            query: searchQueryFor(options.question, options.history),
+            limit: 8,
+          },
         }),
         searchSignal,
       );
@@ -98,6 +112,7 @@ export async function askSession(options: AskOptions, deps = dependencies) {
             for await (const part of deps.streamAnswer({
               question: options.question,
               passages,
+              history: options.history,
               abortSignal: overall,
             }).stream) {
               overall.throwIfAborted();

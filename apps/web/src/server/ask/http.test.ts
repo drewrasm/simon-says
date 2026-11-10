@@ -34,6 +34,7 @@ it("passes trimmed input, signed identity and request cancellation to the servic
     sessionId,
     principalId,
     question: "Explain this idea",
+    history: [],
     signal: req.signal,
   });
 });

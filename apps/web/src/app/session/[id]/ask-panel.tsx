@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   ArrowLeftIcon,
   ArrowUpIcon,
@@ -11,7 +11,7 @@ import {
   SearchIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { AskCitation } from "@simon-says/contracts/ask";
+import type { AskCitation, AskTurn } from "@simon-says/contracts/ask";
 import { Button } from "@simon-says/ui/components/button";
 import { Bubble, BubbleContent } from "@simon-says/ui/components/bubble";
 import {
@@ -33,6 +33,18 @@ import { useClipState } from "./clip-context";
 import { paragraphAnchor } from "./clip-line";
 import { saveNote, type NoteDraft } from "./save-note";
 import { formatTalkTime } from "./talk-time";
+
+type Exchange = { asked: string; answer: string; citations: AskCitation[] };
+
+/** The last three exchanges as turns, within the request's size limits. */
+export const historyFor = (exchanges: Exchange[]): AskTurn[] =>
+  exchanges
+    .slice(-3)
+    .flatMap((exchange) => [
+      { role: "user" as const, text: exchange.asked },
+      { role: "assistant" as const, text: exchange.answer.slice(0, 2000) },
+    ])
+    .filter((turn) => turn.text.trim().length > 0);
 
 export const AskAnswer = ({
   answer,
@@ -78,6 +90,8 @@ export const AskPanel = ({
   const router = useRouter();
   const { talkMs, lines } = useClipState();
   const [question, setQuestion] = useState("");
+  /** Completed exchanges, oldest first. The browser is the only holder. */
+  const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [asked, setAsked] = useState("");
   const [answer, setAnswer] = useState("");
   const [citations, setCitations] = useState<AskCitation[]>([]);
@@ -101,6 +115,7 @@ export const AskPanel = ({
     active.current?.abort();
     active.current = null;
     setQuestion("");
+    setExchanges([]);
     setAsked("");
     setAnswer("");
     setCitations([]);
@@ -122,6 +137,11 @@ export const AskPanel = ({
       return;
     const controller = new AbortController();
     active.current = controller;
+    const kept =
+      answer && !error
+        ? [...exchanges, { asked, answer, citations }]
+        : exchanges;
+    setExchanges(kept);
     setAsked(value);
     setQuestion("");
     setAnswer("");
@@ -135,7 +155,10 @@ export const AskPanel = ({
       const response = await fetch(`/api/sessions/${sessionId}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: value }),
+        body: JSON.stringify({
+          question: value,
+          history: historyFor(kept),
+        }),
         signal: AbortSignal.any([
           controller.signal,
           AbortSignal.timeout(17_000),
@@ -191,6 +214,9 @@ export const AskPanel = ({
     if (result.kind === "saved") router.refresh();
   };
   const provenance = askProvenance(citations);
+  const backOnPhone = () => {
+    if (!window.matchMedia("(min-width: 1024px)").matches) onBack();
+  };
   const latest =
     talkMs === null
       ? "waiting for captions"
@@ -229,6 +255,20 @@ export const AskPanel = ({
         <MessageScroller className="min-h-0 flex-1">
           <MessageScrollerViewport>
             <MessageScrollerContent className="gap-[18px] px-4 py-[18px] lg:gap-5 lg:py-5">
+              {exchanges.map((exchange, index) => (
+                <Fragment key={index}>
+                  <Bubble align="end" variant="muted" className="max-w-[85%]">
+                    <BubbleContent className="rounded-2xl px-3.5 py-2.5 text-base leading-[1.45] lg:rounded-[14px] lg:text-[15px] lg:leading-normal">
+                      {exchange.asked}
+                    </BubbleContent>
+                  </Bubble>
+                  <AskAnswer
+                    answer={exchange.answer}
+                    citations={exchange.citations}
+                    onCitation={backOnPhone}
+                  />
+                </Fragment>
+              ))}
               {asked ? (
                 <>
                   <Bubble align="end" variant="muted" className="max-w-[85%]">
@@ -258,12 +298,7 @@ export const AskPanel = ({
                         <AskAnswer
                           answer={answer}
                           citations={citations}
-                          onCitation={() => {
-                            if (
-                              !window.matchMedia("(min-width: 1024px)").matches
-                            )
-                              onBack();
-                          }}
+                          onCitation={backOnPhone}
                         />
                       </>
                     )}
@@ -321,7 +356,7 @@ export const AskPanel = ({
                     </div>
                   ) : null}
                 </>
-              ) : (
+              ) : exchanges.length ? null : (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   Ask about an idea from this talk. Simon will look for it in
                   the captions.

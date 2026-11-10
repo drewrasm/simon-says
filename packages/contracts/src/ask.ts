@@ -1,8 +1,16 @@
 import { z } from "zod";
 import { searchResultSchema } from "@simon-says/contracts/search";
 
+export const askTurnSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  text: z.string().trim().min(1).max(2000),
+});
+
+/** Recent turns of the browser-held conversation, oldest first. The server
+ * keeps nothing between requests; history is sent with each question. */
 export const askRequestSchema = z.object({
   question: z.string().trim().min(1).max(500),
+  history: z.array(askTurnSchema).max(6).default([]),
 });
 
 export const askCitationSchema = searchResultSchema
@@ -29,5 +37,6 @@ export const askEventSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+export type AskTurn = z.infer<typeof askTurnSchema>;
 export type AskCitation = z.infer<typeof askCitationSchema>;
 export type AskEvent = z.infer<typeof askEventSchema>;

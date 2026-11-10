@@ -2,12 +2,14 @@ import "server-only";
 
 import { openai } from "@ai-sdk/openai";
 import { streamText, wrapLanguageModel } from "ai";
+import type { AskTurn } from "@simon-says/contracts/ask";
 import type { SearchResult } from "@simon-says/contracts/search";
 import { askInstructions, buildAskPrompt } from "./prompt";
 
 export const streamAnswer = (options: {
   question: string;
   passages: SearchResult[];
+  history: AskTurn[];
   abortSignal: AbortSignal;
 }) =>
   streamText({
@@ -36,7 +38,7 @@ export const streamAnswer = (options: {
       },
     }),
     instructions: askInstructions,
-    prompt: buildAskPrompt(options.question, options.passages),
+    prompt: buildAskPrompt(options.question, options.passages, options.history),
     abortSignal: options.abortSignal,
     maxRetries: 0,
     maxOutputTokens: 1_000,
